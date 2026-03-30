@@ -1,4 +1,5 @@
 import Employee from '../models/Employee.js';
+import mongoose from 'mongoose';
 
 const normalizeWorks = (works, fallbackSpecialization = '') => {
   if (Array.isArray(works)) {
@@ -13,6 +14,33 @@ const normalizeWorks = (works, fallbackSpecialization = '') => {
 
   const normalizedFallback = String(fallbackSpecialization ?? '').trim();
   return normalizedFallback ? [normalizedFallback] : [];
+};
+
+const normalizeEmail = (email) => {
+  const normalizedEmail = String(email ?? '').trim().toLowerCase();
+  return normalizedEmail;
+};
+
+const normalizeRegionId = (regionId) => {
+  const normalizedRegionId = String(regionId ?? '').trim();
+  if (!normalizedRegionId) {
+    return null;
+  }
+
+  return mongoose.Types.ObjectId.isValid(normalizedRegionId)
+    ? normalizedRegionId
+    : null;
+};
+
+const handleEmployeeSaveError = (error, res) => {
+  if (error?.code === 11000) {
+    return res.status(400).json({
+      message:
+        'A staff member with the same unique details already exists. Please use a different email or phone.',
+    });
+  }
+
+  return res.status(500).json({ message: error.message });
 };
 
 // @desc    Get all employees
@@ -44,8 +72,11 @@ export const createEmployee = async (req, res) => {
   } = req.body;
 
   try {
-    if (email) {
-      const employeeExists = await Employee.findOne({ email });
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedRegionId = normalizeRegionId(regionId);
+
+    if (normalizedEmail) {
+      const employeeExists = await Employee.findOne({ email: normalizedEmail });
       if (employeeExists) {
         return res.status(400).json({ message: 'Employee already exists' });
       }
@@ -57,14 +88,14 @@ export const createEmployee = async (req, res) => {
 
     const employee = await Employee.create({
       name,
-      email: email ?? '',
+      email: normalizedEmail,
       type: type ?? 'outsource',
       artistRole: artistRole ?? 'artist',
       specialization: normalizedSpecialization,
       works: normalizedWorks,
       phone: phone ?? '',
       status: status ?? 'active',
-      regionId: regionId || null,
+      regionId: normalizedRegionId,
       role: normalizedSpecialization,
       department: 'Staff',
     });
@@ -76,7 +107,7 @@ export const createEmployee = async (req, res) => {
 
     res.status(201).json(populatedEmployee);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return handleEmployeeSaveError(error, res);
   }
 };
 
@@ -99,8 +130,11 @@ export const updateEmployee = async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
-    if (email && email != employee.email) {
-      const employeeExists = await Employee.findOne({ email });
+    const normalizedEmail = normalizeEmail(email);
+    const normalizedRegionId = normalizeRegionId(regionId);
+
+    if (normalizedEmail && normalizedEmail != employee.email) {
+      const employeeExists = await Employee.findOne({ email: normalizedEmail });
       if (employeeExists) {
         return res.status(400).json({ message: 'Employee already exists' });
       }
@@ -118,14 +152,15 @@ export const updateEmployee = async (req, res) => {
       normalizedSpecialization || normalizedWorks[0] || '';
 
     employee.name = name ?? employee.name;
-    employee.email = email ?? employee.email;
+    employee.email =
+      email != null ? normalizedEmail : employee.email;
     employee.type = type ?? employee.type;
     employee.artistRole = artistRole ?? employee.artistRole;
     employee.specialization = effectiveSpecialization;
     employee.works = normalizedWorks;
     employee.phone = phone ?? employee.phone;
     employee.status = status ?? employee.status;
-    employee.regionId = regionId || null;
+    employee.regionId = regionId != null ? normalizedRegionId : employee.regionId;
     employee.role = effectiveSpecialization || employee.role;
     employee.department = 'Staff';
 
@@ -138,7 +173,7 @@ export const updateEmployee = async (req, res) => {
 
     res.json(populatedEmployee);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    return handleEmployeeSaveError(error, res);
   }
 };
 

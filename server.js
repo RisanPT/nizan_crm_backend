@@ -18,8 +18,76 @@ dotenv.config();
 
 const app = express();
 
+const allowedOrigins = new Set([
+  'http://localhost:3000',
+  'http://localhost:5000',
+  'http://localhost:61720',
+  'http://localhost:49705',
+  'http://localhost:60815',
+  'http://localhost:61883',
+  'http://localhost:60407',
+  'http://127.0.0.1:3000',
+  'http://127.0.0.1:5000',
+  'http://127.0.0.1:5173',
+  'http://127.0.0.1:59006',
+  'http://127.0.0.1:60350',
+  'http://127.0.0.1:61883',
+  'http://18.178.214.176:5001',
+  'https://nizancrm.netlify.app',
+  ...(process.env.FRONTEND_ORIGINS ?? '')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean),
+]);
+
+function isAllowedOrigin(origin) {
+  if (!origin) {
+    return true;
+  }
+
+  if (allowedOrigins.has(origin)) {
+    return true;
+  }
+
+  try {
+    const { protocol, hostname } = new URL(origin);
+    const isHttpOrigin = protocol === 'http:' || protocol === 'https:';
+
+    if (!isHttpOrigin) {
+      return false;
+    }
+
+    if (
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.endsWith('.netlify.app') ||
+      hostname === 'teamnmakeovers.com' ||
+      hostname.endsWith('.teamnmakeovers.com')
+    ) {
+      return true;
+    }
+  } catch (error) {
+    return false;
+  }
+
+  return false;
+}
+
 // Middleware
-app.use(cors());
+app.use(
+  cors({
+    origin: (origin, callback) => {
+      if (isAllowedOrigin(origin)) {
+        callback(null, true);
+        return;
+      }
+      callback(new Error(`CORS blocked for origin: ${origin}`));
+    },
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+  })
+);
+app.options('*', cors());
 app.use(express.json());
 
 // Routes
@@ -33,6 +101,10 @@ app.use('/api/packages', packageRoutes);
 app.use('/api/regions', regionRoutes);
 app.use('/api/addon-services', addonServiceRoutes);
 app.use('/api/blocked-dates', blockedDateRoutes);
+
+app.get('/api', (req, res) => {
+  res.json({ message: 'API is running...' });
+});
 
 app.get('/', (req, res) => {
   res.send('API is running...');
