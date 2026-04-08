@@ -16,6 +16,24 @@ const normalizeObjectId = (value) => {
 const isPlaceholderEmail = (value = '') =>
   String(value).trim().toLowerCase().endsWith('@placeholder.local');
 
+const parseLegacyBookingFlag = (value) =>
+  value === true || String(value ?? '').trim().toLowerCase() === 'true';
+
+const generatePlaceholderEmail = ({ customerName = '', phone = '' }) => {
+  const normalizedName = String(customerName ?? '')
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '.')
+    .replace(/^\.+|\.+$/g, '');
+  const normalizedPhone = String(phone ?? '').replace(/\D+/g, '').slice(-10);
+  const fallbackKey = normalizedPhone || `${Date.now()}`;
+  const localPart = normalizedName
+    ? `${normalizedName}.${fallbackKey}`
+    : `legacy.${fallbackKey}`;
+
+  return `${localPart}@placeholder.local`;
+};
+
 const normalizeWorks = (works, fallbackSpecialization = '') => {
   if (Array.isArray(works)) {
     return [
@@ -375,6 +393,86 @@ export const getBookings = async (req, res) => {
   }
 };
 
+export const getPaginatedBookings = async (req, res) => {
+  try {
+    const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
+    const limit = Math.min(
+      100,
+      Math.max(1, Number.parseInt(req.query.limit, 10) || 20)
+    );
+    const skip = (page - 1) * limit;
+
+    const [items, totalItems, summaryResult] = await Promise.all([
+      Booking.find({})
+        .sort({ bookingDate: -1, createdAt: -1 })
+        .skip(skip)
+        .limit(limit),
+      Booking.countDocuments({}),
+      Booking.aggregate([
+        {
+          $group: {
+            _id: null,
+            totalSales: { $sum: { $ifNull: ['$totalPrice', 0] } },
+            totalAdvance: { $sum: { $ifNull: ['$advanceAmount', 0] } },
+            completedCount: {
+              $sum: {
+                $cond: [
+                  {
+                    $eq: [
+                      { $toLower: { $ifNull: ['$status', ''] } },
+                      'completed',
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+            cancelledCount: {
+              $sum: {
+                $cond: [
+                  {
+                    $eq: [
+                      { $toLower: { $ifNull: ['$status', ''] } },
+                      'cancelled',
+                    ],
+                  },
+                  1,
+                  0,
+                ],
+              },
+            },
+          },
+        },
+      ]),
+    ]);
+
+    const summary = summaryResult[0] ?? {
+      totalSales: 0,
+      totalAdvance: 0,
+      completedCount: 0,
+      cancelledCount: 0,
+    };
+    const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+
+    res.json({
+      items,
+      page,
+      limit,
+      totalItems,
+      totalPages,
+      summary: {
+        totalSales: Number(summary.totalSales) || 0,
+        totalAdvance: Number(summary.totalAdvance) || 0,
+        completedCount: Number(summary.completedCount) || 0,
+        cancelledCount: Number(summary.cancelledCount) || 0,
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const getPublicBookings = async (req, res) => {
   try {
     const bookings = await Booking.find(
@@ -403,6 +501,7 @@ export const createBooking = async (req, res) => {
     customerName,
     phone,
     email,
+    legacyBooking,
     service,
     region,
     driverName,
@@ -437,8 +536,18 @@ export const createBooking = async (req, res) => {
     const normalizedStatus = req.user
       ? 'confirmed'
       : String(status ?? 'pending').trim().toLowerCase() || 'pending';
-    const normalizedEmail = String(email ?? '').trim();
-    if (!normalizedEmail || isPlaceholderEmail(normalizedEmail)) {
+    const requestedEmail = String(email ?? '').trim();
+    const isLegacyBooking = Boolean(req.user) && parseLegacyBookingFlag(legacyBooking);
+    const normalizedEmail =
+      requestedEmail ||
+      (isLegacyBooking
+        ? generatePlaceholderEmail({ customerName, phone })
+        : '');
+
+    if (
+      (!req.user || !isLegacyBooking) &&
+      (!normalizedEmail || isPlaceholderEmail(normalizedEmail))
+    ) {
       return res.status(400).json({ message: 'Client email is required' });
     }
 
@@ -531,6 +640,7 @@ export const createBooking = async (req, res) => {
       driverId: normalizedDriverId,
       customerName,
       email: normalizedEmail,
+      legacyBooking: isLegacyBooking,
       phone,
       service: summaryService,
       region,
@@ -564,7 +674,11 @@ export const createBooking = async (req, res) => {
     });
 
     let invoiceEmailSent = false;
-    if (normalizedStatus === 'confirmed') {
+    if (
+      normalizedStatus === 'confirmed' &&
+      !isLegacyBooking &&
+      !isPlaceholderEmail(normalizedEmail)
+    ) {
       try {
         invoiceEmailSent = await sendAdvanceInvoiceEmail(booking);
       } catch (emailError) {
@@ -594,6 +708,7 @@ export const updateBooking = async (req, res) => {
       customerName,
       phone,
       email,
+      legacyBooking,
       packageId,
       regionId,
       driverId,
@@ -628,6 +743,10 @@ export const updateBooking = async (req, res) => {
     } = req.body;
 
     const previousStatus = String(booking.status ?? '').toLowerCase();
+    const nextLegacyBooking =
+      legacyBooking != null
+        ? parseLegacyBookingFlag(legacyBooking)
+        : Boolean(booking.legacyBooking);
     const normalizedPackageId = normalizeObjectId(packageId);
     const normalizedRegionId = normalizeObjectId(regionId);
     const normalizedDriverId = normalizeObjectId(driverId);
@@ -661,6 +780,14 @@ export const updateBooking = async (req, res) => {
       : schedule;
     const nextEmail =
       email != null ? String(email).trim() : String(booking.email ?? '').trim();
+    const effectiveNextEmail =
+      nextEmail ||
+      (nextLegacyBooking
+        ? generatePlaceholderEmail({
+            customerName: customerName ?? booking.customerName,
+            phone: phone ?? booking.phone,
+          })
+        : '');
     const nextStatus = String(status ?? booking.status ?? '').toLowerCase();
     const nextPackageId =
       packageId != null ? normalizedPackageId : booking.packageId;
@@ -715,7 +842,8 @@ export const updateBooking = async (req, res) => {
 
     if (
       nextStatus == 'confirmed' &&
-      (!nextEmail || isPlaceholderEmail(nextEmail))
+      (!effectiveNextEmail ||
+        (isPlaceholderEmail(effectiveNextEmail) && !nextLegacyBooking))
     ) {
       return res.status(400).json({
         message: 'Client email is required before confirming a booking',
@@ -724,7 +852,8 @@ export const updateBooking = async (req, res) => {
 
     booking.customerName = customerName ?? booking.customerName;
     booking.phone = phone ?? booking.phone;
-    booking.email = nextEmail;
+    booking.email = effectiveNextEmail;
+    booking.legacyBooking = nextLegacyBooking;
     booking.packageId = finalPackageId;
     booking.regionId = regionId != null ? normalizedRegionId : booking.regionId;
     booking.driverId = driverId != null ? normalizedDriverId : booking.driverId;
@@ -775,7 +904,12 @@ export const updateBooking = async (req, res) => {
     let invoiceEmailSent = false;
     if (shouldSendAdvanceInvoice) {
       try {
-        invoiceEmailSent = await sendAdvanceInvoiceEmail(updatedBooking);
+        if (
+          !updatedBooking.legacyBooking &&
+          !isPlaceholderEmail(updatedBooking.email ?? '')
+        ) {
+          invoiceEmailSent = await sendAdvanceInvoiceEmail(updatedBooking);
+        }
       } catch (emailError) {
         console.error('Failed to send advance invoice email:', emailError);
       }
@@ -784,9 +918,14 @@ export const updateBooking = async (req, res) => {
     let completionInvoiceEmailSent = false;
     if (shouldSendCompletionInvoice) {
       try {
-        completionInvoiceEmailSent = await sendCompletionInvoiceEmail(
-          updatedBooking
-        );
+        if (
+          !updatedBooking.legacyBooking &&
+          !isPlaceholderEmail(updatedBooking.email ?? '')
+        ) {
+          completionInvoiceEmailSent = await sendCompletionInvoiceEmail(
+            updatedBooking
+          );
+        }
 
         if (completionInvoiceEmailSent) {
           updatedBooking.completionInvoiceSentAt = new Date();

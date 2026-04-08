@@ -138,6 +138,10 @@ const bookingSchema = mongoose.Schema(
     email: {
       type: String,
     },
+    legacyBooking: {
+      type: Boolean,
+      default: false,
+    },
     phone: {
       type: String,
     },

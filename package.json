@@ -7,7 +7,16 @@
   "scripts": {
     "start": "node server.js",
     "dev": "nodemon server.js",
-    "clear:core-data": "node scripts/clearCoreData.js"
+    "clear:core-data": "node scripts/clearCoreData.js",
+    "clear:fma-legacy-data": "node scripts/clearFmaLegacyData.js",
+    "reset:legacy-import-data": "node scripts/resetLegacyImportData.js",
+    "import:sales-2026": "node scripts/importSalesData2026Csv.js",
+    "import:packages": "node scripts/importPackagesFromReviewCsv.js",
+    "import:nizan-packages": "node scripts/importPackagesFromReviewCsv.js tmp/booking_package_review_nizan.csv",
+    "import:fma-packages": "node scripts/importPackagesFromReviewCsv.js tmp/booking_package_review_fma.csv",
+    "import:legacy-bookings": "node scripts/importLegacyBookingsFromNormalizedCsv.js",
+    "import:nizan-legacy-bookings": "node scripts/importLegacyBookingsFromNormalizedCsv.js tmp/bookings_formatted_nizan_only.csv tmp/booking_package_review_nizan.csv",
+    "import:fma-legacy-bookings": "node scripts/importLegacyBookingsFromNormalizedCsv.js tmp/bookings_formatted_fma_only.csv tmp/booking_package_review_fma.csv"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

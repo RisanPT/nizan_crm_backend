@@ -25,6 +25,32 @@ const normalizeRegionPrices = async (regionPrices = []) => {
 
 export const getPackages = async (req, res) => {
   try {
+    const page = Number.parseInt(req.query.page, 10);
+    const limit = Number.parseInt(req.query.limit, 10);
+
+    if (Number.isFinite(page) || Number.isFinite(limit)) {
+      const currentPage = Math.max(1, page || 1);
+      const currentLimit = Math.min(100, Math.max(1, limit || 20));
+      const skip = (currentPage - 1) * currentLimit;
+
+      const [items, totalItems] = await Promise.all([
+        ServicePackage.find({})
+          .populate('regionPrices.region', 'name status')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(currentLimit),
+        ServicePackage.countDocuments({}),
+      ]);
+
+      return res.json({
+        items,
+        page: currentPage,
+        limit: currentLimit,
+        totalItems,
+        totalPages: Math.max(1, Math.ceil(totalItems / currentLimit)),
+      });
+    }
+
     const packages = await ServicePackage.find({})
       .populate('regionPrices.region', 'name status')
       .sort({ createdAt: -1 });

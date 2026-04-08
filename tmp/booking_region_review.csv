@@ -1,0 +1,189 @@
+original_location_area,normalized_region,count
+CLT,Kozhikode,144
+TSR,Thrissur,58
+CALICUT,Kozhikode,31
+THRISSUR,Thrissur,27
+ERNAKULAM,Ernakulam,26
+KNR,Kannur,25
+GURUVAYUR,Thrissur,20
+KANNUR,Kannur,18
+CLCT,Kozhikode,17
+MALAPPURAM,Malappuram,17
+MLP,Malappuram,17
+MLM,Malappuram,16
+KO,Ko,15
+GURUVAYOOR,Thrissur,14
+KOLLAM,Kollam,13
+EKM,Ernakulam,9
+TVM,Thiruvananthapuram,9
+PKD,Palakkad,8
+KTM,Kottayam,7
+MLPRM,Malappuram,7
+ERNKLM,Ernakulam,6
+PALAKKAD,Palakkad,6
+WAYANAD,Wayanad,6
+ALPY,Alappuzha,5
+CHENNI,Tamil Nadu,5
+KOCHI,Ernakulam,5
+PATHANAMTHI,Pathanamthitta,5
+ALAPPUZHA,Alappuzha,4
+EKLM,Ernakulam,4
+PLKD,Palakkad,4
+THRSR,Thrissur,4
+WND,Wayanad,4
+ERKLM,Ernakulam,3
+MLPM,Malappuram,3
+MUVA,Muva,3
+PERINTHALMANNA,Malappuram,3
+VADAKARA,Kozhikode,3
+WAYANADU,Wayanad,3
+WYND,Wayanad,3
+"ARAKKILAD,VADAKARA",Kozhikode,2
+BANGLORE,Bengaluru,2
+CHENNAI COLAB CLIENT,Chennai Colab Client,2
+EDAKKAD,Kannur,2
+ERKM,Ernakulam,2
+IDKI,Idukki,2
+IDUKKI,Idukki,2
+K HILLS,K Hills,2
+KLM,Kollam,2
+KOILANDY,Kozhikode,2
+KOTHAMANGALAM,Ernakulam,2
+MAHE,Mahe,2
+"PERAMBRA ,CLT",Kozhikode,2
+PTM,Pathanamthitta,2
+SHOURNUR,Palakkad,2
+TAMILNADU,Tamil Nadu,2
+"THALASSERY ,KNR",Kannur,2
+THODUPUZHA,Idukki,2
+THRSSR,Thrissur,2
+",CLT",Kozhikode,1
+"ADIMALY,IDUKKI",Idukki,1
+ALP,Alappuzha,1
+ALUVA,Ernakulam,1
+"ANDI ROAD,VENGALI,CALICUT",Kozhikode,1
+"ANDI ROAD,VENGALI,CLT",Kozhikode,1
+ANGAMALY,Ernakulam,1
+"AREEKODE,MLM",Malappuram,1
+"ASHIRVAD LAWNS ,CLT",Kozhikode,1
+"ASHIRVAD,CLT",Kozhikode,1
+ATHOLI,Kozhikode,1
+BALUSSERY,Kozhikode,1
+BANGALORE,Bengaluru,1
+CALICT,Kozhikode,1
+CHALAKKUDY,Thrissur,1
+CHELANNUR,Kozhikode,1
+"CHERTHALA,ALAPPUZHA",Alappuzha,1
+CHERUTHURUTHI,Thrissur,1
+CHIRAYIRAMBU,Chirayirambu,1
+CHO,Cho,1
+CT,Ct,1
+"Chelannur,CLT",Kozhikode,1
+E,E,1
+"EDAVANNAPARA,CLT",Malappuram,1
+ELAMKULAM,Elamkulam,1
+ELE,Ele,1
+ELM,Elm,1
+"ENGAPUZHA,THAMARASSERTY",Kozhikode,1
+ERANHIPALAM,Kozhikode,1
+"GRVYR,TSR",Thrissur,1
+GUIRUVAYOOR,Thrissur,1
+GURUVYUR,Thrissur,1
+GVR,Thrissur,1
+IDUKI,Idukki,1
+IRIGADANPALLYA,Irigadanpallya,1
+IRINGAL,Iringal,1
+"KADAMPANAD,PTM",Pathanamthitta,1
+KADAVANTHARA,Ernakulam,1
+"KAKKAKAND,KAYAMKULAM,ALAPPUZHA",Alappuzha,1
+KAKKANCHERY,Kakkanchery,1
+KAKKODI,Kozhikode,1
+"KALIKADAV,NILAMBUR,MLM",Malappuram,1
+KALIKKADAVU,Kalikkadavu,1
+"KALKANDI,A","Kalkandi,A",1
+KARAPARAMBA,Karaparamba,1
+KARNATAKA,Karnataka,1
+KASARGOD,Kasaragod,1
+KAYAMKULAM,Alappuzha,1
+"KAYAMKULAM,ALAPUZHA",Alappuzha,1
+"KELAKAM,KNR",Kannur,1
+KHILLS,Khills,1
+"KODAKARA,TSR",Thrissur,1
+KODENCHERRY,Kozhikode,1
+KODUNGALLUR,Thrissur,1
+"KOILANDY,CLT",Kozhikode,1
+KOLENCHERY,Ernakulam,1
+KOLM,Kolm,1
+KOO,Koo,1
+KOORKANCHERI,Thrissur,1
+"KOPPAM, PA",Palakkad,1
+KOVOOR,Kozhikode,1
+"KOVOOR,CALICUT",Kozhikode,1
+KOZHIKODE,Kozhikode,1
+"KRISHNA KRIPA ,NEMMARA,PLKD",Palakkad,1
+KTYM,Kottayam,1
+KU,Ku,1
+KUMARAKOM,Kottayam,1
+KUNJIPALLY,Kozhikode,1
+"KURUVA,MLM",Malappuram,1
+KZKD,Kozhikode,1
+"MALAPPURAM,KONDO",Malappuram,1
+MALAPURAM,Malappuram,1
+"MANJERY ,ERNAKULAM",Ernakulam,1
+"MANNUR,KADALUNDI","Mannur,Kadalundi",1
+"MANNUTHY,TSR",Thrissur,1
+"MANTHUKA,PATHANAMTHI",Pathanamthitta,1
+"MELETHALAKKAL,TSR",Thrissur,1
+"MELOOR,ELM","Meloor,Elm",1
+"MOKAVOOR,CLT",Kozhikode,1
+"MORAYUR,ARIMBRA",Malappuram,1
+MYSORE,Mysuru,1
+NA,Na,1
+"NADAKKUTHAZHA,VATAKARA","Nadakkuthazha,Vatakara",1
+"NANMINDA,CALICUT",Kozhikode,1
+NEDUMBASSERY,Ernakulam,1
+"NEELAMBARI AUDITORIUM,ERIYA,KSD",Kasaragod,1
+NILAMBUR,Malappuram,1
+"NILAMBUR,MALAPPURAM",Malappuram,1
+"NOORANAD,KAYAMKULAM",Pathanamthitta,1
+PA,Pa,1
+PALARIVA,Palariva,1
+PALKD,Palakkad,1
+PAMPADY,Kottayam,1
+PANAYAPILLY,Panayapilly,1
+"PARAL,PERITHALMANNA","Paral,Perithalmanna",1
+PARAPANNAGADI,Parapannagadi,1
+PARASSALA,Thiruvananthapuram,1
+"PAROOR,TSR",Thrissur,1
+PAVARA,Pavara,1
+"PAYANUR,KNR",Kannur,1
+PAYYOLI,Kozhikode,1
+PO,Po,1
+"POOMALA,TSR",Thrissur,1
+"POONOOR,PERINGALAMVAYA",Kozhikode,1
+PTNMTHTA,Pathanamthitta,1
+"PUZHAKKAL,TSR",Thrissur,1
+"RAMADA RESORT,KOCHI",Ernakulam,1
+SHORNUR,Palakkad,1
+STUDIO,Studio,1
+STUDIO WRK,Studio Wrk,1
+SULTHAN BATHERY,Wayanad,1
+TAMIL NADU,Tamil Nadu,1
+"THALI TEMPLE ,CLT",Kozhikode,1
+THEKKEDATH MANA,Thekkedath Mana,1
+"THIRUNALLOOR,CHERTHALA",Alappuzha,1
+THO,Tho,1
+THODAYADU,Thodayadu,1
+TRIPRAYAR,Thrissur,1
+TRISSUR,Thrissur,1
+TRSR,Thrissur,1
+Thiruvmabady,Kozhikode,1
+ULLIYERI,Ulliyeri,1
+"VADAKARA,CLT",Kozhikode,1
+"VAKAMOLI,CLT",Kozhikode,1
+VANIYAMKULAM,Palakkad,1
+VEGERI,Kozhikode,1
+"VENGARA,VALIYORA,MLM",Malappuram,1
+VP HALL MANJERI,Vp Hall Manjeri,1
+"WANDOOR,MLM",Malappuram,1
+clt,Kozhikode,1

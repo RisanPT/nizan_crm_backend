@@ -48,7 +48,35 @@ const handleEmployeeSaveError = (error, res) => {
 // @access  Public (for now)
 export const getEmployees = async (req, res) => {
   try {
-    const employees = await Employee.find({}).populate('regionId', 'name status');
+    const page = Number.parseInt(req.query.page, 10);
+    const limit = Number.parseInt(req.query.limit, 10);
+
+    if (Number.isFinite(page) || Number.isFinite(limit)) {
+      const currentPage = Math.max(1, page || 1);
+      const currentLimit = Math.min(100, Math.max(1, limit || 20));
+      const skip = (currentPage - 1) * currentLimit;
+
+      const [items, totalItems] = await Promise.all([
+        Employee.find({})
+          .populate('regionId', 'name status')
+          .sort({ createdAt: -1 })
+          .skip(skip)
+          .limit(currentLimit),
+        Employee.countDocuments({}),
+      ]);
+
+      return res.json({
+        items,
+        page: currentPage,
+        limit: currentLimit,
+        totalItems,
+        totalPages: Math.max(1, Math.ceil(totalItems / currentLimit)),
+      });
+    }
+
+    const employees = await Employee.find({})
+      .populate('regionId', 'name status')
+      .sort({ createdAt: -1 });
     res.json(employees);
   } catch (error) {
     res.status(500).json({ message: error.message });
