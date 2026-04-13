@@ -11,6 +11,7 @@
     "clear:fma-legacy-data": "node scripts/clearFmaLegacyData.js",
     "reset:legacy-import-data": "node scripts/resetLegacyImportData.js",
     "import:sales-2026": "node scripts/importSalesData2026Csv.js",
+    "import:monthly-sales-responses": "node scripts/importMonthlySalesResponsesCsv.js",
     "import:packages": "node scripts/importPackagesFromReviewCsv.js",
     "import:nizan-packages": "node scripts/importPackagesFromReviewCsv.js tmp/booking_package_review_nizan.csv",
     "import:fma-packages": "node scripts/importPackagesFromReviewCsv.js tmp/booking_package_review_fma.csv",

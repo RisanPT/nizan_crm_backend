@@ -121,7 +121,12 @@ const parseDmyDate = (value) => {
   return Number.isNaN(date.getTime()) ? null : date;
 };
 
-const formatDateOnly = (date) => date.toISOString().slice(0, 10);
+const formatDateOnly = (date) => {
+  const year = date.getFullYear().toString().padStart(4, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+};
 
 const buildPlaceholderEmail = (clientId, name) => {
   const slug = String(name || 'legacy-sale')
@@ -179,11 +184,11 @@ const main = async () => {
     for (const row of rows) {
       const clientName = String(row['Client Name'] || '').trim();
       const clientId = String(row['Client_ID'] || '').trim();
-      const regionName = DISTRICT_MAP.get(normalize(row.Region));
+      const regionName = DISTRICT_MAP.get(normalize(row.Region)) ?? '';
       const eventDate = parseDmyDate(row['Event Date']);
       const saleDate = parseDmyDate(row['Sale Date']) || eventDate;
 
-      if (!clientName || !clientId || !regionName || !eventDate || !saleDate) {
+      if (!clientName || !clientId || !eventDate || !saleDate) {
         skippedRows += 1;
         continue;
       }
@@ -198,8 +203,8 @@ const main = async () => {
         continue;
       }
 
-      let region = regionByName.get(normalize(regionName));
-      if (!region) {
+      let region = regionName ? regionByName.get(normalize(regionName)) : null;
+      if (regionName && !region) {
         region = await Region.create({ name: regionName, status: 'active' });
         regionByName.set(normalize(regionName), region);
       }
@@ -220,8 +225,9 @@ const main = async () => {
         createdCustomers += 1;
       }
 
-      const totalPrice = cleanCurrency(row['Forecast Amount']);
+      const forecastAmount = cleanCurrency(row['Forecast Amount']);
       const advanceAmount = cleanCurrency(row['Advance Amount']);
+      const totalPrice = forecastAmount + advanceAmount;
       const serviceStart = new Date(eventDate);
       serviceStart.setHours(9, 0, 0, 0);
       const serviceEnd = new Date(eventDate);
@@ -233,7 +239,7 @@ const main = async () => {
         legacyBooking: true,
         phone,
         service: SERVICE_NAME,
-        regionId: region._id,
+        regionId: region?._id,
         region: regionName,
         status: 'confirmed',
         bookingDate: eventDate,

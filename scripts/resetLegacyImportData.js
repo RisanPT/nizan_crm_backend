@@ -3,6 +3,7 @@ import mongoose from 'mongoose';
 
 import connectDB from '../config/db.js';
 import Booking from '../models/Booking.js';
+import Customer from '../models/Customer.js';
 import Employee from '../models/Employee.js';
 import Region from '../models/Region.js';
 
@@ -36,6 +37,10 @@ const main = async () => {
     const bookingsBefore = await Booking.countDocuments();
     const allRegionsBefore = await Region.find({}, 'name');
     const allEmployeesBefore = await Employee.find({}, 'name email phone type artistRole');
+    const legacyCustomersBefore = await Customer.find(
+      { email: /@legacy\.local$/i },
+      '_id'
+    );
 
     const bookingDeleteResult = await Booking.deleteMany({});
 
@@ -77,6 +82,15 @@ const main = async () => {
       deletedEmployees = deleteEmployeesResult.deletedCount;
     }
 
+    let deletedCustomers = 0;
+    if (legacyCustomersBefore.length > 0) {
+      const ids = legacyCustomersBefore.map((customer) => customer._id);
+      const deleteCustomersResult = await Customer.deleteMany({
+        _id: { $in: ids },
+      });
+      deletedCustomers = deleteCustomersResult.deletedCount;
+    }
+
     console.log('Legacy reset complete.');
     console.log(`Bookings before: ${bookingsBefore}`);
     console.log(`Bookings deleted: ${bookingDeleteResult.deletedCount}`);
@@ -84,6 +98,7 @@ const main = async () => {
     console.log(`Kerala districts ensured: ${KERALA_DISTRICTS.length}`);
     console.log(`Missing districts created: ${createdRegions}`);
     console.log(`Legacy artists deleted: ${deletedEmployees}`);
+    console.log(`Legacy customers deleted: ${deletedCustomers}`);
     console.log('Remaining regions:');
 
     const remainingRegions = await Region.find({}, 'name').sort({ name: 1 });
