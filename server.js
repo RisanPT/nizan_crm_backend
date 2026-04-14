@@ -12,6 +12,8 @@ import packageRoutes from './routes/packageRoutes.js';
 import regionRoutes from './routes/regionRoutes.js';
 import addonServiceRoutes from './routes/addonServiceRoutes.js';
 import blockedDateRoutes from './routes/blockedDateRoutes.js';
+import vehicleRoutes from './routes/vehicleRoutes.js';
+import fuelExpenseRoutes from './routes/fuelExpenseRoutes.js';
 import { seedAdminUser } from './utils/seedAdminUser.js';
 
 dotenv.config();
@@ -25,7 +27,7 @@ const allowedOrigins = new Set([
   'http://localhost:49705',
   'http://localhost:60815',
   'http://localhost:61883',
-  'http://localhost:60407',
+  'http://localhost:58037',
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5000',
   'http://127.0.0.1:5173',
@@ -101,6 +103,8 @@ app.use('/api/packages', packageRoutes);
 app.use('/api/regions', regionRoutes);
 app.use('/api/addon-services', addonServiceRoutes);
 app.use('/api/blocked-dates', blockedDateRoutes);
+app.use('/api/vehicles', vehicleRoutes);
+app.use('/api/fuel-expenses', fuelExpenseRoutes);
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });
