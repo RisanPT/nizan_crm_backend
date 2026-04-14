@@ -384,6 +384,223 @@ const normalizeBookingItems = async ({
   return normalizedItems;
 };
 
+const escapeRegex = (value = '') =>
+  String(value).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const buildBookingSearchMatch = (search = '') => {
+  const normalizedSearch = String(search ?? '').trim();
+  if (!normalizedSearch) return {};
+
+  // For multi-word support, we split the search query into terms
+  const terms = normalizedSearch.split(/\s+/).filter(Boolean);
+
+  const andConditions = terms.map((term) => {
+    const bookingNumTerm = term.startsWith('#') ? term.slice(1) : term;
+    const phoneCleanTerm = term.replace(/\D/g, '');
+
+    const regex = new RegExp(escapeRegex(term), 'i');
+    const bookingRegex = new RegExp(escapeRegex(bookingNumTerm), 'i');
+
+    const orConditions = [
+      { customerName: regex },
+      { email: regex },
+      { service: regex },
+      { region: regex },
+      { bookingNumber: bookingRegex },
+      { internalRemarks: regex },
+    ];
+
+    if (phoneCleanTerm.length > 0) {
+      orConditions.push({ phone: new RegExp(escapeRegex(phoneCleanTerm), 'i') });
+    }
+
+    // Handle exact MongoDB ID search for individual terms if they match
+    if (/^[a-fA-F0-9]{24}$/.test(term)) {
+      orConditions.push({ _id: term });
+    }
+
+    return { $or: orConditions };
+  });
+
+  return andConditions.length > 0 ? { $and: andConditions } : {};
+};
+
+const buildDuplicateGroupsPipeline = (match = {}) => [
+  { $match: match },
+  {
+    $project: {
+      _id: 1,
+      customerKey: {
+        $toLower: {
+          $trim: { input: { $ifNull: ['$customerName', ''] } },
+        },
+      },
+      phoneKey: {
+        $trim: { input: { $ifNull: ['$phone', ''] } },
+      },
+      emailKey: {
+        $toLower: {
+          $trim: { input: { $ifNull: ['$email', ''] } },
+        },
+      },
+      dateKey: {
+        $dateToString: {
+          date: '$bookingDate',
+          format: '%Y-%m-%d',
+          timezone: 'Asia/Kolkata',
+        },
+      },
+    },
+  },
+  {
+    $addFields: {
+      contactKey: {
+        $cond: [
+          { $gt: [{ $strLenCP: '$phoneKey' }, 0] },
+          '$phoneKey',
+          '$emailKey',
+        ],
+      },
+    },
+  },
+  {
+    $match: {
+      customerKey: { $ne: '' },
+      contactKey: { $ne: '' },
+      dateKey: { $ne: '' },
+    },
+  },
+  {
+    $group: {
+      _id: {
+        customerKey: '$customerKey',
+        contactKey: '$contactKey',
+        dateKey: '$dateKey',
+      },
+      ids: { $push: '$_id' },
+      count: { $sum: 1 },
+    },
+  },
+  { $match: { count: { $gt: 1 } } },
+];
+
+const buildBookingSortPipeline = (search = '') => {
+  const normalizedSearch = String(search ?? '').trim();
+  if (!normalizedSearch) {
+    return [{ $sort: { bookingDate: -1, createdAt: -1 } }];
+  }
+
+  const loweredSearch = normalizedSearch.toLowerCase();
+  const bookingNumberSearch = loweredSearch.startsWith('#')
+    ? loweredSearch.slice(1)
+    : loweredSearch;
+  const phoneSearch = normalizedSearch.replace(/\D/g, '');
+  const exactRegex = new RegExp(`^${escapeRegex(normalizedSearch)}$`, 'i');
+  const prefixRegex = new RegExp(`^${escapeRegex(normalizedSearch)}`, 'i');
+  const containsRegex = new RegExp(escapeRegex(normalizedSearch), 'i');
+  const bookingExactRegex = new RegExp(`^${escapeRegex(bookingNumberSearch)}$`, 'i');
+  const bookingPrefixRegex = new RegExp(`^${escapeRegex(bookingNumberSearch)}`, 'i');
+  const phoneExactRegex = phoneSearch
+    ? new RegExp(`^${escapeRegex(phoneSearch)}$`, 'i')
+    : null;
+  const phoneContainsRegex = phoneSearch
+    ? new RegExp(escapeRegex(phoneSearch), 'i')
+    : null;
+
+  return [
+    {
+      $addFields: {
+        searchRank: {
+          $add: [
+            {
+              $cond: [
+                { $regexMatch: { input: { $ifNull: ['$customerName', ''] }, regex: exactRegex } },
+                120,
+                0,
+              ],
+            },
+            {
+              $cond: [
+                { $regexMatch: { input: { $ifNull: ['$bookingNumber', ''] }, regex: bookingExactRegex } },
+                115,
+                0,
+              ],
+            },
+            {
+              $cond: [
+                phoneExactRegex == null
+                  ? false
+                  : { $regexMatch: { input: { $ifNull: ['$phone', ''] }, regex: phoneExactRegex } },
+                110,
+                0,
+              ],
+            },
+            {
+              $cond: [
+                { $regexMatch: { input: { $ifNull: ['$customerName', ''] }, regex: prefixRegex } },
+                80,
+                0,
+              ],
+            },
+            {
+              $cond: [
+                { $regexMatch: { input: { $ifNull: ['$bookingNumber', ''] }, regex: bookingPrefixRegex } },
+                75,
+                0,
+              ],
+            },
+            {
+              $cond: [
+                { $regexMatch: { input: { $ifNull: ['$service', ''] }, regex: prefixRegex } },
+                55,
+                0,
+              ],
+            },
+            {
+              $cond: [
+                { $regexMatch: { input: { $ifNull: ['$region', ''] }, regex: prefixRegex } },
+                45,
+                0,
+              ],
+            },
+            {
+              $cond: [
+                { $regexMatch: { input: { $ifNull: ['$customerName', ''] }, regex: containsRegex } },
+                25,
+                0,
+              ],
+            },
+            {
+              $cond: [
+                phoneContainsRegex == null
+                  ? false
+                  : { $regexMatch: { input: { $ifNull: ['$phone', ''] }, regex: phoneContainsRegex } },
+                25,
+                0,
+              ],
+            },
+            {
+              $cond: [
+                { $regexMatch: { input: { $ifNull: ['$service', ''] }, regex: containsRegex } },
+                15,
+                0,
+              ],
+            },
+            {
+              $cond: [
+                { $regexMatch: { input: { $ifNull: ['$region', ''] }, regex: containsRegex } },
+                10,
+                0,
+              ],
+            },
+          ],
+        },
+      },
+    },
+    { $sort: { searchRank: -1, bookingDate: -1, createdAt: -1 } },
+  ];
+};
+
 export const getBookings = async (req, res) => {
   try {
     const bookings = await Booking.find({});
@@ -401,14 +618,37 @@ export const getPaginatedBookings = async (req, res) => {
       Math.max(1, Number.parseInt(req.query.limit, 10) || 20)
     );
     const skip = (page - 1) * limit;
+    const search = String(req.query.search ?? '').trim();
+    const duplicatesOnly =
+      String(req.query.duplicatesOnly ?? '').trim().toLowerCase() === 'true';
+    const baseMatch = buildBookingSearchMatch(search);
+    const duplicateGroups = await Booking.aggregate(
+      buildDuplicateGroupsPipeline(baseMatch)
+    );
+    const duplicateCountById = new Map();
+    const duplicateIds = [];
+
+    for (const group of duplicateGroups) {
+      for (const id of group.ids ?? []) {
+        duplicateIds.push(id);
+        duplicateCountById.set(String(id), Number(group.count) || 0);
+      }
+    }
+
+    const query = duplicatesOnly ? { _id: { $in: duplicateIds } } : baseMatch;
 
     const [items, totalItems, summaryResult] = await Promise.all([
-      Booking.find({})
-        .sort({ bookingDate: -1, createdAt: -1 })
-        .skip(skip)
-        .limit(limit),
-      Booking.countDocuments({}),
       Booking.aggregate([
+        { $match: query },
+        ...buildBookingSortPipeline(search),
+        { $skip: skip },
+        { $limit: limit },
+      ]),
+      duplicatesOnly
+        ? Promise.resolve(duplicateIds.length)
+        : Booking.countDocuments(baseMatch),
+      Booking.aggregate([
+        { $match: query },
         {
           $group: {
             _id: null,
@@ -454,13 +694,19 @@ export const getPaginatedBookings = async (req, res) => {
       cancelledCount: 0,
     };
     const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+    const enrichedItems = items.map((item) => ({
+      ...item,
+      duplicateCount: duplicateCountById.get(String(item._id)) || 0,
+    }));
 
     res.json({
-      items,
+      items: enrichedItems,
       page,
       limit,
       totalItems,
       totalPages,
+      duplicateItems: duplicateIds.length,
+      duplicateGroups: duplicateGroups.length,
       summary: {
         totalSales: Number(summary.totalSales) || 0,
         totalAdvance: Number(summary.totalAdvance) || 0,
