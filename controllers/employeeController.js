@@ -56,13 +56,22 @@ export const getEmployees = async (req, res) => {
       const currentLimit = Math.min(100, Math.max(1, limit || 20));
       const skip = (currentPage - 1) * currentLimit;
 
+      const query = {};
+      if (req.query.category) {
+        if (req.query.category === 'creative') {
+          query.category = { $ne: 'administrative' };
+        } else {
+          query.category = req.query.category;
+        }
+      }
+
       const [items, totalItems] = await Promise.all([
-        Employee.find({})
+        Employee.find(query)
           .populate('regionId', 'name status')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(currentLimit),
-        Employee.countDocuments({}),
+        Employee.countDocuments(query),
       ]);
 
       return res.json({
@@ -74,7 +83,16 @@ export const getEmployees = async (req, res) => {
       });
     }
 
-    const employees = await Employee.find({})
+    const query = {};
+    if (req.query.category) {
+      if (req.query.category === 'creative') {
+        query.category = { $ne: 'administrative' };
+      } else {
+        query.category = req.query.category;
+      }
+    }
+
+    const employees = await Employee.find(query)
       .populate('regionId', 'name status')
       .sort({ createdAt: -1 });
     res.json(employees);
@@ -97,6 +115,7 @@ export const createEmployee = async (req, res) => {
     phone,
     status,
     regionId,
+    category,
   } = req.body;
 
   try {
@@ -126,6 +145,7 @@ export const createEmployee = async (req, res) => {
       regionId: normalizedRegionId,
       role: normalizedSpecialization,
       department: 'Staff',
+      category: category ?? 'creative',
     });
 
     const populatedEmployee = await Employee.findById(employee._id).populate(
@@ -150,6 +170,7 @@ export const updateEmployee = async (req, res) => {
     phone,
     status,
     regionId,
+    category,
   } = req.body;
 
   try {
@@ -191,6 +212,7 @@ export const updateEmployee = async (req, res) => {
     employee.regionId = regionId != null ? normalizedRegionId : employee.regionId;
     employee.role = effectiveSpecialization || employee.role;
     employee.department = 'Staff';
+    employee.category = category ?? employee.category;
 
     await employee.save();
 

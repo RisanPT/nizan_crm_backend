@@ -90,6 +90,13 @@ const normalizeAddons = (addons = []) => {
     }));
 };
 
+const computeAddonsTotal = (addons = []) =>
+  (Array.isArray(addons) ? addons : []).reduce(
+    (sum, addon) =>
+      sum + ((Number(addon?.amount) || 0) * Math.max(1, Number(addon?.persons) || 1)),
+    0
+  );
+
 const formatDateKey = (date) =>
   `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 
@@ -265,8 +272,13 @@ const mergeBookingItemDates = (bookingItems = [], fallbackDates = []) => {
   return normalizeSelectedDates(sourceDates);
 };
 
-const computeExtraDateCharge = (selectedDates = []) =>
-  Math.max(0, (selectedDates?.length ?? 0) - 1) * EXTRA_DATE_AMOUNT;
+const computeExtraDateCharge = ({
+  selectedDates = [],
+  packageCount = 1,
+}) =>
+  Math.max(0, (selectedDates?.length ?? 0) - 1) *
+  EXTRA_DATE_AMOUNT *
+  Math.max(1, Number(packageCount) || 1);
 
 const computeBasePackagePrice = async ({
   packageId,
@@ -314,8 +326,13 @@ const computeTotalPrice = async ({
     (item) => String(item.region) == String(regionId ?? '')
   );
   const basePrice = Number(matchingRegionPrice?.price ?? packageDoc.price) || 0;
-  const extraDatesCount = Math.max(0, (selectedDates?.length ?? 0) - 1);
-  return basePrice + extraDatesCount * EXTRA_DATE_AMOUNT;
+  return (
+    basePrice +
+    computeExtraDateCharge({
+      selectedDates,
+      packageCount: 1,
+    })
+  );
 };
 
 const computeAdvanceAmount = async ({
@@ -330,6 +347,18 @@ const computeAdvanceAmount = async ({
   if (!packageDoc) return normalizedFallback;
 
   const baseAdvance = Number(packageDoc.advanceAmount) || normalizedFallback;
+  const dateCount = Math.max(1, selectedDates?.length ?? 0);
+  return baseAdvance * dateCount;
+};
+
+const computeBookingItemsAdvanceAmount = ({
+  bookingItems = [],
+  selectedDates = [],
+}) => {
+  const baseAdvance = bookingItems.reduce(
+    (sum, item) => sum + (Number(item?.advanceAmount) || 0),
+    0
+  );
   const dateCount = Math.max(1, selectedDates?.length ?? 0);
   return baseAdvance * dateCount;
 };
@@ -487,7 +516,7 @@ const buildDuplicateGroupsPipeline = (match = {}) => [
 const buildBookingSortPipeline = (search = '') => {
   const normalizedSearch = String(search ?? '').trim();
   if (!normalizedSearch) {
-    return [{ $sort: { bookingDate: -1, createdAt: -1 } }];
+    return [{ $sort: { createdAt: -1, bookingDate: -1 } }];
   }
 
   const loweredSearch = normalizedSearch.toLowerCase();
@@ -597,13 +626,13 @@ const buildBookingSortPipeline = (search = '') => {
         },
       },
     },
-    { $sort: { searchRank: -1, bookingDate: -1, createdAt: -1 } },
+    { $sort: { searchRank: -1, createdAt: -1, bookingDate: -1 } },
   ];
 };
 
 export const getBookings = async (req, res) => {
   try {
-    const bookings = await Booking.find({});
+    const bookings = await Booking.find({}).sort({ createdAt: -1 });
     res.json(bookings);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -621,7 +650,25 @@ export const getPaginatedBookings = async (req, res) => {
     const search = String(req.query.search ?? '').trim();
     const duplicatesOnly =
       String(req.query.duplicatesOnly ?? '').trim().toLowerCase() === 'true';
+    const financialYear = String(req.query.financialYear ?? '').trim();
+
     const baseMatch = buildBookingSearchMatch(search);
+
+    // Apply Financial Year filter if provided (Format: "2024-25")
+    if (financialYear && /^\d{4}-\d{2}$/.test(financialYear)) {
+      const parts = financialYear.split('-');
+      const startYear = Number.parseInt(parts[0], 10);
+      const endYear = 2000 + Number.parseInt(parts[1], 10);
+
+      // Financial year in India: April 1st to March 31st
+      const fyStart = new Date(startYear, 3, 1, 0, 0, 0); // April 1st
+      const fyEnd = new Date(endYear, 2, 31, 23, 59, 59); // March 31st
+
+      baseMatch.bookingDate = {
+        $gte: fyStart,
+        $lte: fyEnd,
+      };
+    }
     const duplicateGroups = await Booking.aggregate(
       buildDuplicateGroupsPipeline(baseMatch)
     );
@@ -837,19 +884,25 @@ export const createBooking = async (req, res) => {
       fallbackAdvanceAmount: advanceAmount,
       selectedDates: effectiveSchedule.selectedDates,
     });
+    const addonsTotal = computeAddonsTotal(normalizedAddons);
     const finalTotalPrice =
       normalizedBookingItems.length > 0
         ? normalizedBookingItems.reduce(
             (sum, item) => sum + (Number(item.totalPrice) || 0),
             0
-          ) + computeExtraDateCharge(effectiveSchedule.selectedDates)
-        : computedTotalPrice;
+          ) +
+          addonsTotal +
+          computeExtraDateCharge({
+            selectedDates: effectiveSchedule.selectedDates,
+            packageCount: normalizedBookingItems.length,
+          })
+        : computedTotalPrice + addonsTotal;
     const finalAdvanceAmount =
       normalizedBookingItems.length > 0
-        ? normalizedBookingItems.reduce(
-            (sum, item) => sum + (Number(item.advanceAmount) || 0),
-            0
-          )
+        ? computeBookingItemsAdvanceAmount({
+            bookingItems: normalizedBookingItems,
+            selectedDates: effectiveSchedule.selectedDates,
+          })
         : computedAdvanceAmount;
     const summaryAssignedStaff =
       normalizedBookingItems.length > 0
@@ -1052,19 +1105,27 @@ export const updateBooking = async (req, res) => {
     });
     const finalBookingItems =
       bookingItems != null ? normalizedBookingItems : booking.bookingItems ?? [];
+    const effectiveAddons =
+      addons != null ? normalizedAddons : booking.addons;
+    const addonsTotal = computeAddonsTotal(effectiveAddons);
     const finalTotalPrice =
       bookingItems != null && finalBookingItems.length > 0
         ? finalBookingItems.reduce(
             (sum, item) => sum + (Number(item.totalPrice) || 0),
             0
-          ) + computeExtraDateCharge(effectiveSchedule.selectedDates)
-        : computedTotalPrice;
+          ) +
+          addonsTotal +
+          computeExtraDateCharge({
+            selectedDates: effectiveSchedule.selectedDates,
+            packageCount: finalBookingItems.length,
+          })
+        : computedTotalPrice + addonsTotal;
     const finalAdvanceAmount =
       bookingItems != null && finalBookingItems.length > 0
-        ? finalBookingItems.reduce(
-            (sum, item) => sum + (Number(item.advanceAmount) || 0),
-            0
-          )
+        ? computeBookingItemsAdvanceAmount({
+            bookingItems: finalBookingItems,
+            selectedDates: effectiveSchedule.selectedDates,
+          })
         : computedAdvanceAmount;
     const finalAssignedStaff =
       bookingItems != null && finalBookingItems.length > 0

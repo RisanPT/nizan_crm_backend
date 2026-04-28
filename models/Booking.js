@@ -44,7 +44,7 @@ const assignedStaffSchema = mongoose.Schema(
     },
     roleType: {
       type: String,
-      enum: ['lead', 'assistant'],
+      enum: ['lead', 'assistant', 'driver'],
       default: 'assistant',
     },
   },

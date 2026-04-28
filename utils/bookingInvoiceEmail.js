@@ -88,28 +88,38 @@ const toInvoiceItems = (booking) => {
     : [];
 
   if (bookingItems.length > 0) {
-    return bookingItems.map((item, index) => ({
-      invoiceNumber: `${toBookingNumber(booking)}-${String(index + 1).padStart(2, '0')}`,
-      service: String(item?.service ?? booking?.service ?? '').trim() || 'Package',
-      eventSlot: String(item?.eventSlot ?? '').trim(),
-      selectedDates: Array.isArray(item?.selectedDates) && item.selectedDates.length > 0
-        ? item.selectedDates
-        : booking?.selectedDates ?? [],
-      totalPrice: Number(item?.totalPrice) || 0,
-      advanceAmount: Number(item?.advanceAmount) || 0,
-    }));
+    let invoiceCounter = 1;
+    return bookingItems.flatMap((item) => {
+      const itemDates =
+        Array.isArray(item?.selectedDates) && item.selectedDates.length > 0
+          ? item.selectedDates
+          : booking?.selectedDates ?? [];
+      const normalizedDates = itemDates.length > 0 ? itemDates : [''];
+
+      return normalizedDates.map((selectedDate) => ({
+        invoiceNumber: `${toBookingNumber(booking)}-${String(invoiceCounter++).padStart(2, '0')}`,
+        service: String(item?.service ?? booking?.service ?? '').trim() || 'Package',
+        eventSlot: String(item?.eventSlot ?? '').trim(),
+        selectedDates: selectedDate ? [selectedDate] : [],
+        totalPrice: Number(item?.totalPrice) || 0,
+        advanceAmount: Number(item?.advanceAmount) || 0,
+      }));
+    });
   }
 
-  return [
-    {
-      invoiceNumber: `${toBookingNumber(booking)}-01`,
-      service: booking?.service ?? 'Package',
-      eventSlot: booking?.eventSlot ?? '',
-      selectedDates: booking?.selectedDates ?? [],
-      totalPrice: Number(booking?.totalPrice) || 0,
-      advanceAmount: Number(booking?.advanceAmount) || 0,
-    },
-  ];
+  const bookingDates =
+    Array.isArray(booking?.selectedDates) && booking.selectedDates.length > 0
+      ? booking.selectedDates
+      : [''];
+
+  return bookingDates.map((selectedDate, index) => ({
+    invoiceNumber: `${toBookingNumber(booking)}-${String(index + 1).padStart(2, '0')}`,
+    service: booking?.service ?? 'Package',
+    eventSlot: booking?.eventSlot ?? '',
+    selectedDates: selectedDate ? [selectedDate] : [],
+    totalPrice: Number(booking?.totalPrice) || 0,
+    advanceAmount: Number(booking?.advanceAmount) || 0,
+  }));
 };
 
 const toInvoiceDateLabel = (selectedDates = [], fallbackBooking) => {
@@ -120,8 +130,12 @@ const toInvoiceTotals = (booking) => {
   const items = toInvoiceItems(booking);
   return {
     items,
-    totalAmount: items.reduce((sum, item) => sum + item.totalPrice, 0),
-    totalAdvance: items.reduce((sum, item) => sum + item.advanceAmount, 0),
+    totalAmount:
+      Number(booking?.totalPrice) ||
+      items.reduce((sum, item) => sum + item.totalPrice, 0),
+    totalAdvance:
+      Number(booking?.advanceAmount) ||
+      items.reduce((sum, item) => sum + item.advanceAmount, 0),
   };
 };
 
@@ -238,7 +252,7 @@ export const sendCompletionInvoiceEmail = async (booking) => {
   );
   const fullAmountPaid = Math.max(
     0,
-    totalAmount + addonsTotal - (Number(booking.discountAmount) || 0)
+    totalAmount - (Number(booking.discountAmount) || 0)
   );
   const assignedArtists = (booking.assignedStaff ?? [])
     .map((staff) => staff.artistName)

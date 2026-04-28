@@ -50,6 +50,11 @@ const employeeSchema = mongoose.Schema(
       type: String,
       default: 'Staff',
     },
+    category: {
+      type: String,
+      enum: ['creative', 'administrative'],
+      default: 'creative',
+    },
   },
   {
     timestamps: true,
