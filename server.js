@@ -14,6 +14,8 @@ import addonServiceRoutes from './routes/addonServiceRoutes.js';
 import blockedDateRoutes from './routes/blockedDateRoutes.js';
 import vehicleRoutes from './routes/vehicleRoutes.js';
 import fuelExpenseRoutes from './routes/fuelExpenseRoutes.js';
+import collectionRoutes from './routes/collectionRoutes.js';
+import expenseRoutes from './routes/expenseRoutes.js';
 import { seedAdminUser } from './utils/seedAdminUser.js';
 
 dotenv.config();
@@ -105,6 +107,8 @@ app.use('/api/addon-services', addonServiceRoutes);
 app.use('/api/blocked-dates', blockedDateRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/fuel-expenses', fuelExpenseRoutes);
+app.use('/api/collections', collectionRoutes);
+app.use('/api/expenses', expenseRoutes);
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });
