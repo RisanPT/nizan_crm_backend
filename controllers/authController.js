@@ -11,6 +11,7 @@ const toAuthResponse = (user) => ({
     name: user.name,
     email: user.email,
     role: user.role,
+    employeeId: user.employeeId?.toString() ?? null,
   },
 });
 
@@ -90,6 +91,7 @@ export const createUser = async (req, res) => {
   const password = String(req.body.password ?? '').trim();
   const role = String(req.body.role ?? 'manager').trim() || 'manager';
   const active = req.body.active ?? true;
+  const employeeId = req.body.employeeId ?? null;
 
   if (!name || !email || !password) {
     return res.status(400).json({
@@ -108,6 +110,7 @@ export const createUser = async (req, res) => {
     password,
     role,
     active: Boolean(active),
+    employeeId: employeeId || null,
   });
 
   return res.status(201).json({
@@ -115,6 +118,7 @@ export const createUser = async (req, res) => {
     name: user.name,
     email: user.email,
     role: user.role,
+    employeeId: user.employeeId?.toString() ?? null,
     active: user.active,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
@@ -150,6 +154,9 @@ export const updateUser = async (req, res) => {
     ? user.role
     : String(req.body.role).trim() || user.role;
   user.active = nextActive;
+  if (req.body.employeeId !== undefined) {
+    user.employeeId = req.body.employeeId || null;
+  }
 
   const nextPassword = String(req.body.password ?? '').trim();
   if (nextPassword.length > 0) {
@@ -163,6 +170,7 @@ export const updateUser = async (req, res) => {
     name: user.name,
     email: user.email,
     role: user.role,
+    employeeId: user.employeeId?.toString() ?? null,
     active: user.active,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,

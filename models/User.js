@@ -22,8 +22,14 @@ const userSchema = mongoose.Schema(
     },
     role: {
       type: String,
+      enum: ['admin', 'manager', 'crm', 'sales', 'artist', 'accounts'],
       default: 'manager',
       trim: true,
+    },
+    employeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+      default: null,
     },
     active: {
       type: Boolean,
