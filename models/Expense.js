@@ -50,6 +50,19 @@ const expenseSchema = mongoose.Schema(
       type: Date,
       default: null,
     },
+    ocrAmountFound: {
+      type: Number,
+      default: null,
+    },
+    ocrStatus: {
+      type: String,
+      enum: ['match', 'mismatch', 'skipped', 'pending'],
+      default: 'pending',
+    },
+    ocrRawText: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,

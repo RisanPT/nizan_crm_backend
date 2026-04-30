@@ -28,15 +28,20 @@ export const createExpense = async (req, res) => {
   const { employeeId, bookingId, category, amount, date, notes, receiptImage } = req.body;
 
   try {
-    const expense = await Expense.create({
+    const amountNum = Number(amount) || 0;
+    
+    // Create the expense
+    const expense = new Expense({
       employeeId,
       bookingId: bookingId || null,
       category: category ?? 'other',
-      amount: Number(amount) || 0,
+      amount: amountNum,
       date: date ?? new Date(),
       notes: notes ?? '',
       receiptImage: receiptImage ?? '',
     });
+
+    await expense.save();
 
     const populated = await Expense.findById(expense._id).populate(expensePopulate);
     res.status(201).json(populated);
@@ -77,9 +82,12 @@ export const deleteExpense = async (req, res) => {
       return res.status(404).json({ message: 'Expense not found' });
     }
 
+    // Restriction removed as per user request: Admin/Accounts need to be able to delete entries.
+    /*
     if (expense.status === 'verified') {
       return res.status(400).json({ message: 'Cannot delete a verified expense' });
     }
+    */
 
     await expense.deleteOne();
     res.json({ message: 'Expense removed' });

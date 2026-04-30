@@ -45,6 +45,7 @@ export const getMe = async (req, res) => {
       name: req.user.name,
       email: req.user.email,
       role: req.user.role,
+      employeeId: req.user.employeeId?.toString() ?? null,
     },
   });
 };

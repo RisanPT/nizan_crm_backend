@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Booking from '../models/Booking.js';
 import Customer from '../models/Customer.js';
 import ServicePackage from '../models/Package.js';
@@ -650,9 +651,23 @@ export const getPaginatedBookings = async (req, res) => {
     const search = String(req.query.search ?? '').trim();
     const duplicatesOnly =
       String(req.query.duplicatesOnly ?? '').trim().toLowerCase() === 'true';
+    const employeeId = String(req.query.employeeId ?? '').trim();
     const financialYear = String(req.query.financialYear ?? '').trim();
 
     const baseMatch = buildBookingSearchMatch(search);
+
+    // Enforce Employee/Artist filter for artist role, or use provided filter for other roles
+    const effectiveEmployeeId = req.user.role === 'artist' 
+      ? (req.user.employeeId?.toString() || employeeId)
+      : employeeId;
+
+    if (effectiveEmployeeId && mongoose.Types.ObjectId.isValid(effectiveEmployeeId)) {
+      const empId = new mongoose.Types.ObjectId(effectiveEmployeeId);
+      baseMatch.$or = [
+        { 'assignedStaff.employeeId': empId },
+        { 'bookingItems.assignedStaff.employeeId': empId },
+      ];
+    }
 
     // Apply Financial Year filter if provided (Format: "2024-25")
     if (financialYear && /^\d{4}-\d{2}$/.test(financialYear)) {

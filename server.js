@@ -16,6 +16,8 @@ import vehicleRoutes from './routes/vehicleRoutes.js';
 import fuelExpenseRoutes from './routes/fuelExpenseRoutes.js';
 import collectionRoutes from './routes/collectionRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
+import reportRoutes from './routes/reportRoutes.js';
+import uploadRoutes from './routes/uploadRoutes.js';
 import { seedAdminUser } from './utils/seedAdminUser.js';
 
 dotenv.config();
@@ -109,6 +111,8 @@ app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/fuel-expenses', fuelExpenseRoutes);
 app.use('/api/collections', collectionRoutes);
 app.use('/api/expenses', expenseRoutes);
+app.use('/api/reports', reportRoutes);
+app.use('/api/upload', uploadRoutes);
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });

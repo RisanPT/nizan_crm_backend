@@ -15,12 +15,36 @@ const leadSchema = mongoose.Schema(
     },
     source: {
       type: String,
-      default: 'Website',
+      default: 'Walk-in',
+    },
+    location: {
+      type: String,
+      default: '',
+    },
+    leadType: {
+      type: String,
+      default: 'Individual',
+    },
+    enquiryDate: {
+      type: Date,
+      default: Date.now,
+    },
+    bookedDate: {
+      type: Date,
+      default: null,
     },
     status: {
       type: String,
-      enum: ['New', 'Contacted', 'Qualified', 'Lost', 'Converted'],
+      enum: ['New', 'Contacted', 'Qualified', 'Lost', 'Converted', 'Follow-up'],
       default: 'New',
+    },
+    reason: {
+      type: String,
+      default: '',
+    },
+    remarks: {
+      type: String,
+      default: '',
     },
   },
   {

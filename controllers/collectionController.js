@@ -10,11 +10,22 @@ const collectionPopulate = [
 
 export const getCollections = async (req, res) => {
   try {
-    const { status, bookingId, employeeId } = req.query;
+    const { status, bookingId, employeeId, paymentMode, startDate, endDate } = req.query;
     const filter = {};
     if (status) filter.status = status;
     if (bookingId) filter.bookingId = bookingId;
     if (employeeId) filter.employeeId = employeeId;
+    if (paymentMode) filter.paymentMode = paymentMode;
+    
+    if (startDate || endDate) {
+      filter.date = {};
+      if (startDate) filter.date.$gte = new Date(startDate);
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        filter.date.$lte = end;
+      }
+    }
 
     const collections = await Collection.find(filter)
       .populate(collectionPopulate)
@@ -26,17 +37,22 @@ export const getCollections = async (req, res) => {
 };
 
 export const createCollection = async (req, res) => {
-  const { bookingId, employeeId, amount, date, paymentMode, notes } = req.body;
-
+  const { bookingId, employeeId, amount, date, paymentMode, notes, attachmentUrl } = req.body;
+  
   try {
-    const collection = await Collection.create({
+    const amountNum = Number(amount) || 0;
+
+    const collection = new Collection({
       bookingId,
       employeeId,
-      amount: Number(amount) || 0,
+      amount: amountNum,
       date: date ?? new Date(),
       paymentMode: paymentMode ?? 'cash',
       notes: notes ?? '',
+      attachmentUrl: attachmentUrl || null,
     });
+
+    await collection.save();
 
     const populated = await Collection.findById(collection._id).populate(collectionPopulate);
     res.status(201).json(populated);
@@ -77,9 +93,12 @@ export const deleteCollection = async (req, res) => {
       return res.status(404).json({ message: 'Collection not found' });
     }
 
+    // Restriction removed as per user request: Admin/Accounts need to be able to delete entries.
+    /*
     if (collection.status === 'verified') {
       return res.status(400).json({ message: 'Cannot delete a verified collection' });
     }
+    */
 
     await collection.deleteOne();
     res.json({ message: 'Collection removed' });
