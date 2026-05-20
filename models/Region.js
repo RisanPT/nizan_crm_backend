@@ -13,6 +13,11 @@ const regionSchema = mongoose.Schema(
       enum: ['active', 'inactive'],
       default: 'active',
     },
+    state: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'State',
+      default: null,
+    },
   },
   {
     timestamps: true,

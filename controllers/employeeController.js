@@ -74,6 +74,10 @@ export const getEmployees = async (req, res) => {
       const [items, totalItems] = await Promise.all([
         Employee.find(query)
           .populate('regionId', 'name status')
+          .populate('zoneId', 'name status')
+          .populate('stateId', 'name status')
+          .populate('districtId', 'name status')
+          .populate('pincodeId', 'code status')
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(currentLimit),
@@ -106,6 +110,10 @@ export const getEmployees = async (req, res) => {
 
     const employees = await Employee.find(query)
       .populate('regionId', 'name status')
+      .populate('zoneId', 'name status')
+      .populate('stateId', 'name status')
+      .populate('districtId', 'name status')
+      .populate('pincodeId', 'code status')
       .sort({ createdAt: -1 });
     res.json(employees);
   } catch (error) {
@@ -118,10 +126,12 @@ export const getEmployees = async (req, res) => {
 // @access  Public (for now)
 export const getEmployee = async (req, res) => {
   try {
-    const employee = await Employee.findById(req.params.id).populate(
-      'regionId',
-      'name status'
-    );
+    const employee = await Employee.findById(req.params.id)
+      .populate('regionId', 'name status')
+      .populate('zoneId', 'name status')
+      .populate('stateId', 'name status')
+      .populate('districtId', 'name status')
+      .populate('pincodeId', 'code status');
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
@@ -145,6 +155,10 @@ export const createEmployee = async (req, res) => {
     phone,
     status,
     regionId,
+    zoneId,
+    stateId,
+    districtId,
+    pincodeId,
     category,
     profileImage,
   } = req.body;
@@ -152,6 +166,10 @@ export const createEmployee = async (req, res) => {
   try {
     const normalizedEmail = normalizeEmail(email);
     const normalizedRegionId = normalizeRegionId(regionId);
+    const normalizedZoneId = normalizeRegionId(zoneId);
+    const normalizedStateId = normalizeRegionId(stateId);
+    const normalizedDistrictId = normalizeRegionId(districtId);
+    const normalizedPincodeId = normalizeRegionId(pincodeId);
 
     if (normalizedEmail) {
       const employeeExists = await Employee.findOne({ email: normalizedEmail });
@@ -174,16 +192,22 @@ export const createEmployee = async (req, res) => {
       phone: phone ?? '',
       status: status ?? 'active',
       regionId: normalizedRegionId,
+      zoneId: normalizedZoneId,
+      stateId: normalizedStateId,
+      districtId: normalizedDistrictId,
+      pincodeId: normalizedPincodeId,
       role: normalizedSpecialization,
       department: 'Staff',
       category: category ?? 'creative',
       profileImage: profileImage ?? '',
     });
 
-    const populatedEmployee = await Employee.findById(employee._id).populate(
-      'regionId',
-      'name status'
-    );
+    const populatedEmployee = await Employee.findById(employee._id)
+      .populate('regionId', 'name status')
+      .populate('zoneId', 'name status')
+      .populate('stateId', 'name status')
+      .populate('districtId', 'name status')
+      .populate('pincodeId', 'code status');
 
     res.status(201).json(populatedEmployee);
   } catch (error) {
@@ -202,6 +226,10 @@ export const updateEmployee = async (req, res) => {
     phone,
     status,
     regionId,
+    zoneId,
+    stateId,
+    districtId,
+    pincodeId,
     category,
     profileImage,
   } = req.body;
@@ -214,6 +242,10 @@ export const updateEmployee = async (req, res) => {
 
     const normalizedEmail = normalizeEmail(email);
     const normalizedRegionId = normalizeRegionId(regionId);
+    const normalizedZoneId = normalizeRegionId(zoneId);
+    const normalizedStateId = normalizeRegionId(stateId);
+    const normalizedDistrictId = normalizeRegionId(districtId);
+    const normalizedPincodeId = normalizeRegionId(pincodeId);
 
     if (normalizedEmail && normalizedEmail != employee.email) {
       const employeeExists = await Employee.findOne({ email: normalizedEmail });
@@ -243,6 +275,10 @@ export const updateEmployee = async (req, res) => {
     employee.phone = phone ?? employee.phone;
     employee.status = status ?? employee.status;
     employee.regionId = regionId != null ? normalizedRegionId : employee.regionId;
+    employee.zoneId = zoneId != null ? normalizedZoneId : employee.zoneId;
+    employee.stateId = stateId != null ? normalizedStateId : employee.stateId;
+    employee.districtId = districtId != null ? normalizedDistrictId : employee.districtId;
+    employee.pincodeId = pincodeId != null ? normalizedPincodeId : employee.pincodeId;
     employee.role = effectiveSpecialization || employee.role;
     employee.department = 'Staff';
     employee.category = category ?? employee.category;
@@ -250,10 +286,12 @@ export const updateEmployee = async (req, res) => {
 
     await employee.save();
 
-    const populatedEmployee = await Employee.findById(employee._id).populate(
-      'regionId',
-      'name status'
-    );
+    const populatedEmployee = await Employee.findById(employee._id)
+      .populate('regionId', 'name status')
+      .populate('zoneId', 'name status')
+      .populate('stateId', 'name status')
+      .populate('districtId', 'name status')
+      .populate('pincodeId', 'code status');
 
     res.json(populatedEmployee);
   } catch (error) {

@@ -3,6 +3,10 @@ import Region from '../models/Region.js';
 export const getRegions = async (req, res) => {
   try {
     const query = req.query.active === 'true' ? { status: 'active' } : {};
+    if (req.query.stateId) {
+      query.state = req.query.stateId;
+    }
+
     const page = Number.parseInt(req.query.page, 10);
     const limit = Number.parseInt(req.query.limit, 10);
 
@@ -12,7 +16,7 @@ export const getRegions = async (req, res) => {
       const skip = (currentPage - 1) * currentLimit;
 
       const [items, totalItems] = await Promise.all([
-        Region.find(query).sort({ name: 1 }).skip(skip).limit(currentLimit),
+        Region.find(query).populate('state', 'name status').sort({ name: 1 }).skip(skip).limit(currentLimit),
         Region.countDocuments(query),
       ]);
 
@@ -25,7 +29,7 @@ export const getRegions = async (req, res) => {
       });
     }
 
-    const regions = await Region.find(query).sort({ name: 1 });
+    const regions = await Region.find(query).populate('state', 'name status').sort({ name: 1 });
     res.json(regions);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -34,7 +38,7 @@ export const getRegions = async (req, res) => {
 
 export const getRegionById = async (req, res) => {
   try {
-    const region = await Region.findById(req.params.id);
+    const region = await Region.findById(req.params.id).populate('state', 'name status');
     if (!region) {
       return res.status(404).json({ message: 'Region not found' });
     }
@@ -45,7 +49,7 @@ export const getRegionById = async (req, res) => {
 };
 
 export const saveRegion = async (req, res) => {
-  const { id, name, status } = req.body;
+  const { id, name, stateId, status } = req.body;
 
   try {
     let region;
@@ -55,15 +59,18 @@ export const saveRegion = async (req, res) => {
         return res.status(404).json({ message: 'Region not found' });
       }
       region.name = name ?? region.name;
+      region.state = stateId ?? region.state;
       region.status = status ?? region.status;
       await region.save();
     } else {
       region = await Region.create({
         name,
+        state: stateId,
         status: status ?? 'active',
       });
     }
-    res.status(id ? 200 : 201).json(region);
+    const populatedRegion = await Region.findById(region._id).populate('state', 'name status');
+    res.status(id ? 200 : 201).json(populatedRegion);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

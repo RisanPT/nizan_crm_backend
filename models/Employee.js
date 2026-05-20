@@ -46,6 +46,26 @@ const employeeSchema = mongoose.Schema(
       ref: 'Region',
       default: null,
     },
+    zoneId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Zone',
+      default: null,
+    },
+    stateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'State',
+      default: null,
+    },
+    districtId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'District',
+      default: null,
+    },
+    pincodeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Pincode',
+      default: null,
+    },
     role: {
       type: String,
       default: '',
