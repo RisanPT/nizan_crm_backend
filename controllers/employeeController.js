@@ -58,8 +58,14 @@ export const getEmployees = async (req, res) => {
 
       const query = {};
       if (req.query.category) {
-        if (req.query.category === 'creative') {
-          query.category = { $ne: 'administrative' };
+        if (req.query.category === 'admin') {
+          query.category = { $in: ['admin', 'administrative'] };
+        } else if (req.query.category === 'creative') {
+          query.$or = [
+            { category: 'creative' },
+            { category: { $exists: false } },
+            { category: null }
+          ];
         } else {
           query.category = req.query.category;
         }
@@ -85,8 +91,14 @@ export const getEmployees = async (req, res) => {
 
     const query = {};
     if (req.query.category) {
-      if (req.query.category === 'creative') {
-        query.category = { $ne: 'administrative' };
+      if (req.query.category === 'admin') {
+        query.category = { $in: ['admin', 'administrative'] };
+      } else if (req.query.category === 'creative') {
+        query.$or = [
+          { category: 'creative' },
+          { category: { $exists: false } },
+          { category: null }
+        ];
       } else {
         query.category = req.query.category;
       }
@@ -96,6 +108,24 @@ export const getEmployees = async (req, res) => {
       .populate('regionId', 'name status')
       .sort({ createdAt: -1 });
     res.json(employees);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get single employee
+// @route   GET /api/employees/:id
+// @access  Public (for now)
+export const getEmployee = async (req, res) => {
+  try {
+    const employee = await Employee.findById(req.params.id).populate(
+      'regionId',
+      'name status'
+    );
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+    res.json(employee);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -116,6 +146,7 @@ export const createEmployee = async (req, res) => {
     status,
     regionId,
     category,
+    profileImage,
   } = req.body;
 
   try {
@@ -146,6 +177,7 @@ export const createEmployee = async (req, res) => {
       role: normalizedSpecialization,
       department: 'Staff',
       category: category ?? 'creative',
+      profileImage: profileImage ?? '',
     });
 
     const populatedEmployee = await Employee.findById(employee._id).populate(
@@ -171,6 +203,7 @@ export const updateEmployee = async (req, res) => {
     status,
     regionId,
     category,
+    profileImage,
   } = req.body;
 
   try {
@@ -213,6 +246,7 @@ export const updateEmployee = async (req, res) => {
     employee.role = effectiveSpecialization || employee.role;
     employee.department = 'Staff';
     employee.category = category ?? employee.category;
+    employee.profileImage = profileImage ?? employee.profileImage;
 
     await employee.save();
 

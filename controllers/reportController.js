@@ -75,7 +75,7 @@ const generatePDF = (res, collections, expenses, month, year) => {
   doc.pipe(res);
 
   // Header
-  doc.fontSize(20).text('Nizan Makeovers - Finance Report', { align: 'center' });
+  doc.fontSize(20).text('Team N Makeovers - Finance Report', { align: 'center' });
   doc.fontSize(12).text(`Period: ${month}/${year}`, { align: 'center' });
   doc.moveDown();
 

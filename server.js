@@ -18,6 +18,10 @@ import collectionRoutes from './routes/collectionRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
+import projectRoutes from './routes/projectRoutes.js';
+import itTaskRoutes from './routes/itTaskRoutes.js';
+import timeBlockRoutes from './routes/timeBlockRoutes.js';
+import budgetRoutes from './routes/budgetRoutes.js';
 import { seedAdminUser } from './utils/seedAdminUser.js';
 
 dotenv.config();
@@ -35,11 +39,12 @@ const allowedOrigins = new Set([
   'http://127.0.0.1:3000',
   'http://127.0.0.1:5000',
   'http://127.0.0.1:5173',
-  'http://127.0.0.1:59006',
+  'http://127.0.0.1:57709',
   'http://127.0.0.1:60350',
   'http://127.0.0.1:61883',
+  'http://192.168.31.205:5001',
   'http://18.178.214.176:5001',
-  'https://nizancrm.netlify.app',
+  'https://teamnmakeovers.netlify.app',
   ...(process.env.FRONTEND_ORIGINS ?? '')
     .split(',')
     .map((origin) => origin.trim())
@@ -113,6 +118,10 @@ app.use('/api/collections', collectionRoutes);
 app.use('/api/expenses', expenseRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/upload', uploadRoutes);
+app.use('/api/projects', projectRoutes);
+app.use('/api/it-tasks', itTaskRoutes);
+app.use('/api/time-blocks', timeBlockRoutes);
+app.use('/api/budgets', budgetRoutes);
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });
@@ -137,7 +146,7 @@ const startServer = async () => {
     );
   }
 
-  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+  app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
 };
 
 startServer();

@@ -152,7 +152,6 @@ const renderAdvanceInvoiceSections = (booking) =>
             ${item.eventSlot ? `<tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Slot</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.eventSlot}</td></tr>` : ''}
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Region</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${booking.region || 'Default'}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Selected Dates</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toInvoiceDateLabel(item.selectedDates, booking)}</td></tr>
-            <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Package Total</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toCurrency(item.totalPrice)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Advance Paid</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toCurrency(item.advanceAmount)}</td></tr>
           </table>
         </div>
@@ -193,8 +192,8 @@ export const sendAdvanceInvoiceEmail = async (booking) => {
 
   const fromEmail =
     process.env.NODEMAILER_EMAIL ||
-    'noreply@nizancrm.local';
-  const companyName = process.env.COMPANY_NAME || 'Nizan Makeovers';
+    'noreply@teamnmakeover.local';
+  const companyName = process.env.COMPANY_NAME || 'Team N Makeovers';
   const { items, totalAmount, totalAdvance } = toInvoiceTotals(booking);
 
   return sendMail(transporter, {
@@ -216,8 +215,8 @@ export const sendAdvanceInvoiceEmail = async (booking) => {
             <div style="font-size:18px;font-weight:700;">${toSelectedDatesLabel(booking)}</div>
           </div>
           <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fcfcfd;">
-            <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Total Booking Amount</div>
-            <div style="font-size:22px;font-weight:700;">${toCurrency(totalAmount)}</div>
+            <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Package</div>
+            <div style="font-size:18px;font-weight:700;">${booking.service || 'Standard Package'}</div>
           </div>
           <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fff7ed;border-color:#fed7aa;">
             <div style="font-size:12px;text-transform:uppercase;color:#9a3412;margin-bottom:8px;">Total Advance Paid</div>
@@ -243,8 +242,8 @@ export const sendCompletionInvoiceEmail = async (booking) => {
 
   const fromEmail =
     process.env.NODEMAILER_EMAIL ||
-    'noreply@nizancrm.local';
-  const companyName = process.env.COMPANY_NAME || 'Nizan Makeovers';
+    'noreply@teamnmakeover.local';
+  const companyName = process.env.COMPANY_NAME || 'Team N Makeovers';
   const { items, totalAmount, totalAdvance } = toInvoiceTotals(booking);
   const addonsTotal = (booking.addons ?? []).reduce(
     (sum, addon) => sum + ((Number(addon.amount) || 0) * (Number(addon.persons) || 1)),

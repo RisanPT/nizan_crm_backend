@@ -12,7 +12,14 @@ export const getExpenses = async (req, res) => {
     const { status, employeeId, bookingId } = req.query;
     const filter = {};
     if (status) filter.status = status;
-    if (employeeId) filter.employeeId = employeeId;
+    
+    // Role-based scoping
+    if (req.user && (req.user.role === 'artist' || req.user.role === 'driver')) {
+      filter.employeeId = req.user.employeeId;
+    } else if (employeeId) {
+      filter.employeeId = employeeId;
+    }
+
     if (bookingId) filter.bookingId = bookingId;
 
     const expenses = await Expense.find(filter)
@@ -28,11 +35,16 @@ export const createExpense = async (req, res) => {
   const { employeeId, bookingId, category, amount, date, notes, receiptImage } = req.body;
 
   try {
+    let finalEmployeeId = employeeId;
+    if (req.user && (req.user.role === 'artist' || req.user.role === 'driver')) {
+      finalEmployeeId = req.user.employeeId;
+    }
+
     const amountNum = Number(amount) || 0;
     
     // Create the expense
     const expense = new Expense({
-      employeeId,
+      employeeId: finalEmployeeId,
       bookingId: bookingId || null,
       category: category ?? 'other',
       amount: amountNum,
@@ -52,6 +64,10 @@ export const createExpense = async (req, res) => {
 
 export const verifyExpense = async (req, res) => {
   try {
+    if (req.user && req.user.role !== 'admin' && req.user.role !== 'accounts') {
+      return res.status(403).json({ message: 'Not authorized to verify expenses' });
+    }
+
     const expense = await Expense.findById(req.params.id);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
@@ -80,6 +96,10 @@ export const deleteExpense = async (req, res) => {
     const expense = await Expense.findById(req.params.id);
     if (!expense) {
       return res.status(404).json({ message: 'Expense not found' });
+    }
+
+    if (req.user && (req.user.role === 'artist' || req.user.role === 'driver') && String(expense.employeeId) !== String(req.user.employeeId)) {
+      return res.status(403).json({ message: 'Not authorized to delete this expense' });
     }
 
     // Restriction removed as per user request: Admin/Accounts need to be able to delete entries.

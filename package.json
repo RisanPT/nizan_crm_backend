@@ -1,7 +1,7 @@
 {
-  "name": "nizan_backend",
+  "name": "team-n-backend",
   "version": "1.0.0",
-  "description": "Backend for Nizan CRM using Node.js and MongoDB",
+  "description": "Backend for Team N CRM using Node.js and MongoDB",
   "type": "module",
   "main": "server.js",
   "scripts": {

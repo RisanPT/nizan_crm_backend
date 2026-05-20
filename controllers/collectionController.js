@@ -14,7 +14,14 @@ export const getCollections = async (req, res) => {
     const filter = {};
     if (status) filter.status = status;
     if (bookingId) filter.bookingId = bookingId;
-    if (employeeId) filter.employeeId = employeeId;
+    
+    // Role-based scoping
+    if (req.user && (req.user.role === 'artist' || req.user.role === 'driver')) {
+      filter.employeeId = req.user.employeeId;
+    } else if (employeeId) {
+      filter.employeeId = employeeId;
+    }
+
     if (paymentMode) filter.paymentMode = paymentMode;
     
     if (startDate || endDate) {
@@ -40,11 +47,16 @@ export const createCollection = async (req, res) => {
   const { bookingId, employeeId, amount, date, paymentMode, notes, attachmentUrl } = req.body;
   
   try {
+    let finalEmployeeId = employeeId;
+    if (req.user && (req.user.role === 'artist' || req.user.role === 'driver')) {
+      finalEmployeeId = req.user.employeeId;
+    }
+
     const amountNum = Number(amount) || 0;
 
     const collection = new Collection({
       bookingId,
-      employeeId,
+      employeeId: finalEmployeeId,
       amount: amountNum,
       date: date ?? new Date(),
       paymentMode: paymentMode ?? 'cash',
@@ -63,6 +75,10 @@ export const createCollection = async (req, res) => {
 
 export const verifyCollection = async (req, res) => {
   try {
+    if (req.user && req.user.role !== 'admin' && req.user.role !== 'accounts') {
+      return res.status(403).json({ message: 'Not authorized to verify collections' });
+    }
+
     const collection = await Collection.findById(req.params.id);
     if (!collection) {
       return res.status(404).json({ message: 'Collection not found' });
@@ -91,6 +107,10 @@ export const deleteCollection = async (req, res) => {
     const collection = await Collection.findById(req.params.id);
     if (!collection) {
       return res.status(404).json({ message: 'Collection not found' });
+    }
+
+    if (req.user && (req.user.role === 'artist' || req.user.role === 'driver') && String(collection.employeeId) !== String(req.user.employeeId)) {
+      return res.status(403).json({ message: 'Not authorized to delete this collection' });
     }
 
     // Restriction removed as per user request: Admin/Accounts need to be able to delete entries.

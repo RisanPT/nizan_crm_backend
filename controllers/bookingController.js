@@ -657,16 +657,23 @@ export const getPaginatedBookings = async (req, res) => {
     const baseMatch = buildBookingSearchMatch(search);
 
     // Enforce Employee/Artist filter for artist role, or use provided filter for other roles
-    const effectiveEmployeeId = req.user.role === 'artist' 
+    const isArtist = req.user.role === 'artist';
+    const isDriver = req.user.role === 'driver';
+    
+    const effectiveEmployeeId = (isArtist || isDriver)
       ? (req.user.employeeId?.toString() || employeeId)
       : employeeId;
 
     if (effectiveEmployeeId && mongoose.Types.ObjectId.isValid(effectiveEmployeeId)) {
       const empId = new mongoose.Types.ObjectId(effectiveEmployeeId);
-      baseMatch.$or = [
-        { 'assignedStaff.employeeId': empId },
-        { 'bookingItems.assignedStaff.employeeId': empId },
-      ];
+      if (isDriver) {
+        baseMatch.driverId = empId;
+      } else {
+        baseMatch.$or = [
+          { 'assignedStaff.employeeId': empId },
+          { 'bookingItems.assignedStaff.employeeId': empId },
+        ];
+      }
     }
 
     // Apply Financial Year filter if provided (Format: "2024-25")

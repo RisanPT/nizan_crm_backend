@@ -17,18 +17,23 @@ export const getFuelExpenses = async (req, res) => {
     const page = Number.parseInt(req.query.page, 10);
     const limit = Number.parseInt(req.query.limit, 10);
 
+    const query = {};
+    if (req.user.role === 'driver') {
+      query.driverId = req.user.employeeId;
+    }
+
     if (Number.isFinite(page) || Number.isFinite(limit)) {
       const currentPage = Math.max(1, page || 1);
       const currentLimit = Math.min(100, Math.max(1, limit || 20));
       const skip = (currentPage - 1) * currentLimit;
 
       const [items, totalItems] = await Promise.all([
-        FuelExpense.find({})
+        FuelExpense.find(query)
           .populate(expensePopulate)
           .sort({ date: -1, createdAt: -1 })
           .skip(skip)
           .limit(currentLimit),
-        FuelExpense.countDocuments({}),
+        FuelExpense.countDocuments(query),
       ]);
 
       return res.json({
@@ -40,7 +45,7 @@ export const getFuelExpenses = async (req, res) => {
       });
     }
 
-    const expenses = await FuelExpense.find({})
+    const expenses = await FuelExpense.find(query)
       .populate(expensePopulate)
       .sort({ date: -1, createdAt: -1 });
     res.json(expenses);
@@ -64,9 +69,14 @@ export const createFuelExpense = async (req, res) => {
   } = req.body;
 
   try {
+    let finalDriverId = normalizeObjectId(driverId);
+    if (req.user.role === 'driver') {
+      finalDriverId = req.user.employeeId;
+    }
+
     const expense = await FuelExpense.create({
       vehicleId: normalizeObjectId(vehicleId),
-      driverId: normalizeObjectId(driverId),
+      driverId: finalDriverId,
       category: category ?? 'fuel',
       date: date ?? new Date(),
       odometerKm: Number(odometerKm) || 0,
@@ -89,6 +99,10 @@ export const updateFuelExpense = async (req, res) => {
     const expense = await FuelExpense.findById(req.params.id);
     if (!expense) {
       return res.status(404).json({ message: 'Fuel expense not found' });
+    }
+
+    if (req.user.role === 'driver' && String(expense.driverId) !== String(req.user.employeeId)) {
+      return res.status(403).json({ message: 'Not authorized to update this expense' });
     }
 
     const {
@@ -133,6 +147,10 @@ export const deleteFuelExpense = async (req, res) => {
     const expense = await FuelExpense.findById(req.params.id);
     if (!expense) {
       return res.status(404).json({ message: 'Fuel expense not found' });
+    }
+
+    if (req.user.role === 'driver' && String(expense.driverId) !== String(req.user.employeeId)) {
+      return res.status(403).json({ message: 'Not authorized to delete this expense' });
     }
 
     await expense.deleteOne();

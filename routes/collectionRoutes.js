@@ -5,8 +5,11 @@ import {
   verifyCollection,
   deleteCollection,
 } from '../controllers/collectionController.js';
+import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
+
+router.use(protect);
 
 router.route('/').get(getCollections).post(createCollection);
 router.route('/:id').delete(deleteCollection);

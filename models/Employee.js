@@ -10,6 +10,10 @@ const employeeSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    profileImage: {
+      type: String,
+      default: '',
+    },
     type: {
       type: String,
       enum: ['in-house', 'outsource'],
@@ -52,7 +56,7 @@ const employeeSchema = mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['creative', 'administrative'],
+      enum: ['creative', 'administrative', 'it', 'marketing', 'sales', 'admin'],
       default: 'creative',
     },
   },
