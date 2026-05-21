@@ -284,6 +284,7 @@ const computeExtraDateCharge = ({
 const computeBasePackagePrice = async ({
   packageId,
   regionId,
+  districtId,
   fallbackTotalPrice,
 }) => {
   const normalizedFallback = Number(fallbackTotalPrice) || 0;
@@ -292,10 +293,25 @@ const computeBasePackagePrice = async ({
   const packageDoc = await ServicePackage.findById(packageId).lean();
   if (!packageDoc) return normalizedFallback;
 
-  const matchingRegionPrice = (packageDoc.regionPrices ?? []).find(
-    (item) => String(item.region) == String(regionId ?? '')
-  );
-  return Number(matchingRegionPrice?.price ?? packageDoc.price) || 0;
+  if (districtId) {
+    const matchingDistrictPrice = (packageDoc.districtPrices ?? []).find(
+      (item) => String(item.district) == String(districtId)
+    );
+    if (matchingDistrictPrice) {
+      return Number(matchingDistrictPrice.price) || 0;
+    }
+  }
+
+  if (regionId) {
+    const matchingRegionPrice = (packageDoc.regionPrices ?? []).find(
+      (item) => String(item.region) == String(regionId)
+    );
+    if (matchingRegionPrice) {
+      return Number(matchingRegionPrice.price) || 0;
+    }
+  }
+
+  return Number(packageDoc.price) || 0;
 };
 
 const computeBaseAdvanceAmount = async ({
@@ -314,6 +330,7 @@ const computeBaseAdvanceAmount = async ({
 const computeTotalPrice = async ({
   packageId,
   regionId,
+  districtId,
   fallbackTotalPrice,
   selectedDates,
 }) => {
@@ -323,10 +340,31 @@ const computeTotalPrice = async ({
   const packageDoc = await ServicePackage.findById(packageId).lean();
   if (!packageDoc) return normalizedFallback;
 
-  const matchingRegionPrice = (packageDoc.regionPrices ?? []).find(
-    (item) => String(item.region) == String(regionId ?? '')
-  );
-  const basePrice = Number(matchingRegionPrice?.price ?? packageDoc.price) || 0;
+  let basePrice = Number(packageDoc.price) || 0;
+
+  if (districtId) {
+    const matchingDistrictPrice = (packageDoc.districtPrices ?? []).find(
+      (item) => String(item.district) == String(districtId)
+    );
+    if (matchingDistrictPrice) {
+      basePrice = Number(matchingDistrictPrice.price) || 0;
+    } else if (regionId) {
+      const matchingRegionPrice = (packageDoc.regionPrices ?? []).find(
+        (item) => String(item.region) == String(regionId)
+      );
+      if (matchingRegionPrice) {
+        basePrice = Number(matchingRegionPrice.price) || 0;
+      }
+    }
+  } else if (regionId) {
+    const matchingRegionPrice = (packageDoc.regionPrices ?? []).find(
+      (item) => String(item.region) == String(regionId)
+    );
+    if (matchingRegionPrice) {
+      basePrice = Number(matchingRegionPrice.price) || 0;
+    }
+  }
+
   return (
     basePrice +
     computeExtraDateCharge({
@@ -367,6 +405,7 @@ const computeBookingItemsAdvanceAmount = ({
 const normalizeBookingItems = async ({
   bookingItems = [],
   regionId,
+  districtId,
   fallbackSelectedDates = [],
   fallbackBookingDate = null,
 }) => {
@@ -385,6 +424,7 @@ const normalizeBookingItems = async ({
     const computedTotalPrice = await computeBasePackagePrice({
       packageId: normalizedPackageId,
       regionId,
+      districtId,
       fallbackTotalPrice: item?.totalPrice,
     });
     const computedAdvanceAmount = await computeBaseAdvanceAmount({
@@ -812,6 +852,7 @@ export const createBooking = async (req, res) => {
     bookingItems = [],
     packageId,
     regionId,
+    districtId,
     driverId,
     customerName,
     phone,
@@ -819,6 +860,7 @@ export const createBooking = async (req, res) => {
     legacyBooking,
     service,
     region,
+    district,
     driverName,
     status,
     mapUrl,
@@ -868,6 +910,7 @@ export const createBooking = async (req, res) => {
 
     const normalizedPackageId = normalizeObjectId(packageId);
     const normalizedRegionId = normalizeObjectId(regionId);
+    const normalizedDistrictId = normalizeObjectId(districtId);
     const normalizedDriverId = normalizeObjectId(driverId);
     const normalizedAssignedStaff = normalizeAssignedStaff(assignedStaff);
     const normalizedAddons = normalizeAddons(addons);
@@ -880,6 +923,7 @@ export const createBooking = async (req, res) => {
     const normalizedBookingItems = await normalizeBookingItems({
       bookingItems,
       regionId: normalizedRegionId,
+      districtId: normalizedDistrictId,
       fallbackSelectedDates: schedule.selectedDates,
       fallbackBookingDate: schedule.bookingDateValue,
     });
@@ -898,6 +942,7 @@ export const createBooking = async (req, res) => {
     const computedTotalPrice = await computeTotalPrice({
       packageId: normalizedPackageId,
       regionId: normalizedRegionId,
+      districtId: normalizedDistrictId,
       fallbackTotalPrice: totalPrice,
       selectedDates: effectiveSchedule.selectedDates,
     });
@@ -958,6 +1003,7 @@ export const createBooking = async (req, res) => {
     const booking = await Booking.create({
       packageId: summaryPackageId,
       regionId: normalizedRegionId,
+      districtId: normalizedDistrictId,
       driverId: normalizedDriverId,
       customerName,
       email: normalizedEmail,
@@ -965,6 +1011,7 @@ export const createBooking = async (req, res) => {
       phone,
       service: summaryService,
       region,
+      district,
       driverName,
       status: normalizedStatus,
       mapUrl,
@@ -1032,9 +1079,11 @@ export const updateBooking = async (req, res) => {
       legacyBooking,
       packageId,
       regionId,
+      districtId,
       driverId,
       service,
       region,
+      district,
       driverName,
       status,
       mapUrl,
@@ -1070,6 +1119,7 @@ export const updateBooking = async (req, res) => {
         : Boolean(booking.legacyBooking);
     const normalizedPackageId = normalizeObjectId(packageId);
     const normalizedRegionId = normalizeObjectId(regionId);
+    const normalizedDistrictId = normalizeObjectId(districtId);
     const normalizedDriverId = normalizeObjectId(driverId);
     const normalizedAssignedStaff = normalizeAssignedStaff(assignedStaff);
     const normalizedAddons = normalizeAddons(addons);
@@ -1080,10 +1130,14 @@ export const updateBooking = async (req, res) => {
       serviceEnd,
       currentBooking: booking,
     });
+    const nextDistrictId =
+      districtId !== undefined ? normalizedDistrictId : booking.districtId;
+    const nextRegionId =
+      regionId !== undefined ? normalizedRegionId : booking.regionId;
     const normalizedBookingItems = await normalizeBookingItems({
       bookingItems,
-      regionId:
-        regionId != null ? normalizedRegionId : booking.regionId,
+      regionId: nextRegionId,
+      districtId: nextDistrictId,
       fallbackSelectedDates: schedule.selectedDates,
       fallbackBookingDate: schedule.bookingDateValue,
     });
@@ -1112,11 +1166,10 @@ export const updateBooking = async (req, res) => {
     const nextStatus = String(status ?? booking.status ?? '').toLowerCase();
     const nextPackageId =
       packageId != null ? normalizedPackageId : booking.packageId;
-    const nextRegionId =
-      regionId != null ? normalizedRegionId : booking.regionId;
     const computedTotalPrice = await computeTotalPrice({
       packageId: nextPackageId,
       regionId: nextRegionId,
+      districtId: nextDistrictId,
       fallbackTotalPrice: totalPrice ?? booking.totalPrice,
       selectedDates: effectiveSchedule.selectedDates,
     });
@@ -1184,10 +1237,12 @@ export const updateBooking = async (req, res) => {
     booking.email = effectiveNextEmail;
     booking.legacyBooking = nextLegacyBooking;
     booking.packageId = finalPackageId;
-    booking.regionId = regionId != null ? normalizedRegionId : booking.regionId;
+    booking.regionId = nextRegionId;
+    booking.districtId = nextDistrictId;
     booking.driverId = driverId != null ? normalizedDriverId : booking.driverId;
     booking.service = finalService;
     booking.region = region ?? booking.region;
+    booking.district = district ?? booking.district;
     booking.driverName = driverName ?? booking.driverName;
     booking.status = status ?? booking.status;
     booking.mapUrl = mapUrl ?? booking.mapUrl;

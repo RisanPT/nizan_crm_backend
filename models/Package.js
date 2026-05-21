@@ -16,6 +16,22 @@ const regionPriceSchema = mongoose.Schema(
   { _id: false }
 );
 
+const districtPriceSchema = mongoose.Schema(
+  {
+    district: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'District',
+      required: true,
+    },
+    price: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
+  },
+  { _id: false }
+);
+
 const packageSchema = mongoose.Schema(
   {
     name: {
@@ -40,6 +56,10 @@ const packageSchema = mongoose.Schema(
     },
     regionPrices: {
       type: [regionPriceSchema],
+      default: [],
+    },
+    districtPrices: {
+      type: [districtPriceSchema],
       default: [],
     },
   },

@@ -127,6 +127,10 @@ const bookingSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Region',
     },
+    districtId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'District',
+    },
     driverId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Employee',
@@ -150,6 +154,9 @@ const bookingSchema = mongoose.Schema(
       required: true,
     },
     region: {
+      type: String,
+    },
+    district: {
       type: String,
     },
     driverName: {

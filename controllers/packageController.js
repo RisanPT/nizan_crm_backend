@@ -1,5 +1,6 @@
 import ServicePackage from '../models/Package.js';
 import Region from '../models/Region.js';
+import District from '../models/District.js';
 
 const normalizeRegionPrices = async (regionPrices = []) => {
   const validRegions = await Region.find({}, '_id');
@@ -23,6 +24,45 @@ const normalizeRegionPrices = async (regionPrices = []) => {
     }));
 };
 
+const normalizeDistrictPrices = async (districtPrices = []) => {
+  const validDistricts = await District.find({}, '_id');
+  const validDistrictIds = new Set(validDistricts.map((d) => String(d._id)));
+  const source = Array.isArray(districtPrices) ? districtPrices : [];
+
+  return source
+    .map((item) => ({
+      district: String(item.district),
+      price: Number(item.price),
+    }))
+    .filter(
+      (item) =>
+        validDistrictIds.has(item.district) &&
+        Number.isFinite(item.price) &&
+        item.price >= 0
+    )
+    .map((item) => ({
+      district: item.district,
+      price: item.price,
+    }));
+};
+
+const districtPopulateOption = {
+  path: 'districtPrices.district',
+  select: 'name status region',
+  populate: {
+    path: 'region',
+    select: 'name status state',
+    populate: {
+      path: 'state',
+      select: 'name status zone',
+      populate: {
+        path: 'zone',
+        select: 'name status',
+      },
+    },
+  },
+};
+
 export const getPackages = async (req, res) => {
   try {
     const page = Number.parseInt(req.query.page, 10);
@@ -36,6 +76,7 @@ export const getPackages = async (req, res) => {
       const [items, totalItems] = await Promise.all([
         ServicePackage.find({})
           .populate('regionPrices.region', 'name status')
+          .populate(districtPopulateOption)
           .sort({ createdAt: -1 })
           .skip(skip)
           .limit(currentLimit),
@@ -53,6 +94,7 @@ export const getPackages = async (req, res) => {
 
     const packages = await ServicePackage.find({})
       .populate('regionPrices.region', 'name status')
+      .populate(districtPopulateOption)
       .sort({ createdAt: -1 });
     res.json(packages);
   } catch (error) {
@@ -62,10 +104,9 @@ export const getPackages = async (req, res) => {
 
 export const getPackageById = async (req, res) => {
   try {
-    const servicePackage = await ServicePackage.findById(req.params.id).populate(
-      'regionPrices.region',
-      'name status'
-    );
+    const servicePackage = await ServicePackage.findById(req.params.id)
+      .populate('regionPrices.region', 'name status')
+      .populate(districtPopulateOption);
     if (!servicePackage) {
       return res.status(404).json({ message: 'Package not found' });
     }
@@ -76,11 +117,19 @@ export const getPackageById = async (req, res) => {
 };
 
 export const savePackage = async (req, res) => {
-  const { id, name, price, advanceAmount, description, regionPrices = [] } =
-    req.body;
+  const {
+    id,
+    name,
+    price,
+    advanceAmount,
+    description,
+    regionPrices = [],
+    districtPrices = [],
+  } = req.body;
 
   try {
     const normalizedRegionPrices = await normalizeRegionPrices(regionPrices);
+    const normalizedDistrictPrices = await normalizeDistrictPrices(districtPrices);
 
     let servicePackage;
     if (id) {
@@ -95,6 +144,7 @@ export const savePackage = async (req, res) => {
         advanceAmount ?? servicePackage.advanceAmount;
       servicePackage.description = description ?? servicePackage.description;
       servicePackage.regionPrices = normalizedRegionPrices;
+      servicePackage.districtPrices = normalizedDistrictPrices;
       await servicePackage.save();
     } else {
       servicePackage = await ServicePackage.create({
@@ -103,12 +153,15 @@ export const savePackage = async (req, res) => {
         advanceAmount: advanceAmount ?? 3000,
         description,
         regionPrices: normalizedRegionPrices,
+        districtPrices: normalizedDistrictPrices,
       });
     }
 
     const populatedPackage = await ServicePackage.findById(
       servicePackage._id
-    ).populate('regionPrices.region', 'name status');
+    )
+      .populate('regionPrices.region', 'name status')
+      .populate(districtPopulateOption);
 
     res.status(id ? 200 : 201).json(populatedPackage);
   } catch (error) {

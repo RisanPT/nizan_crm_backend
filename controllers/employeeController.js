@@ -51,25 +51,61 @@ export const getEmployees = async (req, res) => {
     const page = Number.parseInt(req.query.page, 10);
     const limit = Number.parseInt(req.query.limit, 10);
 
+    const query = {};
+    const andConditions = [];
+
+    if (req.query.category) {
+      if (req.query.category === 'admin') {
+        andConditions.push({ category: { $in: ['admin', 'administrative'] } });
+      } else if (req.query.category === 'creative') {
+        andConditions.push({
+          $or: [
+            { category: 'creative' },
+            { category: { $exists: false } },
+            { category: null }
+          ]
+        });
+      } else {
+        andConditions.push({ category: req.query.category });
+      }
+    }
+
+    if (req.query.search) {
+      const searchRegex = new RegExp(req.query.search, 'i');
+      andConditions.push({
+        $or: [
+          { name: searchRegex },
+          { email: searchRegex },
+          { phone: searchRegex },
+          { specialization: searchRegex },
+        ]
+      });
+    }
+
+    if (req.query.zoneId) {
+      andConditions.push({ zoneId: req.query.zoneId });
+    }
+    if (req.query.stateId) {
+      andConditions.push({ stateId: req.query.stateId });
+    }
+    if (req.query.regionId) {
+      andConditions.push({ regionId: req.query.regionId });
+    }
+    if (req.query.districtId) {
+      andConditions.push({ districtId: req.query.districtId });
+    }
+    if (req.query.pincodeId) {
+      andConditions.push({ pincodeId: req.query.pincodeId });
+    }
+
+    if (andConditions.length > 0) {
+      query.$and = andConditions;
+    }
+
     if (Number.isFinite(page) || Number.isFinite(limit)) {
       const currentPage = Math.max(1, page || 1);
       const currentLimit = Math.min(100, Math.max(1, limit || 20));
       const skip = (currentPage - 1) * currentLimit;
-
-      const query = {};
-      if (req.query.category) {
-        if (req.query.category === 'admin') {
-          query.category = { $in: ['admin', 'administrative'] };
-        } else if (req.query.category === 'creative') {
-          query.$or = [
-            { category: 'creative' },
-            { category: { $exists: false } },
-            { category: null }
-          ];
-        } else {
-          query.category = req.query.category;
-        }
-      }
 
       const [items, totalItems] = await Promise.all([
         Employee.find(query)
@@ -91,21 +127,6 @@ export const getEmployees = async (req, res) => {
         totalItems,
         totalPages: Math.max(1, Math.ceil(totalItems / currentLimit)),
       });
-    }
-
-    const query = {};
-    if (req.query.category) {
-      if (req.query.category === 'admin') {
-        query.category = { $in: ['admin', 'administrative'] };
-      } else if (req.query.category === 'creative') {
-        query.$or = [
-          { category: 'creative' },
-          { category: { $exists: false } },
-          { category: null }
-        ];
-      } else {
-        query.category = req.query.category;
-      }
     }
 
     const employees = await Employee.find(query)
