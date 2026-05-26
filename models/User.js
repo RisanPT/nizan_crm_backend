@@ -31,6 +31,31 @@ const userSchema = mongoose.Schema(
       ref: 'Employee',
       default: null,
     },
+    zoneId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Zone',
+      default: null,
+    },
+    stateId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'State',
+      default: null,
+    },
+    regionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Region',
+      default: null,
+    },
+    districtId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'District',
+      default: null,
+    },
+    pincodeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Pincode',
+      default: null,
+    },
     active: {
       type: Boolean,
       default: true,

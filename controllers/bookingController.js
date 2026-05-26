@@ -731,6 +731,31 @@ export const getPaginatedBookings = async (req, res) => {
         $lte: fyEnd,
       };
     }
+
+    // Geographic filtering logic
+    const zoneId = String(req.query.zoneId ?? '').trim();
+    const stateId = String(req.query.stateId ?? '').trim();
+    const regionId = String(req.query.regionId ?? '').trim();
+    const districtId = String(req.query.districtId ?? '').trim();
+
+    if (districtId && mongoose.Types.ObjectId.isValid(districtId)) {
+      baseMatch.districtId = new mongoose.Types.ObjectId(districtId);
+    } else if (regionId && mongoose.Types.ObjectId.isValid(regionId)) {
+      baseMatch.regionId = new mongoose.Types.ObjectId(regionId);
+    } else if (stateId && mongoose.Types.ObjectId.isValid(stateId)) {
+      const mongoose = await import('mongoose');
+      const RegionModel = mongoose.model('Region');
+      const regions = await RegionModel.find({ state: stateId }).select('_id').lean();
+      baseMatch.regionId = { $in: regions.map(r => r._id) };
+    } else if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
+      const mongoose = await import('mongoose');
+      const StateModel = mongoose.model('State');
+      const RegionModel = mongoose.model('Region');
+      const states = await StateModel.find({ zone: zoneId }).select('_id').lean();
+      const regions = await RegionModel.find({ state: { $in: states.map(s => s._id) } }).select('_id').lean();
+      baseMatch.regionId = { $in: regions.map(r => r._id) };
+    }
+
     const duplicateGroups = await Booking.aggregate(
       buildDuplicateGroupsPipeline(baseMatch)
     );

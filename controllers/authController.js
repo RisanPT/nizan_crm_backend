@@ -12,6 +12,11 @@ const toAuthResponse = (user) => ({
     email: user.email,
     role: user.role,
     employeeId: user.employeeId?.toString() ?? null,
+    zoneId: user.zoneId?.toString() ?? null,
+    stateId: user.stateId?.toString() ?? null,
+    regionId: user.regionId?.toString() ?? null,
+    districtId: user.districtId?.toString() ?? null,
+    pincodeId: user.pincodeId?.toString() ?? null,
   },
 });
 
@@ -46,6 +51,11 @@ export const getMe = async (req, res) => {
       email: req.user.email,
       role: req.user.role,
       employeeId: req.user.employeeId?.toString() ?? null,
+      zoneId: req.user.zoneId?.toString() ?? null,
+      stateId: req.user.stateId?.toString() ?? null,
+      regionId: req.user.regionId?.toString() ?? null,
+      districtId: req.user.districtId?.toString() ?? null,
+      pincodeId: req.user.pincodeId?.toString() ?? null,
     },
   });
 };
@@ -112,6 +122,11 @@ export const createUser = async (req, res) => {
     role,
     active: Boolean(active),
     employeeId: employeeId || null,
+    zoneId: req.body.zoneId || null,
+    stateId: req.body.stateId || null,
+    regionId: req.body.regionId || null,
+    districtId: req.body.districtId || null,
+    pincodeId: req.body.pincodeId || null,
   });
 
   return res.status(201).json({
@@ -120,6 +135,11 @@ export const createUser = async (req, res) => {
     email: user.email,
     role: user.role,
     employeeId: user.employeeId?.toString() ?? null,
+    zoneId: user.zoneId?.toString() ?? null,
+    stateId: user.stateId?.toString() ?? null,
+    regionId: user.regionId?.toString() ?? null,
+    districtId: user.districtId?.toString() ?? null,
+    pincodeId: user.pincodeId?.toString() ?? null,
     active: user.active,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
@@ -158,6 +178,21 @@ export const updateUser = async (req, res) => {
   if (req.body.employeeId !== undefined) {
     user.employeeId = req.body.employeeId || null;
   }
+  if (req.body.zoneId !== undefined) {
+    user.zoneId = req.body.zoneId || null;
+  }
+  if (req.body.stateId !== undefined) {
+    user.stateId = req.body.stateId || null;
+  }
+  if (req.body.regionId !== undefined) {
+    user.regionId = req.body.regionId || null;
+  }
+  if (req.body.districtId !== undefined) {
+    user.districtId = req.body.districtId || null;
+  }
+  if (req.body.pincodeId !== undefined) {
+    user.pincodeId = req.body.pincodeId || null;
+  }
 
   const nextPassword = String(req.body.password ?? '').trim();
   if (nextPassword.length > 0) {
@@ -172,6 +207,11 @@ export const updateUser = async (req, res) => {
     email: user.email,
     role: user.role,
     employeeId: user.employeeId?.toString() ?? null,
+    zoneId: user.zoneId?.toString() ?? null,
+    stateId: user.stateId?.toString() ?? null,
+    regionId: user.regionId?.toString() ?? null,
+    districtId: user.districtId?.toString() ?? null,
+    pincodeId: user.pincodeId?.toString() ?? null,
     active: user.active,
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
