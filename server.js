@@ -28,7 +28,13 @@ import timeBlockRoutes from './routes/timeBlockRoutes.js';
 import budgetRoutes from './routes/budgetRoutes.js';
 import { seedAdminUser } from './utils/seedAdminUser.js';
 
-dotenv.config();
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+dotenv.config({ path: path.resolve(__dirname, '.env'), override: true });
 
 const app = express();
 

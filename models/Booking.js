@@ -275,6 +275,18 @@ const bookingSchema = mongoose.Schema(
       type: Date,
       default: null,
     },
+    pocId: {
+      type: String,
+      default: '',
+    },
+    pocName: {
+      type: String,
+      default: '',
+    },
+    pocPhone: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,

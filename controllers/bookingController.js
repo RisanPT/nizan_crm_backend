@@ -912,6 +912,9 @@ export const createBooking = async (req, res) => {
     assignedStaff = [],
     addons = [],
     selectedDates = [],
+    pocId,
+    pocName,
+    pocPhone,
   } = req.body;
 
   try {
@@ -1064,6 +1067,9 @@ export const createBooking = async (req, res) => {
       assignedStaff: summaryAssignedStaff,
       addons: normalizedAddons,
       bookingItems: normalizedBookingItems,
+      pocId: pocId ?? '',
+      pocName: pocName ?? '',
+      pocPhone: pocPhone ?? '',
     });
 
     let invoiceEmailSent = false;
@@ -1135,6 +1141,9 @@ export const updateBooking = async (req, res) => {
       assignedStaff,
       addons,
       selectedDates,
+      pocId,
+      pocName,
+      pocPhone,
     } = req.body;
 
     const previousStatus = String(booking.status ?? '').toLowerCase();
@@ -1300,6 +1309,9 @@ export const updateBooking = async (req, res) => {
     booking.assignedStaff = finalAssignedStaff;
     booking.addons = addons != null ? normalizedAddons : booking.addons;
     booking.bookingItems = bookingItems != null ? finalBookingItems : booking.bookingItems;
+    booking.pocId = pocId ?? booking.pocId;
+    booking.pocName = pocName ?? booking.pocName;
+    booking.pocPhone = pocPhone ?? booking.pocPhone;
 
     const updatedBooking = await booking.save();
     const shouldSendAdvanceInvoice =
