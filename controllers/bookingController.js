@@ -333,9 +333,13 @@ const computeTotalPrice = async ({
   districtId,
   fallbackTotalPrice,
   selectedDates,
+  addonsTotal = 0,
 }) => {
   const normalizedFallback = Number(fallbackTotalPrice) || 0;
-  if (!packageId) return normalizedFallback;
+  if (!packageId) {
+    const basePrice = normalizedFallback - addonsTotal;
+    return basePrice < 0 ? 0 : basePrice;
+  }
 
   const packageDoc = await ServicePackage.findById(packageId).lean();
   if (!packageDoc) return normalizedFallback;
@@ -967,19 +971,20 @@ export const createBooking = async (req, res) => {
           serviceEnd,
         })
       : schedule;
+    const addonsTotal = computeAddonsTotal(normalizedAddons);
     const computedTotalPrice = await computeTotalPrice({
       packageId: normalizedPackageId,
       regionId: normalizedRegionId,
       districtId: normalizedDistrictId,
       fallbackTotalPrice: totalPrice,
       selectedDates: effectiveSchedule.selectedDates,
+      addonsTotal,
     });
     const computedAdvanceAmount = await computeAdvanceAmount({
       packageId: normalizedPackageId,
       fallbackAdvanceAmount: advanceAmount,
       selectedDates: effectiveSchedule.selectedDates,
     });
-    const addonsTotal = computeAddonsTotal(normalizedAddons);
     const finalTotalPrice =
       normalizedBookingItems.length > 0
         ? normalizedBookingItems.reduce(
@@ -1200,12 +1205,16 @@ export const updateBooking = async (req, res) => {
     const nextStatus = String(status ?? booking.status ?? '').toLowerCase();
     const nextPackageId =
       packageId != null ? normalizedPackageId : booking.packageId;
+    const effectiveAddons =
+      addons != null ? normalizedAddons : booking.addons;
+    const addonsTotal = computeAddonsTotal(effectiveAddons);
     const computedTotalPrice = await computeTotalPrice({
       packageId: nextPackageId,
       regionId: nextRegionId,
       districtId: nextDistrictId,
       fallbackTotalPrice: totalPrice ?? booking.totalPrice,
       selectedDates: effectiveSchedule.selectedDates,
+      addonsTotal,
     });
     const computedAdvanceAmount = await computeAdvanceAmount({
       packageId: nextPackageId,
@@ -1214,9 +1223,6 @@ export const updateBooking = async (req, res) => {
     });
     const finalBookingItems =
       bookingItems != null ? normalizedBookingItems : booking.bookingItems ?? [];
-    const effectiveAddons =
-      addons != null ? normalizedAddons : booking.addons;
-    const addonsTotal = computeAddonsTotal(effectiveAddons);
     const finalTotalPrice =
       bookingItems != null && finalBookingItems.length > 0
         ? finalBookingItems.reduce(
