@@ -135,6 +135,11 @@ const bookingSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Employee',
     },
+    vehicleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Vehicle',
+      default: null,
+    },
     customerName: {
       type: String,
       required: true,
@@ -148,6 +153,14 @@ const bookingSchema = mongoose.Schema(
     },
     phone: {
       type: String,
+    },
+    address: {
+      type: String,
+      default: '',
+    },
+    pincode: {
+      type: String,
+      default: '',
     },
     service: {
       type: String,

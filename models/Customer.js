@@ -14,6 +14,14 @@ const customerSchema = mongoose.Schema(
     phone: {
       type: String,
     },
+    address: {
+      type: String,
+      default: '',
+    },
+    pincode: {
+      type: String,
+      default: '',
+    },
     company: {
       type: String,
     },

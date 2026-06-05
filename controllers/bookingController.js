@@ -697,6 +697,7 @@ export const getPaginatedBookings = async (req, res) => {
       String(req.query.duplicatesOnly ?? '').trim().toLowerCase() === 'true';
     const employeeId = String(req.query.employeeId ?? '').trim();
     const financialYear = String(req.query.financialYear ?? '').trim();
+    const dateBasis = String(req.query.dateBasis ?? 'event_date').trim().toLowerCase();
 
     const baseMatch = buildBookingSearchMatch(search);
 
@@ -730,7 +731,9 @@ export const getPaginatedBookings = async (req, res) => {
       const fyStart = new Date(startYear, 3, 1, 0, 0, 0); // April 1st
       const fyEnd = new Date(endYear, 2, 31, 23, 59, 59); // March 31st
 
-      baseMatch.bookingDate = {
+      const dateField = dateBasis === 'booking_date' ? 'createdAt' : 'bookingDate';
+
+      baseMatch[dateField] = {
         $gte: fyStart,
         $lte: fyEnd,
       };
@@ -883,8 +886,11 @@ export const createBooking = async (req, res) => {
     regionId,
     districtId,
     driverId,
+    vehicleId,
     customerName,
     phone,
+    address,
+    pincode,
     email,
     legacyBooking,
     service,
@@ -940,10 +946,18 @@ export const createBooking = async (req, res) => {
       return res.status(400).json({ message: 'Client email is required' });
     }
 
+    if (
+      (!req.user || !isLegacyBooking) &&
+      (!phone || !String(phone).trim())
+    ) {
+      return res.status(400).json({ message: 'Client phone number is required' });
+    }
+
     const normalizedPackageId = normalizeObjectId(packageId);
     const normalizedRegionId = normalizeObjectId(regionId);
     const normalizedDistrictId = normalizeObjectId(districtId);
     const normalizedDriverId = normalizeObjectId(driverId);
+    const normalizedVehicleId = normalizeObjectId(vehicleId);
     const normalizedAssignedStaff = normalizeAssignedStaff(assignedStaff);
     const normalizedAddons = normalizeAddons(addons);
     const schedule = resolveSchedule({
@@ -1029,6 +1043,8 @@ export const createBooking = async (req, res) => {
         name: customerName,
         email: normalizedEmail,
         phone,
+        address,
+        pincode,
         status: 'Active',
       });
     }
@@ -1038,10 +1054,13 @@ export const createBooking = async (req, res) => {
       regionId: normalizedRegionId,
       districtId: normalizedDistrictId,
       driverId: normalizedDriverId,
+      vehicleId: normalizedVehicleId,
       customerName,
       email: normalizedEmail,
       legacyBooking: isLegacyBooking,
       phone,
+      address,
+      pincode,
       service: summaryService,
       region,
       district,
@@ -1111,12 +1130,15 @@ export const updateBooking = async (req, res) => {
       bookingItems,
       customerName,
       phone,
+      address,
+      pincode,
       email,
       legacyBooking,
       packageId,
       regionId,
       districtId,
       driverId,
+      vehicleId,
       service,
       region,
       district,
@@ -1160,6 +1182,7 @@ export const updateBooking = async (req, res) => {
     const normalizedRegionId = normalizeObjectId(regionId);
     const normalizedDistrictId = normalizeObjectId(districtId);
     const normalizedDriverId = normalizeObjectId(driverId);
+    const normalizedVehicleId = normalizeObjectId(vehicleId);
     const normalizedAssignedStaff = normalizeAssignedStaff(assignedStaff);
     const normalizedAddons = normalizeAddons(addons);
     const schedule = resolveSchedule({
@@ -1274,12 +1297,15 @@ export const updateBooking = async (req, res) => {
 
     booking.customerName = customerName ?? booking.customerName;
     booking.phone = phone ?? booking.phone;
+    booking.address = address ?? booking.address;
+    booking.pincode = pincode ?? booking.pincode;
     booking.email = effectiveNextEmail;
     booking.legacyBooking = nextLegacyBooking;
     booking.packageId = finalPackageId;
     booking.regionId = nextRegionId;
     booking.districtId = nextDistrictId;
     booking.driverId = driverId != null ? normalizedDriverId : booking.driverId;
+    booking.vehicleId = vehicleId != null ? normalizedVehicleId : booking.vehicleId;
     booking.service = finalService;
     booking.region = region ?? booking.region;
     booking.district = district ?? booking.district;

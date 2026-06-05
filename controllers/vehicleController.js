@@ -71,6 +71,7 @@ export const createVehicle = async (req, res) => {
     driverId,
     status,
     notes,
+    ownershipType,
   } = req.body;
 
   try {
@@ -83,6 +84,7 @@ export const createVehicle = async (req, res) => {
       driverId: normalizeObjectId(driverId),
       status: status ?? 'active',
       notes: notes ?? '',
+      ownershipType: ownershipType ?? 'in_house',
     });
 
     const populated = await Vehicle.findById(vehicle._id).populate(vehiclePopulate);
@@ -108,6 +110,7 @@ export const updateVehicle = async (req, res) => {
       driverId,
       status,
       notes,
+      ownershipType,
     } = req.body;
 
     vehicle.name = name ?? vehicle.name;
@@ -122,6 +125,7 @@ export const updateVehicle = async (req, res) => {
       driverId != null ? normalizeObjectId(driverId) : vehicle.driverId;
     vehicle.status = status ?? vehicle.status;
     vehicle.notes = notes ?? vehicle.notes;
+    vehicle.ownershipType = ownershipType ?? vehicle.ownershipType;
 
     await vehicle.save();
 

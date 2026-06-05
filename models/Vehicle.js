@@ -43,6 +43,11 @@ const vehicleSchema = mongoose.Schema(
       default: '',
       trim: true,
     },
+    ownershipType: {
+      type: String,
+      enum: ['in_house', 'rented'],
+      default: 'in_house',
+    },
   },
   {
     timestamps: true,
