@@ -6,11 +6,12 @@ dotenv.config();
 export const transporter =
   process.env.NODEMAILER_EMAIL && process.env.NODEMAILER_PASS
     ? nodemailer.createTransport({
-        service: 'gmail',
-        host: 'smtp.gmail.com',
+        host: process.env.SMTP_HOST?.trim() || 'smtp.titan.email',
+        port: Number(process.env.SMTP_PORT?.trim()) || 465,
+        secure: Number(process.env.SMTP_PORT?.trim() || 465) === 465,
         auth: {
-          user: process.env.NODEMAILER_EMAIL,
-          pass: process.env.NODEMAILER_PASS,
+          user: process.env.NODEMAILER_EMAIL.trim(),
+          pass: process.env.NODEMAILER_PASS.trim(),
         },
       })
     : null;

@@ -71,6 +71,10 @@ const addonSchema = mongoose.Schema(
       required: true,
       min: 1,
     },
+    description: {
+      type: String,
+      default: '',
+    },
   },
   { _id: false }
 );

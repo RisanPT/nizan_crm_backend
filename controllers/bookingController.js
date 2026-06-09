@@ -153,16 +153,18 @@ const normalizeSelectedDates = (selectedDates = [], fallbackDate = null) => {
 
 const mergeDateAndTime = (dateOnly, timeSource, fallbackHour, fallbackMinute) => {
   const sourceDate = timeSource ? new Date(timeSource) : null;
-  const hour =
-    sourceDate && !Number.isNaN(sourceDate.getTime())
-      ? sourceDate.getHours()
-      : fallbackHour;
-  const minute =
-    sourceDate && !Number.isNaN(sourceDate.getTime())
-      ? sourceDate.getMinutes()
-      : fallbackMinute;
+  let hour = fallbackHour;
+  let minute = fallbackMinute;
 
-  return new Date(
+  if (sourceDate && !Number.isNaN(sourceDate.getTime())) {
+    // Convert sourceDate to Asia/Kolkata (+5:30) timezone before extracting hours and minutes
+    const adjusted = new Date(sourceDate.getTime() + 5.5 * 60 * 60 * 1000);
+    hour = adjusted.getUTCHours();
+    minute = adjusted.getUTCMinutes();
+  }
+
+  // Construct in Asia/Kolkata timezone and convert back to UTC
+  const mergedUtc = Date.UTC(
     dateOnly.getFullYear(),
     dateOnly.getMonth(),
     dateOnly.getDate(),
@@ -170,7 +172,9 @@ const mergeDateAndTime = (dateOnly, timeSource, fallbackHour, fallbackMinute) =>
     minute,
     0,
     0
-  );
+  ) - 5.5 * 60 * 60 * 1000;
+
+  return new Date(mergedUtc);
 };
 
 const resolveSchedule = ({
@@ -1174,6 +1178,12 @@ export const updateBooking = async (req, res) => {
     } = req.body;
 
     const previousStatus = String(booking.status ?? '').toLowerCase();
+    console.log('[DEBUG updateBooking] req.body:', {
+      travelDistanceKm: req.body.travelDistanceKm,
+      travelMode: req.body.travelMode,
+      travelTime: req.body.travelTime,
+      keys: Object.keys(req.body)
+    });
     const nextLegacyBooking =
       legacyBooking != null
         ? parseLegacyBookingFlag(legacyBooking)

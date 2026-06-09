@@ -200,6 +200,7 @@ export const sendAdvanceInvoiceEmail = async (booking) => {
     from: fromEmail,
     to: booking.email,
     subject: `Advance Payment Invoice - ${booking.customerName}`,
+    text: `Hello ${booking.customerName},\n\nYour booking has been confirmed. Please review your advance payment details.\n\nBooking ID: ${toBookingNumber(booking)}\nTotal Advance Paid: ${toCurrency(totalAdvance)}\n\nPlease contact us if you have any questions.\n\nRegards,\n${companyName}`,
     html: `
       <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6;">
         <h2 style="margin-bottom:8px;">Advance Payment Invoice</h2>
@@ -262,6 +263,7 @@ export const sendCompletionInvoiceEmail = async (booking) => {
     from: fromEmail,
     to: booking.email,
     subject: `Work Completion Invoice - ${booking.customerName}`,
+    text: `Hello ${booking.customerName},\n\nYour work has been marked as completed and the full payment has been received.\n\nBooking ID: ${toBookingNumber(booking)}\nTotal Booking Amount: ${toCurrency(totalAmount)}\nFull Amount Paid: ${toCurrency(fullAmountPaid)}\n\nPayment Status: Paid in Full\n\nRegards,\n${companyName}`,
     html: `
       <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6;">
         <h2 style="margin-bottom:8px;">Work Completion Invoice</h2>
