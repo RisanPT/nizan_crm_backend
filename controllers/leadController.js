@@ -7,6 +7,10 @@ export const getLeads = async (req, res) => {
   const { search, status } = req.query;
 
   const query = {};
+  if (req.user && req.user.role === 'sales') {
+    query.assignedTo = req.user._id;
+  }
+
   if (search) {
     query.$or = [
       { name: { $regex: search, $options: 'i' } },
@@ -20,7 +24,8 @@ export const getLeads = async (req, res) => {
   try {
     const totalItems = await Lead.countDocuments(query);
     const leads = await Lead.find(query)
-      .sort({ createdAt: -1 })
+      .populate('assignedTo', 'name email role')
+      .sort({ leadDate: -1, createdAt: -1 })
       .skip(skip)
       .limit(limit);
 
@@ -38,7 +43,14 @@ export const getLeads = async (req, res) => {
 
 export const createLead = async (req, res) => {
   try {
-    const lead = await Lead.create(req.body);
+    // Store current UTC time — Flutter's .toLocal() converts to IST on the device.
+    // Do NOT add a manual IST offset (that would cause double-counting: stored as UTC+5:30,
+    // then Flutter adds another +5:30 = displayed as UTC+11).
+    const leadData = { ...req.body };
+    if (req.user && req.user.role === 'sales') {
+      leadData.assignedTo = req.user._id;
+    }
+    const lead = await Lead.create({ ...leadData, leadDate: new Date() });
     res.status(201).json(lead);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -47,7 +59,11 @@ export const createLead = async (req, res) => {
 
 export const updateLead = async (req, res) => {
   try {
-    const lead = await Lead.findByIdAndUpdate(req.params.id, req.body, {
+    const leadData = { ...req.body };
+    if (req.user && req.user.role === 'sales') {
+      leadData.assignedTo = req.user._id;
+    }
+    const lead = await Lead.findByIdAndUpdate(req.params.id, leadData, {
       new: true,
       runValidators: true,
     });

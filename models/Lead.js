@@ -25,12 +25,27 @@ const leadSchema = mongoose.Schema(
       type: String,
       default: 'Individual',
     },
+    // Manually set date when the lead was actually received (can be past)
+    leadDate: {
+      type: Date,
+      // No default — so existing docs without this field return null,
+      // and Flutter correctly falls back to createdAt.
+    },
     enquiryDate: {
       type: Date,
       default: Date.now,
     },
     bookedDate: {
       type: Date,
+      default: null,
+    },
+    // Date + time for follow-up reminder (only when status is Follow-up)
+    followUpDate: {
+      type: Date,
+    },
+    assignedTo: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
       default: null,
     },
     status: {
