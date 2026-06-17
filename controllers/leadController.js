@@ -87,3 +87,24 @@ export const deleteLead = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+// Assign all leads that have no assignedTo → a specific user
+export const bulkAssignLeads = async (req, res) => {
+  try {
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ message: 'userId is required' });
+    }
+    const result = await Lead.updateMany(
+      { $or: [{ assignedTo: null }, { assignedTo: { $exists: false } }] },
+      { $set: { assignedTo: userId } }
+    );
+    res.json({
+      message: `${result.modifiedCount} unassigned lead(s) assigned successfully.`,
+      modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+

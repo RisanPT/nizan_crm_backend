@@ -217,3 +217,18 @@ export const updateUser = async (req, res) => {
     updatedAt: user.updatedAt,
   });
 };
+
+export const deleteUser = async (req, res) => {
+  // Guard: cannot delete your own account
+  if (req.user._id.toString() === req.params.id) {
+    return res.status(400).json({ message: 'You cannot delete your own account' });
+  }
+
+  const user = await User.findByIdAndDelete(req.params.id);
+  if (!user) {
+    return res.status(404).json({ message: 'User not found' });
+  }
+
+  return res.json({ message: 'User deleted successfully', id: req.params.id });
+};
+
