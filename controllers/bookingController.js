@@ -743,6 +743,40 @@ export const getPaginatedBookings = async (req, res) => {
       };
     }
 
+    // Apply Month filter if provided (Format: "YYYY-MM")
+    const month = String(req.query.month ?? '').trim();
+    if (month && /^\d{4}-\d{2}$/.test(month)) {
+      const parts = month.split('-');
+      const year = Number.parseInt(parts[0], 10);
+      const monthIndex = Number.parseInt(parts[1], 10) - 1;
+
+      const startOfMonth = new Date(year, monthIndex, 1, 0, 0, 0);
+      const endOfMonth = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+
+      const dateField = dateBasis === 'booking_date' ? 'createdAt' : 'bookingDate';
+
+      baseMatch[dateField] = {
+        $gte: startOfMonth,
+        $lte: endOfMonth,
+      };
+    }
+
+    // Apply Map Link filter if provided
+    const onlyWithMapLink = String(req.query.onlyWithMapLink ?? '').trim().toLowerCase() === 'true';
+    if (onlyWithMapLink) {
+      baseMatch.mapUrl = { $ne: null, $not: /^\s*$/ };
+    }
+
+    // Apply Status filter if provided (Format: "completed" or "upcoming")
+    const status = String(req.query.status ?? '').trim().toLowerCase();
+    if (status) {
+      if (status === 'completed') {
+        baseMatch.status = { $regex: /^completed$/i };
+      } else if (status === 'upcoming') {
+        baseMatch.status = { $nin: ['completed', 'cancelled', 'rejected', 'Completed', 'Cancelled', 'Rejected'] };
+      }
+    }
+
     // Geographic filtering logic
     const zoneId = String(req.query.zoneId ?? '').trim();
     const stateId = String(req.query.stateId ?? '').trim();

@@ -4,21 +4,57 @@ export const getLeads = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const skip = (page - 1) * limit;
-  const { search, status } = req.query;
+  const { search, status, source, salesperson, month } = req.query;
 
   const query = {};
   if (req.user && req.user.role === 'sales') {
     query.assignedTo = req.user._id;
+  } else if (salesperson && salesperson !== 'All') {
+    if (salesperson === 'Unassigned') {
+      query.$or = [{ assignedTo: null }, { assignedTo: { $exists: false } }];
+    } else {
+      query.assignedTo = salesperson;
+    }
   }
 
   if (search) {
     query.$or = [
       { name: { $regex: search, $options: 'i' } },
       { phone: { $regex: search, $options: 'i' } },
+      { location: { $regex: search, $options: 'i' } },
     ];
   }
   if (status && status !== 'All') {
     query.status = status;
+  }
+  if (source && source !== 'All') {
+    if (source === 'Other') {
+      query.source = { $nin: ['Instagram', 'YouTube', 'Reference', 'Walk-in'] };
+    } else {
+      query.source = source;
+    }
+  }
+  
+  if (month && month !== 'All') {
+    const [year, monthStr] = month.split('-');
+    const startDate = new Date(Date.UTC(parseInt(year), parseInt(monthStr) - 1, 1));
+    const endDate = new Date(Date.UTC(parseInt(year), parseInt(monthStr), 1));
+    
+    // We use an $and to combine the existing $or (from search) with the date filter
+    const dateQuery = {
+      $or: [
+        { leadDate: { $gte: startDate, $lt: endDate } },
+        { leadDate: { $exists: false }, createdAt: { $gte: startDate, $lt: endDate } },
+        { leadDate: null, createdAt: { $gte: startDate, $lt: endDate } }
+      ]
+    };
+    
+    if (query.$or) {
+      query.$and = [{ $or: query.$or }, dateQuery];
+      delete query.$or;
+    } else {
+      query.$or = dateQuery.$or;
+    }
   }
 
   try {
@@ -29,12 +65,44 @@ export const getLeads = async (req, res) => {
       .skip(skip)
       .limit(limit);
 
+    // Calculate accurate stats for the dashboard based on the filtered query
+    const statsAgg = await Lead.aggregate([
+      { $match: query },
+      { 
+        $group: { 
+          _id: "$status", 
+          count: { $sum: 1 } 
+        } 
+      }
+    ]);
+
+    const now = new Date();
+    // For missed count, we need to match followUpDate < now AND status not converted/lost
+    const missedQuery = { ...query };
+    missedQuery.followUpDate = { $lt: now };
+    missedQuery.status = { $nin: ['Converted', 'Lost'] };
+    const missedCount = await Lead.countDocuments(missedQuery);
+
+    const stats = {
+      New: 0,
+      'Follow-up': 0,
+      Closed: 0,
+      Missed: missedCount,
+    };
+
+    statsAgg.forEach(s => {
+      if (s._id === 'New') stats.New = s.count;
+      else if (s._id === 'Follow-up') stats['Follow-up'] = s.count;
+      else if (['Converted', 'Lost'].includes(s._id)) stats.Closed += s.count;
+    });
+
     res.json({
       items: leads,
       totalItems,
       totalPages: Math.ceil(totalItems / limit),
       page,
       limit,
+      stats,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
