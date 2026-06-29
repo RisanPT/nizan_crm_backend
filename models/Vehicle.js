@@ -35,8 +35,13 @@ const vehicleSchema = mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['active', 'maintenance', 'inactive'],
-      default: 'active',
+      enum: ['running', 'under_service', 'accident', 'complaint', 'other'],
+      default: 'running',
+    },
+    parkedLocation: {
+      type: String,
+      default: '',
+      trim: true,
     },
     notes: {
       type: String,

@@ -144,6 +144,15 @@ const bookingSchema = mongoose.Schema(
       ref: 'Vehicle',
       default: null,
     },
+    preTripPhotos: {
+      type: [String],
+      default: [],
+    },
+    tripStatus: {
+      type: String,
+      enum: ['unassigned', 'assigned', 'inspection_pending', 'in_progress', 'completed'],
+      default: 'unassigned',
+    },
     customerName: {
       type: String,
       required: true,
