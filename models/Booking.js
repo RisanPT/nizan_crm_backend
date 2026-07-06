@@ -285,6 +285,14 @@ const bookingSchema = mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Sum of all verified artist collection amounts for this booking.
+    // Updated automatically by collectionController whenever a collection
+    // is verified, rejected, or deleted — never set directly by sales.
+    collectedAmount: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     assignedStaff: {
       type: [assignedStaffSchema],
       default: [],

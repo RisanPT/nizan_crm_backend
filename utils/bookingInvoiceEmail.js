@@ -246,30 +246,62 @@ export const sendCompletionInvoiceEmail = async (booking) => {
     'noreply@teamnmakeover.local';
   const companyName = process.env.COMPANY_NAME || 'Team N Makeovers';
   const { items, totalAmount, totalAdvance } = toInvoiceTotals(booking);
-  const addonsTotal = (booking.addons ?? []).reduce(
-    (sum, addon) => sum + ((Number(addon.amount) || 0) * (Number(addon.persons) || 1)),
-    0
-  );
-  const fullAmountPaid = Math.max(
-    0,
-    totalAmount - (Number(booking.discountAmount) || 0)
-  );
+
+  const discountAmt = Number(booking.discountAmount) || 0;
+  // collectedAmount = sum of all verified artist collections (synced by backend)
+  const collectedAmt = Number(booking.collectedAmount) || 0;
+  const subtotal = totalAmount;
+  const balanceDue = Math.max(0, subtotal - discountAmt - totalAdvance - collectedAmt);
+  const isFullyPaid = balanceDue <= 0;
+
   const assignedArtists = (booking.assignedStaff ?? [])
     .map((staff) => staff.artistName)
     .filter(Boolean)
     .join(', ');
 
+  const paymentSummaryRows = `
+    <tr style="border-top:2px solid #d9dde3;">
+      <td style="padding:10px 12px;font-size:14px;">Booking Total</td>
+      <td style="padding:10px 12px;font-size:14px;text-align:right;">${toCurrency(subtotal)}</td>
+    </tr>
+    ${discountAmt > 0 ? `
+    <tr>
+      <td style="padding:6px 12px;font-size:14px;color:#667085;">Less: Discount</td>
+      <td style="padding:6px 12px;font-size:14px;text-align:right;color:#667085;">− ${toCurrency(discountAmt)}</td>
+    </tr>` : ''}
+    ${totalAdvance > 0 ? `
+    <tr>
+      <td style="padding:6px 12px;font-size:14px;color:#667085;">Less: Advance Paid</td>
+      <td style="padding:6px 12px;font-size:14px;text-align:right;color:#667085;">− ${toCurrency(totalAdvance)}</td>
+    </tr>` : ''}
+    ${collectedAmt > 0 ? `
+    <tr>
+      <td style="padding:6px 12px;font-size:14px;color:#667085;">Less: Final Payment Collected</td>
+      <td style="padding:6px 12px;font-size:14px;text-align:right;color:#667085;">− ${toCurrency(collectedAmt)}</td>
+    </tr>` : ''}
+    <tr style="border-top:2px solid #d9dde3;background:${isFullyPaid ? '#ecfdf3' : '#fff7ed'};">
+      <td style="padding:12px;font-size:16px;font-weight:700;color:${isFullyPaid ? '#166534' : '#9a3412'};">Balance Due</td>
+      <td style="padding:12px;font-size:20px;font-weight:800;text-align:right;color:${isFullyPaid ? '#166534' : '#c2410c'};">${isFullyPaid ? '₹ 0' : toCurrency(balanceDue)}</td>
+    </tr>
+    <tr style="background:${isFullyPaid ? '#ecfdf3' : '#fff7ed'};">
+      <td colspan="2" style="padding:4px 12px 12px;font-size:13px;font-weight:700;color:${isFullyPaid ? '#166534' : '#9a3412'};text-align:center;">
+        ${isFullyPaid ? '✅ PAID IN FULL' : '⚠️ PAYMENT PENDING'}
+      </td>
+    </tr>
+  `;
+
   return sendMail(transporter, {
     from: fromEmail,
     to: booking.email,
     subject: `Work Completion Invoice - ${booking.customerName}`,
-    text: `Hello ${booking.customerName},\n\nYour work has been marked as completed and the full payment has been received.\n\nBooking ID: ${toBookingNumber(booking)}\nTotal Booking Amount: ${toCurrency(totalAmount)}\nFull Amount Paid: ${toCurrency(fullAmountPaid)}\n\nPayment Status: Paid in Full\n\nRegards,\n${companyName}`,
+    text: `Hello ${booking.customerName},\n\nYour work has been marked as completed.\n\nBooking ID: ${toBookingNumber(booking)}\nTotal: ${toCurrency(subtotal)}\nAdvance Paid: ${toCurrency(totalAdvance)}\nFinal Payment Collected: ${toCurrency(collectedAmt)}\nBalance Due: ${toCurrency(balanceDue)}\nPayment Status: ${isFullyPaid ? 'Paid in Full' : 'Pending'}\n\nRegards,\n${companyName}`,
     html: `
-      <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6;">
+      <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6;max-width:640px;margin:0 auto;">
         <h2 style="margin-bottom:8px;">Work Completion Invoice</h2>
         <p>Hello ${booking.customerName},</p>
-        <p>Your work has been marked as completed and the full payment has been received. Please find the final payment summary below.</p>
-        <div style="display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:14px;margin:20px 0;">
+        <p>Your work has been marked as completed. Please find the final payment summary below.</p>
+
+        <div style="display:grid;grid-template-columns:repeat(2,minmax(200px,1fr));gap:14px;margin:20px 0;">
           <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fcfcfd;">
             <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Booking ID</div>
             <div style="font-size:22px;font-weight:700;">${toBookingNumber(booking)}</div>
@@ -279,36 +311,31 @@ export const sendCompletionInvoiceEmail = async (booking) => {
             <div style="font-size:18px;font-weight:700;">${toSelectedDatesLabel(booking)}</div>
           </div>
           <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fcfcfd;">
+            <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Package</div>
+            <div style="font-size:18px;font-weight:700;">${booking.service || 'Standard Package'}</div>
+          </div>
+          <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fcfcfd;">
             <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Assigned Team</div>
-            <div style="font-size:18px;font-weight:700;">${assignedArtists || 'Assigned by admin'}</div>
-          </div>
-          <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fcfcfd;">
-            <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Discount</div>
-            <div style="font-size:18px;font-weight:700;">${toCurrency(booking.discountAmount)}</div>
-          </div>
-          <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fcfcfd;">
-            <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Total Booking Amount</div>
-            <div style="font-size:22px;font-weight:700;">${toCurrency(totalAmount)}</div>
-          </div>
-          <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fcfcfd;">
-            <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Advance Previously Paid</div>
-            <div style="font-size:22px;font-weight:700;">${toCurrency(totalAdvance)}</div>
-          </div>
-          <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fcfcfd;">
-            <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Add-ons Total</div>
-            <div style="font-size:22px;font-weight:700;">${toCurrency(addonsTotal)}</div>
-          </div>
-          <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fff7ed;border-color:#fed7aa;">
-            <div style="font-size:12px;text-transform:uppercase;color:#9a3412;margin-bottom:8px;">Full Amount Paid</div>
-            <div style="font-size:24px;font-weight:800;color:#c2410c;">${toCurrency(fullAmountPaid)}</div>
-          </div>
-          <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#ecfdf3;border-color:#86efac;">
-            <div style="font-size:12px;text-transform:uppercase;color:#166534;margin-bottom:8px;">Payment Status</div>
-            <div style="font-size:24px;font-weight:800;color:#166534;">Paid in Full</div>
+            <div style="font-size:16px;font-weight:700;">${assignedArtists || 'Assigned by admin'}</div>
           </div>
         </div>
+
+        <p style="margin:20px 0 8px;font-weight:700;font-size:15px;">Payment Breakdown</p>
+        <table style="border-collapse:collapse;width:100%;border:1px solid #d9dde3;border-radius:12px;overflow:hidden;">
+          <thead>
+            <tr style="background:#f8fafc;">
+              <th style="padding:10px 12px;text-align:left;font-size:12px;text-transform:uppercase;color:#667085;">Description</th>
+              <th style="padding:10px 12px;text-align:right;font-size:12px;text-transform:uppercase;color:#667085;">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${paymentSummaryRows}
+          </tbody>
+        </table>
+
         ${items.length > 1 ? '<p style="margin:18px 0 8px;font-weight:700;">Package-wise breakdown</p>' : ''}
         ${renderCompletionInvoiceSections(booking)}
+
         <p>Please contact us if you need the detailed invoice breakdown or payment support.</p>
         <p>Regards,<br />${companyName}</p>
       </div>

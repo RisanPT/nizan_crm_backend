@@ -8,6 +8,24 @@ const collectionPopulate = [
   { path: 'verifiedBy', select: 'name role' },
 ];
 
+/**
+ * Recalculates the sum of all verified collections for a booking and
+ * writes it to Booking.collectedAmount.  Call this after any status change
+ * or deletion of a Collection document.
+ */
+const syncBookingCollectedAmount = async (bookingId) => {
+  if (!bookingId) return;
+  const verifiedCollections = await Collection.find({
+    bookingId,
+    status: 'verified',
+  }).select('amount');
+  const totalCollected = verifiedCollections.reduce(
+    (sum, c) => sum + (Number(c.amount) || 0),
+    0
+  );
+  await Booking.findByIdAndUpdate(bookingId, { collectedAmount: totalCollected });
+};
+
 export const getCollections = async (req, res) => {
   try {
     const { status, bookingId, employeeId, paymentMode, startDate, endDate } = req.query;
@@ -95,6 +113,13 @@ export const verifyCollection = async (req, res) => {
 
     await collection.save();
 
+    // ─── Sync booking.collectedAmount ─────────────────────────────────────────
+    // After any status change (verified or rejected), recalculate the total of
+    // all *verified* collections for this booking and persist it so the invoice
+    // screen always has an accurate balance without a separate query.
+    await syncBookingCollectedAmount(collection.bookingId);
+    // ──────────────────────────────────────────────────────────────────────────
+
     const populated = await Collection.findById(collection._id).populate(collectionPopulate);
     res.json(populated);
   } catch (error) {
@@ -120,7 +145,14 @@ export const deleteCollection = async (req, res) => {
     }
     */
 
+    const bookingId = collection.bookingId;
     await collection.deleteOne();
+
+    // ─── Sync booking.collectedAmount after deletion ───────────────────────────
+    // If the deleted collection was verified, the booking balance must be updated.
+    await syncBookingCollectedAmount(bookingId);
+    // ──────────────────────────────────────────────────────────────────────────
+
     res.json({ message: 'Collection removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });

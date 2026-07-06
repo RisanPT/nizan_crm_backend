@@ -1,6 +1,7 @@
 import express from 'express';
 import {
   getBookings,
+  getBookingById,
   getPaginatedBookings,
   getPublicBookings,
   createBooking,
@@ -17,6 +18,6 @@ router.post('/public', createBooking);
 router.use(protect);
 router.get('/paged', getPaginatedBookings);
 router.route('/').get(getBookings).post(createBooking);
-router.route('/:id').put(updateBooking).delete(deleteBooking);
+router.route('/:id').get(getBookingById).put(updateBooking).delete(deleteBooking);
 
 export default router;
