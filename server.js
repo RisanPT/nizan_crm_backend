@@ -29,6 +29,7 @@ import budgetRoutes from './routes/budgetRoutes.js';
 import { seedAdminUser } from './utils/seedAdminUser.js';
 
 import fleetRoutes from './routes/fleetRoutes.js';
+import inventoryRoutes from './routes/inventoryRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -139,6 +140,7 @@ app.use('/api/it-tasks', itTaskRoutes);
 app.use('/api/time-blocks', timeBlockRoutes);
 app.use('/api/budgets', budgetRoutes);
 app.use('/api/fleet', fleetRoutes);
+app.use('/api/inventory', inventoryRoutes);
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });

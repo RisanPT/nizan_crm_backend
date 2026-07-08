@@ -22,9 +22,14 @@ const userSchema = mongoose.Schema(
     },
     role: {
       type: String,
-      enum: ['admin', 'manager', 'crm', 'sales', 'artist', 'accounts', 'driver', 'fleet_manager'],
+      enum: ['admin', 'manager', 'crm', 'sales', 'artist', 'accounts', 'driver', 'fleet_manager', 'inventory_manager'],
       default: 'manager',
       trim: true,
+    },
+    // For artist users: whether they can access the Inventory feature.
+    inventoryAccess: {
+      type: Boolean,
+      default: false,
     },
     employeeId: {
       type: mongoose.Schema.Types.ObjectId,

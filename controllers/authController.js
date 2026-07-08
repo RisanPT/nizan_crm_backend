@@ -11,6 +11,7 @@ const toAuthResponse = (user) => ({
     name: user.name,
     email: user.email,
     role: user.role,
+    inventoryAccess: user.inventoryAccess ?? false,
     employeeId: user.employeeId?.toString() ?? null,
     zoneId: user.zoneId?.toString() ?? null,
     stateId: user.stateId?.toString() ?? null,
@@ -50,6 +51,7 @@ export const getMe = async (req, res) => {
       name: req.user.name,
       email: req.user.email,
       role: req.user.role,
+      inventoryAccess: req.user.inventoryAccess ?? false,
       employeeId: req.user.employeeId?.toString() ?? null,
       zoneId: req.user.zoneId?.toString() ?? null,
       stateId: req.user.stateId?.toString() ?? null,
@@ -121,6 +123,7 @@ export const createUser = async (req, res) => {
     password,
     role,
     active: Boolean(active),
+    inventoryAccess: Boolean(req.body.inventoryAccess),
     employeeId: employeeId || null,
     zoneId: req.body.zoneId || null,
     stateId: req.body.stateId || null,
@@ -134,6 +137,7 @@ export const createUser = async (req, res) => {
     name: user.name,
     email: user.email,
     role: user.role,
+    inventoryAccess: user.inventoryAccess ?? false,
     employeeId: user.employeeId?.toString() ?? null,
     zoneId: user.zoneId?.toString() ?? null,
     stateId: user.stateId?.toString() ?? null,
@@ -175,6 +179,9 @@ export const updateUser = async (req, res) => {
     ? user.role
     : String(req.body.role).trim() || user.role;
   user.active = nextActive;
+  if (req.body.inventoryAccess !== undefined) {
+    user.inventoryAccess = Boolean(req.body.inventoryAccess);
+  }
   if (req.body.employeeId !== undefined) {
     user.employeeId = req.body.employeeId || null;
   }
@@ -206,6 +213,7 @@ export const updateUser = async (req, res) => {
     name: user.name,
     email: user.email,
     role: user.role,
+    inventoryAccess: user.inventoryAccess ?? false,
     employeeId: user.employeeId?.toString() ?? null,
     zoneId: user.zoneId?.toString() ?? null,
     stateId: user.stateId?.toString() ?? null,
