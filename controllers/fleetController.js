@@ -123,7 +123,7 @@ export const completeJob = async (req, res) => {
 // @access  Private (Driver)
 export const reportAccident = async (req, res) => {
   try {
-    const { vehicleId, jobId, location, photos, description } = req.body;
+    const { vehicleId, jobId, location, photos, description, opposite } = req.body;
 
     if (!location || !photos || !description) {
       return res.status(400).json({ message: "Location, photos, and description are required." });
@@ -136,6 +136,12 @@ export const reportAccident = async (req, res) => {
       location,
       photos,
       description,
+      opposite: {
+        name: String(opposite?.name ?? "").trim(),
+        phone: String(opposite?.phone ?? "").trim(),
+        vehicleNumber: String(opposite?.vehicleNumber ?? "").trim(),
+        notes: String(opposite?.notes ?? "").trim(),
+      },
       status: "reported",
     });
 

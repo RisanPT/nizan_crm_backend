@@ -30,6 +30,13 @@ const accidentReportSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    // The other party involved in the accident (optional).
+    opposite: {
+      name: { type: String, default: "" },
+      phone: { type: String, default: "" },
+      vehicleNumber: { type: String, default: "" },
+      notes: { type: String, default: "" },
+    },
     status: {
       type: String,
       enum: ["reported", "investigating", "resolved"],
