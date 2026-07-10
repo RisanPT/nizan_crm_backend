@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import InventoryProduct from '../models/InventoryProduct.js';
 import StaffKit from '../models/StaffKit.js';
 import Purchase from '../models/Purchase.js';
+import Vendor from '../models/Vendor.js';
 
 const STUDIO_ROLES = ['inventory_manager', 'admin', 'manager'];
 
@@ -9,6 +10,10 @@ const canManageStudio = (user) => STUDIO_ROLES.includes(user.role);
 
 const hasInventoryAccess = (user) =>
   canManageStudio(user) || (user.role === 'artist' && !!user.inventoryAccess);
+
+// Accounts may READ purchases for the finance dashboard (not create / edit).
+const canViewPurchases = (user) =>
+  canManageStudio(user) || user.role === 'accounts';
 
 // There is a single studio inventory. Everyone with access READS it; only
 // managers WRITE it (guards below). Artists never own products.
@@ -432,6 +437,95 @@ export const updateKitItem = async (req, res) => {
   }
 };
 
+// ── Vendors (suppliers) ──────────────────────────────────────────────────────
+
+const cleanVendor = (body) => ({
+  name: String(body.name ?? '').trim(),
+  gstNumber: String(body.gstNumber ?? '').trim(),
+  phone: String(body.phone ?? '').trim(),
+  email: String(body.email ?? '').trim(),
+  address: String(body.address ?? '').trim(),
+  state: String(body.state ?? '').trim(),
+  stateCode: String(body.stateCode ?? '').trim(),
+  bankName: String(body.bankName ?? '').trim(),
+  bankAccount: String(body.bankAccount ?? '').trim(),
+  bankIfsc: String(body.bankIfsc ?? '').trim(),
+  notes: String(body.notes ?? '').trim(),
+});
+
+export const getVendors = async (req, res) => {
+  if (!canViewPurchases(req.user)) {
+    return res.status(403).json({ message: 'No access' });
+  }
+  try {
+    const vendors = await Vendor.find(ownerScope(req.user)).sort({ name: 1 });
+    res.json(vendors);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const createVendor = async (req, res) => {
+  if (!canManageStudio(req.user)) {
+    return res.status(403).json({ message: 'Only managers can add vendors' });
+  }
+  try {
+    const data = cleanVendor(req.body);
+    if (!data.name) {
+      return res.status(400).json({ message: 'Vendor name is required' });
+    }
+    const vendor = await Vendor.create({ ...data, owner: null });
+    res.status(201).json(vendor);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const updateVendor = async (req, res) => {
+  if (!canManageStudio(req.user)) {
+    return res.status(403).json({ message: 'Only managers can edit vendors' });
+  }
+  try {
+    const vendor = await Vendor.findOne({
+      _id: req.params.id,
+      ...ownerScope(req.user),
+    });
+    if (!vendor) {
+      return res.status(404).json({ message: 'Vendor not found' });
+    }
+    const data = cleanVendor(req.body);
+    if (req.body.name != null) vendor.name = data.name || vendor.name;
+    for (const key of [
+      'gstNumber', 'phone', 'email', 'address', 'state', 'stateCode',
+      'bankName', 'bankAccount', 'bankIfsc', 'notes',
+    ]) {
+      if (req.body[key] != null) vendor[key] = data[key];
+    }
+    await vendor.save();
+    res.json(vendor);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const deleteVendor = async (req, res) => {
+  if (!canManageStudio(req.user)) {
+    return res.status(403).json({ message: 'Only managers can delete vendors' });
+  }
+  try {
+    const vendor = await Vendor.findOneAndDelete({
+      _id: req.params.id,
+      ...ownerScope(req.user),
+    });
+    if (!vendor) {
+      return res.status(404).json({ message: 'Vendor not found' });
+    }
+    res.json({ message: 'Vendor removed', id: req.params.id });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // ── Purchases (stock-in) ─────────────────────────────────────────────────────
 
 const toNum = (v, def = 0) => {
@@ -440,7 +534,7 @@ const toNum = (v, def = 0) => {
 };
 
 export const getPurchases = async (req, res) => {
-  if (!canManageStudio(req.user)) {
+  if (!canViewPurchases(req.user)) {
     return res.status(403).json({ message: 'No access' });
   }
   try {
@@ -554,10 +648,29 @@ export const createPurchase = async (req, res) => {
           .json({ message: 'No valid items in the purchase' });
     }
 
+    // Resolve the vendor (if chosen) so the supplier name is authoritative.
+    let vendorId = null;
+    let supplier = String(req.body.supplier ?? '').trim();
+    if (
+      req.body.vendorId &&
+      mongoose.Types.ObjectId.isValid(req.body.vendorId)
+    ) {
+      const vendor = await Vendor.findOne({
+        _id: req.body.vendorId,
+        ...ownerScope(req.user),
+      });
+      if (vendor) {
+        vendorId = vendor._id;
+        if (!supplier) supplier = vendor.name;
+      }
+    }
+
     const purchaseDate = new Date(req.body.date);
     const purchase = await Purchase.create({
-      supplier: String(req.body.supplier ?? '').trim(),
+      supplier,
+      vendor: vendorId,
       invoiceNo: String(req.body.invoiceNo ?? '').trim(),
+      billImage: String(req.body.billImage ?? '').trim(),
       date: Number.isNaN(purchaseDate.getTime()) ? new Date() : purchaseDate,
       items: resolvedItems,
       total,
@@ -588,6 +701,25 @@ export const setPurchasePaid = async (req, res) => {
     purchase.paid = !!req.body.paid;
     await purchase.save();
     res.json(purchase);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Remove a purchase from the ledger. Does NOT reverse stock already added.
+export const deletePurchase = async (req, res) => {
+  if (!canManageStudio(req.user)) {
+    return res.status(403).json({ message: 'No access' });
+  }
+  try {
+    const purchase = await Purchase.findOneAndDelete({
+      _id: req.params.id,
+      ...ownerScope(req.user),
+    });
+    if (!purchase) {
+      return res.status(404).json({ message: 'Purchase not found' });
+    }
+    res.json({ message: 'Purchase removed', id: req.params.id });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

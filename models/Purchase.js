@@ -24,7 +24,14 @@ const purchaseItemSchema = mongoose.Schema(
 const purchaseSchema = mongoose.Schema(
   {
     supplier: { type: String, default: '', trim: true },
+    vendor: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Vendor',
+      default: null,
+    },
     invoiceNo: { type: String, default: '', trim: true },
+    // Cloudinary URL of the uploaded supplier bill / tax invoice.
+    billImage: { type: String, default: '' },
     date: { type: Date, default: Date.now },
     items: { type: [purchaseItemSchema], default: [] },
     total: { type: Number, default: 0 },

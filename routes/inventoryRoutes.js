@@ -17,6 +17,11 @@ import {
   setProductFill,
   lookupExternalBarcode,
   setPurchasePaid,
+  deletePurchase,
+  getVendors,
+  createVendor,
+  updateVendor,
+  deleteVendor,
 } from '../controllers/inventoryController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -38,5 +43,9 @@ router.patch('/kits/:id/item/:index', updateKitItem);
 
 router.route('/purchases').get(getPurchases).post(createPurchase);
 router.patch('/purchases/:id/paid', setPurchasePaid);
+router.delete('/purchases/:id', deletePurchase);
+
+router.route('/vendors').get(getVendors).post(createVendor);
+router.route('/vendors/:id').put(updateVendor).delete(deleteVendor);
 
 export default router;
