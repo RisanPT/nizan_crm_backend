@@ -106,6 +106,18 @@ export const createUser = async (req, res) => {
   const active = req.body.active ?? true;
   const employeeId = req.body.employeeId ?? null;
 
+  // Authorization: admins/managers may add any user; a fleet manager may add
+  // driver logins only. Everyone else is blocked.
+  const requesterRole = req.user?.role;
+  const isFullAccess = requesterRole === 'admin' || requesterRole === 'manager';
+  const fleetCanAddDriver =
+    requesterRole === 'fleet_manager' && role === 'driver';
+  if (!isFullAccess && !fleetCanAddDriver) {
+    return res
+      .status(403)
+      .json({ message: 'You are not allowed to create this type of user.' });
+  }
+
   if (!name || !email || !password) {
     return res.status(400).json({
       message: 'Name, email, and password are required',
@@ -148,6 +160,62 @@ export const createUser = async (req, res) => {
     createdAt: user.createdAt,
     updatedAt: user.updatedAt,
   });
+};
+
+// Grant (or refresh) a driver's login. Upserts by email so it works for a
+// brand-new driver AND for an existing driver whose email is already on file.
+export const grantDriverLogin = async (req, res) => {
+  try {
+    const requesterRole = req.user?.role;
+    if (!['admin', 'manager', 'fleet_manager'].includes(requesterRole)) {
+      return res
+        .status(403)
+        .json({ message: 'You are not allowed to grant login access.' });
+    }
+
+    const name = String(req.body.name ?? '').trim();
+    const email = String(req.body.email ?? '').trim().toLowerCase();
+    const password = String(req.body.password ?? '').trim();
+    const employeeId = req.body.employeeId || null;
+
+    if (!email || password.length < 6) {
+      return res.status(400).json({
+        message: 'Email and a password of at least 6 characters are required.',
+      });
+    }
+
+    let user = await User.findOne({ email });
+    let created = false;
+    if (user) {
+      if (name) user.name = name;
+      user.password = password; // hashed by the pre-save hook
+      user.role = 'driver';
+      if (employeeId) user.employeeId = employeeId;
+      user.active = true;
+      await user.save();
+    } else {
+      user = await User.create({
+        name: name || email,
+        email,
+        password,
+        role: 'driver',
+        active: true,
+        employeeId,
+      });
+      created = true;
+    }
+
+    return res.status(created ? 201 : 200).json({
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      created,
+      message: created ? 'Driver login created' : 'Driver login updated',
+    });
+  } catch (error) {
+    return res.status(500).json({ message: 'Server error', error: error.message });
+  }
 };
 
 export const updateUser = async (req, res) => {
