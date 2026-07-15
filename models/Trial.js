@@ -33,6 +33,10 @@ const trialItemSchema = new mongoose.Schema(
       enum: ['pending', 'approved', 'needs_revision', 'rejected'],
       default: 'pending',
     },
+    price: {
+      type: Number,
+      default: 0,
+    },
   },
   { _id: false }
 );

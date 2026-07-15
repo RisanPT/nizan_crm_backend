@@ -10,6 +10,7 @@ const normalizeTrialItems = (items = []) => {
     outcome: ['pending', 'approved', 'needs_revision', 'rejected'].includes(item.outcome)
       ? item.outcome
       : 'pending',
+    price: Number(item.price) || 0,
   }));
 };
 
