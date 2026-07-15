@@ -21,6 +21,18 @@ const purchaseItemSchema = mongoose.Schema(
   { _id: false }
 );
 
+// One payment made against a vendor bill (Zoho "Payments Made").
+const purchasePaymentSchema = mongoose.Schema(
+  {
+    amount: { type: Number, default: 0, min: 0 },
+    date: { type: Date, default: Date.now },
+    // cash / upi / bank_transfer / cheque / card / other
+    mode: { type: String, default: 'cash', trim: true },
+    note: { type: String, default: '', trim: true },
+  },
+  { _id: false }
+);
+
 const purchaseSchema = mongoose.Schema(
   {
     supplier: { type: String, default: '', trim: true },
@@ -33,10 +45,22 @@ const purchaseSchema = mongoose.Schema(
     // Cloudinary URL of the uploaded supplier bill / tax invoice.
     billImage: { type: String, default: '' },
     date: { type: Date, default: Date.now },
+    // Accounts-payable due date for the bill (optional).
+    dueDate: { type: Date, default: null },
     items: { type: [purchaseItemSchema], default: [] },
+    // Taxable base = sum of line items (quantity * unitCost).
     total: { type: Number, default: 0 },
-    // Ledger payment status for the whole purchase.
+    // GST (input tax) on the vendor bill.
+    gstEnabled: { type: Boolean, default: false },
+    gstin: { type: String, default: '', trim: true },
+    gstRate: { type: Number, default: 0 }, // percentage, e.g. 18
+    gstAmount: { type: Number, default: 0 }, // tax value in currency
+    interState: { type: Boolean, default: false }, // true => IGST, false => CGST+SGST
+    // Whole bill fully settled. Kept for backward-compat; derived from amountPaid.
     paid: { type: Boolean, default: false },
+    // Running total of payments made against grandTotal (= total + gstAmount).
+    amountPaid: { type: Number, default: 0 },
+    payments: { type: [purchasePaymentSchema], default: [] },
     // null => studio purchase; set => an artist's own purchase.
     owner: {
       type: mongoose.Schema.Types.ObjectId,

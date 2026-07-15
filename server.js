@@ -30,6 +30,7 @@ import { seedAdminUser } from './utils/seedAdminUser.js';
 
 import fleetRoutes from './routes/fleetRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
+import marketingRoutes from './routes/marketingRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -141,6 +142,7 @@ app.use('/api/time-blocks', timeBlockRoutes);
 app.use('/api/budgets', budgetRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/marketing', marketingRoutes);
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });

@@ -17,6 +17,8 @@ import {
   setProductFill,
   lookupExternalBarcode,
   setPurchasePaid,
+  recordPurchasePayment,
+  updatePurchase,
   deletePurchase,
   getVendors,
   createVendor,
@@ -43,7 +45,8 @@ router.patch('/kits/:id/item/:index', updateKitItem);
 
 router.route('/purchases').get(getPurchases).post(createPurchase);
 router.patch('/purchases/:id/paid', setPurchasePaid);
-router.delete('/purchases/:id', deletePurchase);
+router.post('/purchases/:id/payments', recordPurchasePayment);
+router.route('/purchases/:id').put(updatePurchase).delete(deletePurchase);
 
 router.route('/vendors').get(getVendors).post(createVendor);
 router.route('/vendors/:id').put(updateVendor).delete(deleteVendor);

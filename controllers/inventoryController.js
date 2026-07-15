@@ -15,6 +15,15 @@ const hasInventoryAccess = (user) =>
 const canViewPurchases = (user) =>
   canManageStudio(user) || user.role === 'accounts';
 
+// Accounts team can settle vendor bills (mark paid, record payments, edit
+// billing / GST) alongside the studio managers — but not create/delete stock.
+const canManagePayables = (user) =>
+  canManageStudio(user) || user.role === 'accounts';
+
+// Fully-settled once payments cover the grand total (base + GST).
+const grandTotalOf = (purchase) =>
+  (Number(purchase.total) || 0) + (Number(purchase.gstAmount) || 0);
+
 // There is a single studio inventory. Everyone with access READS it; only
 // managers WRITE it (guards below). Artists never own products.
 const ownerScope = () => ({ owner: null });
@@ -666,15 +675,30 @@ export const createPurchase = async (req, res) => {
     }
 
     const purchaseDate = new Date(req.body.date);
+    const dueDateRaw = req.body.dueDate ? new Date(req.body.dueDate) : null;
+    const gstEnabled = !!req.body.gstEnabled;
+    const gstAmount = gstEnabled ? Number(req.body.gstAmount) || 0 : 0;
+    const grandTotal = total + gstAmount;
+    // paid=true => fully settled; else honour an explicit opening amountPaid.
+    const amountPaid = req.body.paid
+      ? grandTotal
+      : Math.max(0, Number(req.body.amountPaid) || 0);
     const purchase = await Purchase.create({
       supplier,
       vendor: vendorId,
       invoiceNo: String(req.body.invoiceNo ?? '').trim(),
       billImage: String(req.body.billImage ?? '').trim(),
       date: Number.isNaN(purchaseDate.getTime()) ? new Date() : purchaseDate,
+      dueDate: dueDateRaw && !Number.isNaN(dueDateRaw.getTime()) ? dueDateRaw : null,
       items: resolvedItems,
       total,
-      paid: !!req.body.paid,
+      gstEnabled,
+      gstin: String(req.body.gstin ?? '').trim(),
+      gstRate: Number(req.body.gstRate) || 0,
+      gstAmount,
+      interState: !!req.body.interState,
+      amountPaid,
+      paid: grandTotal > 0 ? amountPaid >= grandTotal - 0.01 : !!req.body.paid,
       owner,
       notes: String(req.body.notes ?? '').trim(),
     });
@@ -685,9 +709,10 @@ export const createPurchase = async (req, res) => {
   }
 };
 
-// Toggle a purchase's ledger payment status (Paid / Not Paid).
+// Toggle a bill's payment status (Paid / Not Paid). Syncs amountPaid so the
+// balance stays consistent for the Accounts payables view.
 export const setPurchasePaid = async (req, res) => {
-  if (!canManageStudio(req.user)) {
+  if (!canManagePayables(req.user)) {
     return res.status(403).json({ message: 'No access' });
   }
   try {
@@ -698,7 +723,99 @@ export const setPurchasePaid = async (req, res) => {
     if (!purchase) {
       return res.status(404).json({ message: 'Purchase not found' });
     }
-    purchase.paid = !!req.body.paid;
+    const paid = !!req.body.paid;
+    purchase.paid = paid;
+    purchase.amountPaid = paid ? grandTotalOf(purchase) : 0;
+    await purchase.save();
+    res.json(purchase);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Record a payment against a bill (supports partial payments). Appends to the
+// payments log, bumps amountPaid, and flips `paid` once fully settled.
+export const recordPurchasePayment = async (req, res) => {
+  if (!canManagePayables(req.user)) {
+    return res.status(403).json({ message: 'No access' });
+  }
+  try {
+    const purchase = await Purchase.findOne({
+      _id: req.params.id,
+      ...ownerScope(req.user),
+    });
+    if (!purchase) {
+      return res.status(404).json({ message: 'Purchase not found' });
+    }
+    const amount = Number(req.body.amount) || 0;
+    if (amount <= 0) {
+      return res
+        .status(400)
+        .json({ message: 'Payment amount must be greater than zero' });
+    }
+    const payDate = req.body.date ? new Date(req.body.date) : new Date();
+    purchase.payments.push({
+      amount,
+      date: Number.isNaN(payDate.getTime()) ? new Date() : payDate,
+      mode: String(req.body.mode ?? 'cash').trim() || 'cash',
+      note: String(req.body.note ?? '').trim(),
+    });
+    purchase.amountPaid = (Number(purchase.amountPaid) || 0) + amount;
+    const grand = grandTotalOf(purchase);
+    purchase.paid = grand > 0 ? purchase.amountPaid >= grand - 0.01 : false;
+    await purchase.save();
+    res.json(purchase);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Edit a bill's billing / GST metadata (invoice no, due date, GST, vendor,
+// notes) without touching stock. Used from the Accounts payables screen.
+export const updatePurchase = async (req, res) => {
+  if (!canManagePayables(req.user)) {
+    return res.status(403).json({ message: 'No access' });
+  }
+  try {
+    const purchase = await Purchase.findOne({
+      _id: req.params.id,
+      ...ownerScope(req.user),
+    });
+    if (!purchase) {
+      return res.status(404).json({ message: 'Purchase not found' });
+    }
+    const b = req.body;
+    if (b.supplier !== undefined) purchase.supplier = String(b.supplier).trim();
+    if (b.invoiceNo !== undefined) {
+      purchase.invoiceNo = String(b.invoiceNo).trim();
+    }
+    if (b.billImage !== undefined) {
+      purchase.billImage = String(b.billImage).trim();
+    }
+    if (b.notes !== undefined) purchase.notes = String(b.notes).trim();
+    if (b.date !== undefined && b.date) {
+      const d = new Date(b.date);
+      if (!Number.isNaN(d.getTime())) purchase.date = d;
+    }
+    if (b.dueDate !== undefined) {
+      const d = b.dueDate ? new Date(b.dueDate) : null;
+      purchase.dueDate = d && !Number.isNaN(d.getTime()) ? d : null;
+    }
+    if (b.gstEnabled !== undefined) purchase.gstEnabled = !!b.gstEnabled;
+    if (b.gstin !== undefined) purchase.gstin = String(b.gstin).trim();
+    if (b.gstRate !== undefined) purchase.gstRate = Number(b.gstRate) || 0;
+    if (b.gstAmount !== undefined) purchase.gstAmount = Number(b.gstAmount) || 0;
+    if (b.interState !== undefined) purchase.interState = !!b.interState;
+    if (
+      b.vendorId !== undefined &&
+      (!b.vendorId || mongoose.Types.ObjectId.isValid(b.vendorId))
+    ) {
+      purchase.vendor = b.vendorId || null;
+    }
+    // Re-sync paid vs amountPaid against the (possibly new) grand total.
+    const grand = grandTotalOf(purchase);
+    purchase.paid =
+      grand > 0 ? (Number(purchase.amountPaid) || 0) >= grand - 0.01 : false;
     await purchase.save();
     res.json(purchase);
   } catch (error) {
