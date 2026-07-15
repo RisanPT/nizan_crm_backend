@@ -32,6 +32,7 @@ import fleetRoutes from './routes/fleetRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
 import marketingRoutes from './routes/marketingRoutes.js';
 import trialRoutes from './routes/trialRoutes.js';
+import trialPackageRoutes from './routes/trialPackageRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -145,6 +146,7 @@ app.use('/api/fleet', fleetRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/marketing', marketingRoutes);
 app.use('/api/trials', trialRoutes);
+app.use('/api/trial-packages', trialPackageRoutes);
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });
