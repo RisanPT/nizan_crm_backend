@@ -956,6 +956,7 @@ export const createBooking = async (req, res) => {
     requiredRoomDetail,
     secondaryContact,
     outfitDetails,
+    looks,
     captureStaffDetails,
     temporaryStaffDetails,
     staffInstructions,

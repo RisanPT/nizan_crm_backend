@@ -226,6 +226,23 @@ const bookingSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // Multiple outfits/looks for one booking. A look can be at a different
+    // venue — when sameLocation is false its own address/mapUrl are used.
+    looks: {
+      type: [
+        {
+          label: { type: String, default: '' },
+          outfitDetails: { type: String, default: '' },
+          sameLocation: { type: Boolean, default: true },
+          address: { type: String, default: '' },
+          mapUrl: { type: String, default: '' },
+          eventSlot: { type: String, default: '' },
+          time: { type: String, default: '' },
+          notes: { type: String, default: '' },
+        },
+      ],
+      default: [],
+    },
     captureStaffDetails: {
       type: String,
       default: '',
