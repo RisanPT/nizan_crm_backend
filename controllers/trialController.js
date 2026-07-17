@@ -1,6 +1,23 @@
+import mongoose from 'mongoose';
 import Trial from '../models/Trial.js';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
+const normalizeAssigned = (arr = []) => {
+  if (!Array.isArray(arr)) return [];
+  return arr
+    .map((a) => ({
+      employeeId:
+        a.employeeId && mongoose.Types.ObjectId.isValid(a.employeeId)
+          ? a.employeeId
+          : null,
+      artistName: String(a.artistName ?? '').trim(),
+      phone: String(a.phone ?? '').trim(),
+      roleType: String(a.roleType ?? 'artist').trim() || 'artist',
+      type: String(a.type ?? '').trim(),
+    }))
+    .filter((a) => a.employeeId || a.artistName);
+};
+
 const normalizeTrialItems = (items = []) => {
   if (!Array.isArray(items)) return [];
   return items.map((item) => ({
@@ -22,6 +39,10 @@ export const getTrials = async (req, res) => {
     if (req.query.month) {
       // e.g. month=2026-07 → match all trialDate starting with "2026-07"
       filter.trialDate = { $regex: `^${req.query.month}` };
+    }
+    // Artist login: only the trials they're assigned to.
+    if (req.query.artist) {
+      filter['assignedStaff.employeeId'] = req.query.artist;
     }
     const trials = await Trial.find(filter).sort({ trialDate: -1, createdAt: -1 });
     res.json(trials);
@@ -54,6 +75,7 @@ export const createTrial = async (req, res) => {
       status = 'scheduled',
       notes = '',
       trialItems = [],
+      assignedStaff = [],
       bookingId = null,
     } = req.body;
 
@@ -77,6 +99,7 @@ export const createTrial = async (req, res) => {
       status,
       notes: notes.trim(),
       trialItems: normalizeTrialItems(trialItems),
+      assignedStaff: normalizeAssigned(assignedStaff),
       bookingId: bookingId || null,
     });
 
@@ -103,6 +126,7 @@ export const updateTrial = async (req, res) => {
       status,
       notes,
       trialItems,
+      assignedStaff,
       bookingId,
     } = req.body;
 
@@ -118,6 +142,9 @@ export const updateTrial = async (req, res) => {
     if (notes !== undefined) trial.notes = String(notes).trim();
     if (Array.isArray(trialItems)) {
       trial.trialItems = normalizeTrialItems(trialItems);
+    }
+    if (Array.isArray(assignedStaff)) {
+      trial.assignedStaff = normalizeAssigned(assignedStaff);
     }
     if (bookingId !== undefined) trial.bookingId = bookingId || null;
 

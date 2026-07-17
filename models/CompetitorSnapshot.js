@@ -34,6 +34,31 @@ const snapshotSchema = new mongoose.Schema(
     newService: { type: Boolean, default: false }, // +2
     newPartnership: { type: Boolean, default: false }, // +2
 
+    // Evidence per triggered signal (FR-2.2 — no score point without evidence).
+    signalEvidence: {
+      newCampaign: { type: String, default: '' },
+      viralContent: { type: String, default: '' },
+      qualityCreative: { type: String, default: '' },
+      followerGrowth: { type: String, default: '' },
+      engagementIncrease: { type: String, default: '' },
+      newService: { type: String, default: '' },
+      newPartnership: { type: String, default: '' },
+    },
+    // Denormalised breakdown of the triggered signals + points + evidence.
+    signals: {
+      type: [
+        {
+          key: String,
+          label: String,
+          points: Number,
+          evidence: String,
+        },
+      ],
+      default: [],
+    },
+    // Scoring config version this score was computed under (audit).
+    scoringVersion: { type: Number, default: 1 },
+
     // Deterministic Weekly Growth Score (1-25), computed on save.
     score: { type: Number, default: 0 },
 

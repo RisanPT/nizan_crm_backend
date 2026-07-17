@@ -66,6 +66,7 @@ export const createFuelExpense = async (req, res) => {
     paymentMode,
     station,
     notes,
+    billImage,
   } = req.body;
 
   try {
@@ -85,6 +86,8 @@ export const createFuelExpense = async (req, res) => {
       paymentMode: paymentMode ?? 'cash',
       station: station ?? '',
       notes: notes ?? '',
+      billImage: String(billImage ?? '').trim(),
+      status: 'pending',
     });
 
     const populated = await FuelExpense.findById(expense._id).populate(expensePopulate);
@@ -116,8 +119,16 @@ export const updateFuelExpense = async (req, res) => {
       paymentMode,
       station,
       notes,
+      billImage,
+      status,
     } = req.body;
 
+    if (billImage !== undefined) expense.billImage = String(billImage).trim();
+    // Only a manager/fleet manager (not the driver) may change review status.
+    if (status !== undefined && req.user.role !== 'driver' &&
+        ['pending', 'approved', 'rejected'].includes(status)) {
+      expense.status = status;
+    }
     expense.vehicleId =
       vehicleId != null ? normalizeObjectId(vehicleId) : expense.vehicleId;
     expense.driverId =

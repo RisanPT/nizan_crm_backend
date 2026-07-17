@@ -1,14 +1,15 @@
 import mongoose from 'mongoose';
 import Competitor from '../models/Competitor.js';
 import CompetitorSnapshot from '../models/CompetitorSnapshot.js';
+import ScoringConfig from '../models/ScoringConfig.js';
 
 // Only the digital-marketing admin (and full-access managers) manage this module.
 const MARKETING_ROLES = ['admin', 'manager', 'marketing_admin'];
 const canManageMarketing = (user) => MARKETING_ROLES.includes(user?.role);
 
-// Weekly Growth Score weights (from the marketing workflow spec), clamped 0-25.
-const SCORE_WEIGHTS = {
-  newCampaign: 6,
+// SRS §4.2 default weights (sum to exactly 25).
+const SRS_DEFAULT_WEIGHTS = {
+  newCampaign: 5,
   viralContent: 5,
   qualityCreative: 5,
   followerGrowth: 3,
@@ -16,13 +17,43 @@ const SCORE_WEIGHTS = {
   newService: 2,
   newPartnership: 2,
 };
+const SIGNAL_KEYS = Object.keys(SRS_DEFAULT_WEIGHTS);
+const SIGNAL_LABELS = {
+  newCampaign: 'New Campaign',
+  viralContent: 'Viral Content',
+  qualityCreative: 'Quality Creative',
+  followerGrowth: 'Follower Growth',
+  engagementIncrease: 'Engagement Increase',
+  newService: 'New Service',
+  newPartnership: 'New Partnership',
+};
 
-const computeScore = (flags) => {
+// Load the active scoring config (weights + version), falling back to SRS defaults.
+const getActiveScoring = async () => {
+  const cfg = await ScoringConfig.findOne({ active: true }).sort({ version: -1 });
+  if (!cfg) return { weights: { ...SRS_DEFAULT_WEIGHTS }, version: 1 };
+  const w = cfg.weights?.toObject ? cfg.weights.toObject() : cfg.weights;
+  return { weights: { ...SRS_DEFAULT_WEIGHTS, ...w }, version: cfg.version };
+};
+
+// GS = Σ(points of triggered signals), clamped [1,25] (FR-2.1: zero signals => 1).
+const computeScoreAndSignals = (flags, evidence, weights) => {
+  const signals = [];
   let total = 0;
-  for (const [key, weight] of Object.entries(SCORE_WEIGHTS)) {
-    if (flags[key]) total += weight;
+  for (const key of SIGNAL_KEYS) {
+    if (flags[key]) {
+      const points = Number(weights[key]) || 0;
+      total += points;
+      signals.push({
+        key,
+        label: SIGNAL_LABELS[key],
+        points,
+        evidence: String(evidence?.[key] ?? '').trim(),
+      });
+    }
   }
-  return Math.max(0, Math.min(25, total));
+  const score = Math.max(1, Math.min(25, total));
+  return { score, signals };
 };
 
 // Normalise any date to the Monday 00:00 of its week (UTC).
@@ -65,6 +96,15 @@ const snapshotFieldsFromBody = (b) => ({
   engagementIncrease: toBool(b.engagementIncrease),
   newService: toBool(b.newService),
   newPartnership: toBool(b.newPartnership),
+  signalEvidence: {
+    newCampaign: String(b.signalEvidence?.newCampaign ?? '').trim(),
+    viralContent: String(b.signalEvidence?.viralContent ?? '').trim(),
+    qualityCreative: String(b.signalEvidence?.qualityCreative ?? '').trim(),
+    followerGrowth: String(b.signalEvidence?.followerGrowth ?? '').trim(),
+    engagementIncrease: String(b.signalEvidence?.engagementIncrease ?? '').trim(),
+    newService: String(b.signalEvidence?.newService ?? '').trim(),
+    newPartnership: String(b.signalEvidence?.newPartnership ?? '').trim(),
+  },
   notes: String(b.notes ?? '').trim(),
 });
 
@@ -186,10 +226,21 @@ export const upsertSnapshot = async (req, res) => {
     }
     const weekOf = mondayOf(req.body.weekOf);
     const fields = snapshotFieldsFromBody(req.body);
-    const score = computeScore(fields);
+    const { weights, version } = await getActiveScoring();
+    const { score, signals } =
+        computeScoreAndSignals(fields, fields.signalEvidence, weights);
     const snapshot = await CompetitorSnapshot.findOneAndUpdate(
       { competitor: competitorId, weekOf },
-      { $set: { ...fields, score, competitor: competitorId, weekOf } },
+      {
+        $set: {
+          ...fields,
+          score,
+          signals,
+          scoringVersion: version,
+          competitor: competitorId,
+          weekOf,
+        },
+      },
       { new: true, upsert: true, setDefaultsOnInsert: true }
     );
     res.status(201).json(snapshot);
@@ -229,6 +280,7 @@ export const importCompetitors = async (req, res) => {
       return res.status(400).json({ message: 'No rows to import' });
     }
     const defaultWeek = mondayOf(req.body.weekOf);
+    const { weights, version } = await getActiveScoring();
     let created = 0;
     let updated = 0;
     let snapshots = 0;
@@ -268,10 +320,20 @@ export const importCompetitors = async (req, res) => {
       if (hasMetrics) {
         const weekOf = row.weekOf ? mondayOf(row.weekOf) : defaultWeek;
         const fields = snapshotFieldsFromBody(row);
-        const score = computeScore(fields);
+        const { score, signals } =
+            computeScoreAndSignals(fields, fields.signalEvidence, weights);
         await CompetitorSnapshot.findOneAndUpdate(
           { competitor: competitor._id, weekOf },
-          { $set: { ...fields, score, competitor: competitor._id, weekOf } },
+          {
+            $set: {
+              ...fields,
+              score,
+              signals,
+              scoringVersion: version,
+              competitor: competitor._id,
+              weekOf,
+            },
+          },
           { upsert: true, setDefaultsOnInsert: true }
         );
         snapshots += 1;
@@ -309,7 +371,7 @@ export const getRankings = async (req, res) => {
       previous.map((s) => [s.competitor.toString(), s.score])
     );
 
-    const ranked = current
+    const rows = current
       .filter((s) => s.competitor) // guard orphaned snapshots
       .map((s) => {
         const prevScore = prevById.get(s.competitor._id.toString());
@@ -320,18 +382,133 @@ export const getRankings = async (req, res) => {
           category: s.competitor.category,
           instagram: s.competitor.instagram,
           score: s.score,
+          engagementRate: s.engagementRate,
+          weeklyGrowthPct: s.weeklyGrowthPct,
+          seoScore: s.seoScore,
+          collaborations: s.collaborations,
+          signals: s.signals ?? [],
           previousScore: prevScore ?? null,
           movement: prevScore == null ? null : s.score - prevScore,
           snapshotId: s._id,
         };
-      })
-      .sort((a, b) => b.score - a.score);
+      });
 
-    ranked.forEach((r, i) => {
+    // Overall ranking with SRS tie-breaks (FR-2.5): score, then engagement rate,
+    // then follower growth, then alphabetical.
+    const overall = [...rows].sort(
+      (a, b) =>
+        b.score - a.score ||
+        b.engagementRate - a.engagementRate ||
+        b.weeklyGrowthPct - a.weeklyGrowthPct ||
+        String(a.name).localeCompare(String(b.name))
+    );
+    overall.forEach((r, i) => {
       r.rank = i + 1;
     });
 
-    res.json({ weekOf: week, previousWeekOf: prevWeek, rankings: ranked });
+    // Top-25 sub-leaderboards (FR-2.4). Reels ~ engagement, Websites ~ SEO,
+    // Collaborations ~ partnership count.
+    const board = (sortKey) =>
+      [...rows]
+        .sort((a, b) => (b[sortKey] || 0) - (a[sortKey] || 0) || b.score - a.score)
+        .slice(0, 25)
+        .map((r, i) => ({
+          rank: i + 1,
+          competitorId: r.competitorId,
+          name: r.name,
+          city: r.city,
+          metric: r[sortKey] || 0,
+          score: r.score,
+        }));
+
+    res.json({
+      weekOf: week,
+      previousWeekOf: prevWeek,
+      rankings: overall,
+      top25: overall.slice(0, 25),
+      leaderboards: {
+        reels: board('engagementRate'),
+        websites: board('seoScore'),
+        collaborations: board('collaborations'),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ── Scoring config (versioned weights — FR-2.3) ──────────────────────────────
+
+export const getScoringConfig = async (req, res) => {
+  if (!canManageMarketing(req.user)) {
+    return res.status(403).json({ message: 'No access' });
+  }
+  try {
+    const active = await ScoringConfig.findOne({ active: true }).sort({
+      version: -1,
+    });
+    const weights = active
+      ? { ...SRS_DEFAULT_WEIGHTS, ...(active.weights?.toObject?.() ?? active.weights) }
+      : { ...SRS_DEFAULT_WEIGHTS };
+    res.json({
+      version: active?.version ?? 1,
+      weights,
+      max: 25,
+      labels: SIGNAL_LABELS,
+      defaults: SRS_DEFAULT_WEIGHTS,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// A weight change creates a NEW active version (applies from the next run only).
+export const updateScoringConfig = async (req, res) => {
+  if (!canManageMarketing(req.user)) {
+    return res.status(403).json({ message: 'No access' });
+  }
+  try {
+    const incoming = req.body.weights ?? {};
+    const weights = {};
+    for (const key of SIGNAL_KEYS) {
+      const v = Number(incoming[key]);
+      weights[key] = Number.isFinite(v) && v >= 0 ? v : SRS_DEFAULT_WEIGHTS[key];
+    }
+    const last = await ScoringConfig.findOne({}).sort({ version: -1 });
+    const version = (last?.version ?? 0) + 1;
+    await ScoringConfig.updateMany({ active: true }, { $set: { active: false } });
+    const cfg = await ScoringConfig.create({
+      version,
+      weights,
+      active: true,
+      createdBy: req.user?._id ?? null,
+      note: String(req.body.note ?? '').trim(),
+    });
+    res.status(201).json({ version: cfg.version, weights: cfg.weights });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// 12-week Growth-Score trend for one competitor (FR-2.6).
+export const getScoreTrend = async (req, res) => {
+  if (!canManageMarketing(req.user)) {
+    return res.status(403).json({ message: 'No access' });
+  }
+  try {
+    const snaps = await CompetitorSnapshot.find({
+      competitor: req.params.id,
+    })
+      .sort({ weekOf: -1 })
+      .limit(12)
+      .select('weekOf score signals');
+    res.json({
+      competitorId: req.params.id,
+      trend: snaps
+        .reverse()
+        .map((s) => ({ weekOf: s.weekOf, score: s.score })),
+      latestSignals: snaps.length ? snaps[snaps.length - 1].signals : [],
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

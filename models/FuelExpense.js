@@ -52,6 +52,17 @@ const fuelExpenseSchema = mongoose.Schema(
       default: '',
       trim: true,
     },
+    // Cloudinary URL of the bill/receipt uploaded by the driver.
+    billImage: {
+      type: String,
+      default: '',
+    },
+    // Fleet-manager review status.
+    status: {
+      type: String,
+      enum: ['pending', 'approved', 'rejected'],
+      default: 'pending',
+    },
   },
   {
     timestamps: true,

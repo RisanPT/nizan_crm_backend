@@ -41,6 +41,22 @@ const trialItemSchema = new mongoose.Schema(
   { _id: false }
 );
 
+// ── Assigned artist sub-schema (mirrors booking assignment) ──────────────────
+const trialAssignmentSchema = new mongoose.Schema(
+  {
+    employeeId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+      default: null,
+    },
+    artistName: { type: String, default: '' },
+    phone: { type: String, default: '' },
+    roleType: { type: String, default: 'artist' }, // artist | lead | assistant
+    type: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
 // ── Trial Schema ────────────────────────────────────────────────────────────
 const trialSchema = new mongoose.Schema(
   {
@@ -90,6 +106,11 @@ const trialSchema = new mongoose.Schema(
     // 1..N packages / looks tried during the appointment
     trialItems: {
       type: [trialItemSchema],
+      default: [],
+    },
+    // Artists assigned to this trial (like a booking).
+    assignedStaff: {
+      type: [trialAssignmentSchema],
       default: [],
     },
     // Optional link to a parent Booking (leave null if not needed)
