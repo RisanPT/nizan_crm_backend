@@ -285,6 +285,16 @@ const computeExtraDateCharge = ({
   EXTRA_DATE_AMOUNT *
   Math.max(1, Number(packageCount) || 1);
 
+// Per-day charge derived per item from ITS OWN dates. EXTRA_DATE_AMOUNT is
+// billed for EVERY day a package runs (not only additional days), so one date
+// of a 21500 package totals 24500 and two dates total 49000.
+const computeItemsExtraDateCharge = (bookingItems = []) =>
+  (Array.isArray(bookingItems) ? bookingItems : []).reduce(
+    (sum, item) =>
+      sum + Math.max(1, item?.selectedDates?.length ?? 1) * EXTRA_DATE_AMOUNT,
+    0
+  );
+
 const computeBasePackagePrice = async ({
   packageId,
   regionId,
@@ -398,16 +408,22 @@ const computeAdvanceAmount = async ({
   return baseAdvance * dateCount;
 };
 
+// Advance is charged per item per day it actually runs. Using each item's own
+// dates keeps "one package per date" correct (2 dates x 3000 = 6000) instead of
+// multiplying the whole basket by the merged date count.
+// Equivalent to the old formula when every item shares the same dates.
 const computeBookingItemsAdvanceAmount = ({
   bookingItems = [],
   selectedDates = [],
 }) => {
-  const baseAdvance = bookingItems.reduce(
-    (sum, item) => sum + (Number(item?.advanceAmount) || 0),
-    0
-  );
-  const dateCount = Math.max(1, selectedDates?.length ?? 0);
-  return baseAdvance * dateCount;
+  const fallbackDateCount = Math.max(1, selectedDates?.length ?? 0);
+  return bookingItems.reduce((sum, item) => {
+    const itemDateCount = Math.max(
+      1,
+      item?.selectedDates?.length ?? fallbackDateCount
+    );
+    return sum + (Number(item?.advanceAmount) || 0) * itemDateCount;
+  }, 0);
 };
 
 const normalizeBookingItems = async ({
@@ -1057,10 +1073,7 @@ export const createBooking = async (req, res) => {
             0
           ) +
           addonsTotal +
-          computeExtraDateCharge({
-            selectedDates: effectiveSchedule.selectedDates,
-            packageCount: normalizedBookingItems.length,
-          })
+          computeItemsExtraDateCharge(normalizedBookingItems)
         : computedTotalPrice + addonsTotal;
     const finalAdvanceAmount =
       normalizedBookingItems.length > 0
@@ -1310,10 +1323,7 @@ export const updateBooking = async (req, res) => {
             0
           ) +
           addonsTotal +
-          computeExtraDateCharge({
-            selectedDates: effectiveSchedule.selectedDates,
-            packageCount: finalBookingItems.length,
-          })
+          computeItemsExtraDateCharge(finalBookingItems)
         : computedTotalPrice + addonsTotal;
     const finalAdvanceAmount =
       bookingItems != null && finalBookingItems.length > 0
