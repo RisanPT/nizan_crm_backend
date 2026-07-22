@@ -20,11 +20,14 @@ const userSchema = mongoose.Schema(
       required: true,
       minlength: 6,
     },
+    // Holds a Role.key. Deliberately NOT an enum — roles are now created and
+    // edited at runtime in Settings → Roles & Permissions, so the valid set
+    // lives in the Role collection rather than in this schema.
     role: {
       type: String,
-      enum: ['admin', 'manager', 'crm', 'sales', 'artist', 'accounts', 'driver', 'fleet_manager', 'inventory_manager'],
       default: 'manager',
       trim: true,
+      lowercase: true,
     },
     // For artist users: whether they can access the Inventory feature.
     inventoryAccess: {

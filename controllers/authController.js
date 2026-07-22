@@ -1,16 +1,22 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
+import { permissionsForRole, ensureDefaultRoles, homeRouteForRole } from './roleController.js';
+import Role from '../models/Role.js';
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
 
-const toAuthResponse = (user) => ({
+// Async because the role's feature permissions are resolved from the Role
+// collection, so access changes take effect on the next login without a deploy.
+const toAuthResponse = async (user) => ({
   token: generateToken(user._id.toString()),
   user: {
     id: user._id.toString(),
     name: user.name,
     email: user.email,
     role: user.role,
+    permissions: await permissionsForRole(user.role),
+    homeRoute: await homeRouteForRole(user.role),
     inventoryAccess: user.inventoryAccess ?? false,
     employeeId: user.employeeId?.toString() ?? null,
     zoneId: user.zoneId?.toString() ?? null,
@@ -41,7 +47,8 @@ export const login = async (req, res) => {
     return res.status(401).json({ message: 'Invalid email or password' });
   }
 
-  return res.json(toAuthResponse(user));
+  await ensureDefaultRoles();
+  return res.json(await toAuthResponse(user));
 };
 
 export const getMe = async (req, res) => {
@@ -51,6 +58,8 @@ export const getMe = async (req, res) => {
       name: req.user.name,
       email: req.user.email,
       role: req.user.role,
+      permissions: await permissionsForRole(req.user.role),
+      homeRoute: await homeRouteForRole(req.user.role),
       inventoryAccess: req.user.inventoryAccess ?? false,
       employeeId: req.user.employeeId?.toString() ?? null,
       zoneId: req.user.zoneId?.toString() ?? null,
@@ -102,7 +111,7 @@ export const createUser = async (req, res) => {
     .trim()
     .toLowerCase();
   const password = String(req.body.password ?? '').trim();
-  const role = String(req.body.role ?? 'manager').trim() || 'manager';
+  const role = String(req.body.role ?? 'manager').trim().toLowerCase() || 'manager';
   const active = req.body.active ?? true;
   const employeeId = req.body.employeeId ?? null;
 
@@ -116,6 +125,13 @@ export const createUser = async (req, res) => {
     return res
       .status(403)
       .json({ message: 'You are not allowed to create this type of user.' });
+  }
+
+  // The schema no longer enums roles, so validate against the Role collection.
+  await ensureDefaultRoles();
+  const roleDoc = await Role.findOne({ key: role });
+  if (!roleDoc) {
+    return res.status(400).json({ message: `Unknown role "${role}".` });
   }
 
   if (!name || !email || !password) {

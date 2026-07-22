@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Booking from '../models/Booking.js';
 import Customer from '../models/Customer.js';
 import ServicePackage from '../models/Package.js';
+import Lead from '../models/Lead.js';
 import {
   sendAdvanceInvoiceEmail,
   sendCompletionInvoiceEmail,
@@ -476,6 +477,52 @@ const normalizeBookingItems = async ({
   }
 
   return normalizedItems;
+};
+
+
+// ── Lead → Booking linkage ──────────────────────────────────────────────────
+// Indian numbers get entered inconsistently (+91, 0-prefix, spaces, dashes),
+// so match on the last 10 digits only.
+const phoneKey = (value = '') => {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  return digits.length > 10 ? digits.slice(-10) : digits;
+};
+
+/// Marks the matching lead(s) as Converted once a booking exists for the same
+/// mobile number, and links them to that booking. Never throws — a failure
+/// here must not fail the booking itself.
+const linkLeadsToBooking = async (booking) => {
+  try {
+    const key = phoneKey(booking?.phone);
+    if (key.length < 10) return;
+
+    // Match on the last 10 digits regardless of how the lead was stored.
+    const candidates = await Lead.find({
+      phone: { $regex: `${key}$` },
+    });
+
+    for (const lead of candidates) {
+      if (phoneKey(lead.phone) !== key) continue;
+      // Don't overwrite a lead already tied to another booking.
+      if (lead.bookingId && String(lead.bookingId) !== String(booking._id)) {
+        continue;
+      }
+      lead.status = 'Converted';
+      lead.bookingId = booking._id;
+      lead.bookedDate = lead.bookedDate ?? booking.bookingDate ?? new Date();
+      // Carry the confirmed address/geography onto the lead so lead reports
+      // can be grouped by district, region and pincode.
+      lead.address = booking.address || lead.address;
+      lead.pincode = booking.pincode || lead.pincode;
+      lead.regionId = booking.regionId || lead.regionId;
+      lead.districtId = booking.districtId || lead.districtId;
+      lead.region = booking.region || lead.region;
+      lead.district = booking.district || lead.district;
+      await lead.save();
+    }
+  } catch (error) {
+    console.error('Failed to link leads to booking:', error);
+  }
 };
 
 const escapeRegex = (value = '') =>
@@ -1159,6 +1206,9 @@ export const createBooking = async (req, res) => {
       pocName: pocName ?? '',
       pocPhone: pocPhone ?? '',
     });
+
+    // A booking for a known lead's number converts that lead automatically.
+    await linkLeadsToBooking(booking);
 
     let invoiceEmailSent = false;
     if (

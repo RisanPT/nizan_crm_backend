@@ -39,6 +39,29 @@ const leadSchema = mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Set automatically when a booking is created for this lead's phone
+    // number, so a converted lead links straight to the work it produced.
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      default: null,
+    },
+    // Geography copied from the booking on conversion, so lead reporting can
+    // be sliced by district / region / pincode using confirmed address data.
+    address: { type: String, default: '' },
+    pincode: { type: String, default: '' },
+    regionId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Region',
+      default: null,
+    },
+    districtId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'District',
+      default: null,
+    },
+    region: { type: String, default: '' },
+    district: { type: String, default: '' },
     // Date + time for follow-up reminder (only when status is Follow-up)
     followUpDate: {
       type: Date,

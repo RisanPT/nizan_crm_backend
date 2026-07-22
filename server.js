@@ -33,6 +33,7 @@ import inventoryRoutes from './routes/inventoryRoutes.js';
 import marketingRoutes from './routes/marketingRoutes.js';
 import trialRoutes from './routes/trialRoutes.js';
 import trialPackageRoutes from './routes/trialPackageRoutes.js';
+import roleRoutes from './routes/roleRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -119,6 +120,7 @@ app.use(express.json());
 
 // Routes
 app.use('/api/auth', authRoutes);
+app.use('/api/roles', roleRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/leads', leadRoutes);
