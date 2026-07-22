@@ -4,7 +4,7 @@ export const getLeads = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
   const skip = (page - 1) * limit;
-  const { search, status, source, salesperson, month } = req.query;
+  const { search, status, source, salesperson, month, priority } = req.query;
 
   const query = {};
   if (req.user && req.user.role === 'sales') {
@@ -24,6 +24,10 @@ export const getLeads = async (req, res) => {
       { location: { $regex: search, $options: 'i' } },
     ];
   }
+  if (priority && priority !== 'All') {
+    query.priority = priority;
+  }
+
   if (status && status !== 'All') {
     query.status = status;
   }

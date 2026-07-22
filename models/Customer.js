@@ -13,6 +13,10 @@ const customerSchema = mongoose.Schema(
     },
     phone: {
       type: String,
+      trim: true,
+      // Phone numbers get typed with spaces and dashes ("70341 09552"), which
+      // breaks equality checks and lead↔booking matching. Normalise on write.
+      set: (v) => String(v ?? '').replace(/\s+/g, '').trim(),
     },
     address: {
       type: String,

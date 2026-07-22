@@ -62,6 +62,52 @@ export const createExpense = async (req, res) => {
   }
 };
 
+/// Edits an expense. An artist/driver may only change their OWN entry, and
+/// only while it is still `pending` — once Accounts has verified or rejected
+/// it the record is locked so the audited figure cannot move underneath them.
+export const updateExpense = async (req, res) => {
+  try {
+    const expense = await Expense.findById(req.params.id);
+    if (!expense) {
+      return res.status(404).json({ message: 'Expense not found' });
+    }
+
+    const role = req.user?.role;
+    const isOwnerRole = role === 'artist' || role === 'driver';
+
+    if (isOwnerRole) {
+      if (String(expense.employeeId) !== String(req.user.employeeId)) {
+        return res
+          .status(403)
+          .json({ message: 'Not authorized to edit this expense' });
+      }
+      if (expense.status !== 'pending') {
+        return res.status(400).json({
+          message:
+            `This expense has already been ${expense.status} by Accounts and can no longer be edited.`,
+        });
+      }
+    }
+
+    const { bookingId, category, amount, date, notes, receiptImage } = req.body;
+    if (bookingId !== undefined) expense.bookingId = bookingId || null;
+    if (category !== undefined) expense.category = category;
+    if (amount !== undefined) expense.amount = Number(amount) || 0;
+    if (date !== undefined) expense.date = date;
+    if (notes !== undefined) expense.notes = notes ?? '';
+    if (receiptImage !== undefined) expense.receiptImage = receiptImage ?? '';
+
+    await expense.save();
+
+    const populated = await Expense.findById(expense._id).populate(
+      expensePopulate
+    );
+    res.json(populated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const verifyExpense = async (req, res) => {
   try {
     if (req.user && req.user.role !== 'admin' && req.user.role !== 'accounts') {

@@ -12,6 +12,10 @@ const leadSchema = mongoose.Schema(
     phone: {
       type: String,
       required: [true, 'Please add a phone number'],
+      trim: true,
+      // Phone numbers get typed with spaces and dashes ("70341 09552"), which
+      // breaks equality checks and lead↔booking matching. Normalise on write.
+      set: (v) => String(v ?? '').replace(/\s+/g, '').trim(),
     },
     source: {
       type: String,
@@ -75,6 +79,13 @@ const leadSchema = mongoose.Schema(
       type: String,
       enum: ['New', 'Contacted', 'Qualified', 'Lost', 'Converted', 'Follow-up'],
       default: 'New',
+    },
+    // How likely this lead is to close — tracked separately from the pipeline
+    // stage so a lead can be, say, "Follow-up" AND "Hot" at the same time.
+    priority: {
+      type: String,
+      enum: ['Hot', 'Warm', 'Cold'],
+      default: 'Warm',
     },
     reason: {
       type: String,
