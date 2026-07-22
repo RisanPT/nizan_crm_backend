@@ -286,15 +286,11 @@ const computeExtraDateCharge = ({
   EXTRA_DATE_AMOUNT *
   Math.max(1, Number(packageCount) || 1);
 
-// Per-day charge derived per item from ITS OWN dates. EXTRA_DATE_AMOUNT is
-// billed for EVERY day a package runs (not only additional days), so one date
-// of a 21500 package totals 24500 and two dates total 49000.
+// EXTRA_DATE_AMOUNT is charged PER PACKAGE, not per day: the total is simply
+// package count x 3000. Two packages on the same day cost the same as two
+// packages on different days.
 const computeItemsExtraDateCharge = (bookingItems = []) =>
-  (Array.isArray(bookingItems) ? bookingItems : []).reduce(
-    (sum, item) =>
-      sum + Math.max(1, item?.selectedDates?.length ?? 1) * EXTRA_DATE_AMOUNT,
-    0
-  );
+  (Array.isArray(bookingItems) ? bookingItems : []).length * EXTRA_DATE_AMOUNT;
 
 const computeBasePackagePrice = async ({
   packageId,
@@ -409,23 +405,13 @@ const computeAdvanceAmount = async ({
   return baseAdvance * dateCount;
 };
 
-// Advance is charged per item per day it actually runs. Using each item's own
-// dates keeps "one package per date" correct (2 dates x 3000 = 6000) instead of
-// multiplying the whole basket by the merged date count.
-// Equivalent to the old formula when every item shares the same dates.
-const computeBookingItemsAdvanceAmount = ({
-  bookingItems = [],
-  selectedDates = [],
-}) => {
-  const fallbackDateCount = Math.max(1, selectedDates?.length ?? 0);
-  return bookingItems.reduce((sum, item) => {
-    const itemDateCount = Math.max(
-      1,
-      item?.selectedDates?.length ?? fallbackDateCount
-    );
-    return sum + (Number(item?.advanceAmount) || 0) * itemDateCount;
-  }, 0);
-};
+// Advance is likewise charged PER PACKAGE — each package carries its own
+// advance once, regardless of how many days it spans.
+const computeBookingItemsAdvanceAmount = ({ bookingItems = [] }) =>
+  bookingItems.reduce(
+    (sum, item) => sum + (Number(item?.advanceAmount) || 0),
+    0
+  );
 
 const normalizeBookingItems = async ({
   bookingItems = [],
@@ -1019,6 +1005,7 @@ export const createBooking = async (req, res) => {
     requiredRoomDetail,
     secondaryContact,
     outfitDetails,
+    referenceImages,
     looks,
     captureStaffDetails,
     temporaryStaffDetails,
@@ -1185,6 +1172,7 @@ export const createBooking = async (req, res) => {
       requiredRoomDetail,
       secondaryContact,
       outfitDetails,
+      referenceImages: Array.isArray(referenceImages) ? referenceImages : [],
       captureStaffDetails,
       temporaryStaffDetails,
       staffInstructions,
@@ -1266,6 +1254,7 @@ export const updateBooking = async (req, res) => {
       requiredRoomDetail,
       secondaryContact,
       outfitDetails,
+    referenceImages,
       captureStaffDetails,
       temporaryStaffDetails,
       staffInstructions,
@@ -1437,6 +1426,11 @@ export const updateBooking = async (req, res) => {
       requiredRoomDetail ?? booking.requiredRoomDetail;
     booking.secondaryContact = secondaryContact ?? booking.secondaryContact;
     booking.outfitDetails = outfitDetails ?? booking.outfitDetails;
+    if (referenceImages !== undefined) {
+      booking.referenceImages = Array.isArray(referenceImages)
+        ? referenceImages.filter((u) => String(u ?? '').trim())
+        : [];
+    }
     booking.captureStaffDetails =
       captureStaffDetails ?? booking.captureStaffDetails;
     booking.temporaryStaffDetails =

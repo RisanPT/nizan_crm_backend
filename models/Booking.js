@@ -230,6 +230,12 @@ const bookingSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // Bride / client reference looks uploaded by CRM. Artists see these on
+    // their job screen so they know the look to recreate.
+    referenceImages: {
+      type: [String],
+      default: [],
+    },
     // Multiple outfits/looks for one booking. A look can be at a different
     // venue — when sameLocation is false its own address/mapUrl are used.
     looks: {
