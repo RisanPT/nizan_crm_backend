@@ -17,6 +17,14 @@ const expenseSchema = mongoose.Schema(
       enum: ['food', 'travel', 'stay', 'materials', 'fuel', 'other'],
       default: 'other',
     },
+    // What the spend was FOR — kept separate from `category` (which is the
+    // kind of spend) so bridal client work and internal model shoots can be
+    // reported and budgeted independently.
+    workType: {
+      type: String,
+      enum: ['bridal', 'model_shoot'],
+      default: 'bridal',
+    },
     amount: {
       type: Number,
       required: [true, 'Please add an amount'],

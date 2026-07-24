@@ -9,9 +9,10 @@ const expensePopulate = [
 
 export const getExpenses = async (req, res) => {
   try {
-    const { status, employeeId, bookingId } = req.query;
+    const { status, employeeId, bookingId, workType } = req.query;
     const filter = {};
     if (status) filter.status = status;
+    if (workType && workType !== 'All') filter.workType = workType;
     
     // Role-based scoping
     if (req.user && (req.user.role === 'artist' || req.user.role === 'driver')) {
@@ -32,7 +33,7 @@ export const getExpenses = async (req, res) => {
 };
 
 export const createExpense = async (req, res) => {
-  const { employeeId, bookingId, category, amount, date, notes, receiptImage } = req.body;
+  const { employeeId, bookingId, category, amount, date, notes, receiptImage, workType } = req.body;
 
   try {
     let finalEmployeeId = employeeId;
@@ -47,6 +48,7 @@ export const createExpense = async (req, res) => {
       employeeId: finalEmployeeId,
       bookingId: bookingId || null,
       category: category ?? 'other',
+      workType: workType === 'model_shoot' ? 'model_shoot' : 'bridal',
       amount: amountNum,
       date: date ?? new Date(),
       notes: notes ?? '',
@@ -89,7 +91,11 @@ export const updateExpense = async (req, res) => {
       }
     }
 
-    const { bookingId, category, amount, date, notes, receiptImage } = req.body;
+    const { bookingId, category, amount, date, notes, receiptImage, workType } =
+      req.body;
+    if (workType !== undefined) {
+      expense.workType = workType === 'model_shoot' ? 'model_shoot' : 'bridal';
+    }
     if (bookingId !== undefined) expense.bookingId = bookingId || null;
     if (category !== undefined) expense.category = category;
     if (amount !== undefined) expense.amount = Number(amount) || 0;

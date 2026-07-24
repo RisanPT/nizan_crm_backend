@@ -44,6 +44,16 @@ const snapshotSchema = new mongoose.Schema(
       newService: { type: String, default: '' },
       newPartnership: { type: String, default: '' },
     },
+    // Reel / post / ad URL for the item that was manually scored, per signal.
+    signalLinks: {
+      newCampaign: { type: String, default: '' },
+      viralContent: { type: String, default: '' },
+      qualityCreative: { type: String, default: '' },
+      followerGrowth: { type: String, default: '' },
+      engagementIncrease: { type: String, default: '' },
+      newService: { type: String, default: '' },
+      newPartnership: { type: String, default: '' },
+    },
     // Denormalised breakdown of the triggered signals + points + evidence.
     signals: {
       type: [
@@ -52,6 +62,7 @@ const snapshotSchema = new mongoose.Schema(
           label: String,
           points: Number,
           evidence: String,
+          link: String,
         },
       ],
       default: [],

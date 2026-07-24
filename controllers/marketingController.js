@@ -37,7 +37,7 @@ const getActiveScoring = async () => {
 };
 
 // GS = Σ(points of triggered signals), clamped [1,25] (FR-2.1: zero signals => 1).
-const computeScoreAndSignals = (flags, evidence, weights) => {
+const computeScoreAndSignals = (flags, evidence, links, weights) => {
   const signals = [];
   let total = 0;
   for (const key of SIGNAL_KEYS) {
@@ -49,6 +49,7 @@ const computeScoreAndSignals = (flags, evidence, weights) => {
         label: SIGNAL_LABELS[key],
         points,
         evidence: String(evidence?.[key] ?? '').trim(),
+        link: String(links?.[key] ?? '').trim(),
       });
     }
   }
@@ -104,6 +105,15 @@ const snapshotFieldsFromBody = (b) => ({
     engagementIncrease: String(b.signalEvidence?.engagementIncrease ?? '').trim(),
     newService: String(b.signalEvidence?.newService ?? '').trim(),
     newPartnership: String(b.signalEvidence?.newPartnership ?? '').trim(),
+  },
+  signalLinks: {
+    newCampaign: String(b.signalLinks?.newCampaign ?? '').trim(),
+    viralContent: String(b.signalLinks?.viralContent ?? '').trim(),
+    qualityCreative: String(b.signalLinks?.qualityCreative ?? '').trim(),
+    followerGrowth: String(b.signalLinks?.followerGrowth ?? '').trim(),
+    engagementIncrease: String(b.signalLinks?.engagementIncrease ?? '').trim(),
+    newService: String(b.signalLinks?.newService ?? '').trim(),
+    newPartnership: String(b.signalLinks?.newPartnership ?? '').trim(),
   },
   notes: String(b.notes ?? '').trim(),
 });
@@ -228,7 +238,7 @@ export const upsertSnapshot = async (req, res) => {
     const fields = snapshotFieldsFromBody(req.body);
     const { weights, version } = await getActiveScoring();
     const { score, signals } =
-        computeScoreAndSignals(fields, fields.signalEvidence, weights);
+        computeScoreAndSignals(fields, fields.signalEvidence, fields.signalLinks, weights);
     const snapshot = await CompetitorSnapshot.findOneAndUpdate(
       { competitor: competitorId, weekOf },
       {
@@ -321,7 +331,7 @@ export const importCompetitors = async (req, res) => {
         const weekOf = row.weekOf ? mondayOf(row.weekOf) : defaultWeek;
         const fields = snapshotFieldsFromBody(row);
         const { score, signals } =
-            computeScoreAndSignals(fields, fields.signalEvidence, weights);
+            computeScoreAndSignals(fields, fields.signalEvidence, fields.signalLinks, weights);
         await CompetitorSnapshot.findOneAndUpdate(
           { competitor: competitor._id, weekOf },
           {
