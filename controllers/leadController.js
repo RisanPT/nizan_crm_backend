@@ -135,13 +135,29 @@ export const updateLead = async (req, res) => {
     if (req.user && req.user.role === 'sales') {
       leadData.assignedTo = req.user._id;
     }
+
+    const existing = await Lead.findById(req.params.id);
+    if (!existing) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    // followUpCount is server-owned — ignore whatever the client sent and only
+    // bump it when a genuinely new (or rescheduled) follow-up is being saved.
+    delete leadData.followUpCount;
+    if (leadData.status === 'Follow-up' && leadData.followUpDate) {
+      const incoming = new Date(leadData.followUpDate).getTime();
+      const previous = existing.followUpDate
+        ? new Date(existing.followUpDate).getTime()
+        : null;
+      if (incoming !== previous) {
+        leadData.followUpCount = (existing.followUpCount || 0) + 1;
+      }
+    }
+
     const lead = await Lead.findByIdAndUpdate(req.params.id, leadData, {
       new: true,
       runValidators: true,
     });
-    if (!lead) {
-      return res.status(404).json({ message: 'Lead not found' });
-    }
     res.json(lead);
   } catch (error) {
     res.status(500).json({ message: error.message });

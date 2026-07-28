@@ -2,10 +2,12 @@ import mongoose from 'mongoose';
 
 const fuelExpenseSchema = mongoose.Schema(
   {
+    // Optional at the schema level: vehicle-related expenses require it (enforced
+    // in the controller), but an outsourced-driver salary has no vehicle.
     vehicleId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Vehicle',
-      required: [true, 'Please select a vehicle'],
+      default: null,
     },
     driverId: {
       type: mongoose.Schema.Types.ObjectId,
@@ -14,7 +16,15 @@ const fuelExpenseSchema = mongoose.Schema(
     },
     category: {
       type: String,
-      enum: ['fuel', 'food', 'toll', 'parking', 'service', 'other'],
+      enum: [
+        'fuel',
+        'food',
+        'toll',
+        'parking',
+        'service',
+        'other',
+        'outsource_salary',
+      ],
       default: 'fuel',
     },
     date: {

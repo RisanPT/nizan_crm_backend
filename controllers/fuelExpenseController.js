@@ -70,15 +70,30 @@ export const createFuelExpense = async (req, res) => {
   } = req.body;
 
   try {
+    const finalCategory = category ?? 'fuel';
+    const normalizedVehicleId = normalizeObjectId(vehicleId);
+
+    // Outsourced-driver salary is a manager-only expense and carries no vehicle.
+    if (finalCategory === 'outsource_salary') {
+      if (req.user.role === 'driver') {
+        return res
+          .status(403)
+          .json({ message: 'Drivers cannot record salary expenses' });
+      }
+    } else if (!normalizedVehicleId) {
+      // Every other category is vehicle-related.
+      return res.status(400).json({ message: 'Please select a vehicle' });
+    }
+
     let finalDriverId = normalizeObjectId(driverId);
     if (req.user.role === 'driver') {
       finalDriverId = req.user.employeeId;
     }
 
     const expense = await FuelExpense.create({
-      vehicleId: normalizeObjectId(vehicleId),
+      vehicleId: normalizedVehicleId,
       driverId: finalDriverId,
-      category: category ?? 'fuel',
+      category: finalCategory,
       date: date ?? new Date(),
       odometerKm: Number(odometerKm) || 0,
       liters: Number(liters) || 0,

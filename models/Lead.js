@@ -70,6 +70,12 @@ const leadSchema = mongoose.Schema(
     followUpDate: {
       type: Date,
     },
+    // How many times a follow-up has been scheduled for this lead. Incremented
+    // server-side whenever a new/changed follow-up date is saved.
+    followUpCount: {
+      type: Number,
+      default: 0,
+    },
     assignedTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

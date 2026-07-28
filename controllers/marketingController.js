@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Competitor from '../models/Competitor.js';
 import CompetitorSnapshot from '../models/CompetitorSnapshot.js';
 import ScoringConfig from '../models/ScoringConfig.js';
+import Region from '../models/Region.js';
 
 // Only the digital-marketing admin (and full-access managers) manage this module.
 const MARKETING_ROLES = ['admin', 'manager', 'marketing_admin'];
@@ -149,9 +150,16 @@ export const getCompetitors = async (req, res) => {
   }
 };
 
+const normalizeObjectId = (value) => {
+  const v = String(value ?? '').trim();
+  return v && mongoose.Types.ObjectId.isValid(v) ? v : null;
+};
+
 const cleanCompetitor = (b) => ({
   name: String(b.name ?? '').trim(),
   city: String(b.city ?? '').trim(),
+  region: String(b.region ?? '').trim(),
+  regionId: normalizeObjectId(b.regionId),
   website: String(b.website ?? '').trim(),
   category: String(b.category ?? '').trim(),
   instagram: String(b.instagram ?? '').trim(),
@@ -291,6 +299,12 @@ export const importCompetitors = async (req, res) => {
     }
     const defaultWeek = mondayOf(req.body.weekOf);
     const { weights, version } = await getActiveScoring();
+    // Map region names (case-insensitive) to our geographics, so a CSV can
+    // carry a plain "region" column and still link to the real Region record.
+    const regions = await Region.find({}).select('name').lean();
+    const regionByName = new Map(
+      regions.map((r) => [r.name.trim().toLowerCase(), { id: r._id, name: r.name }])
+    );
     let created = 0;
     let updated = 0;
     let snapshots = 0;
@@ -303,6 +317,12 @@ export const importCompetitors = async (req, res) => {
         errors.push({ row: i + 1, message: 'Missing name' });
         continue;
       }
+      // Resolve the CSV's region name against our geographics.
+      if (data.region) {
+        const match = regionByName.get(data.region.toLowerCase());
+        data.region = match ? match.name : data.region;
+        data.regionId = match ? match.id : null;
+      }
       let competitor = await Competitor.findOne({
         name: new RegExp(`^${data.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i'),
         city: data.city,
@@ -310,6 +330,11 @@ export const importCompetitors = async (req, res) => {
       if (competitor) {
         for (const key of Object.keys(data)) {
           if (row[key] !== undefined && data[key] !== '') competitor[key] = data[key];
+        }
+        // regionId is derived (not a raw CSV column), so set it explicitly.
+        if (row.region !== undefined && data.region) {
+          competitor.region = data.region;
+          competitor.regionId = data.regionId;
         }
         await competitor.save();
         updated += 1;

@@ -16,6 +16,16 @@ export const getLeadActivities = async (req, res) => {
 // Create a new activity and update the lead's status/follow-up date
 export const createLeadActivity = async (req, res) => {
   try {
+    // A lead can only be marked Lost with a recorded reason.
+    if (req.body.leadStatus === 'Lost') {
+      const reason = String(req.body.reason ?? req.body.remark ?? '').trim();
+      if (!reason) {
+        return res
+          .status(400)
+          .json({ message: 'A reason is required to mark a lead as Lost' });
+      }
+    }
+
     const activity = await LeadActivity.create({
       ...req.body,
       leadId: req.params.leadId,
@@ -23,8 +33,12 @@ export const createLeadActivity = async (req, res) => {
     });
 
     const updateFields = {};
+    const incFields = {};
     if (req.body.leadStatus) {
       updateFields.status = req.body.leadStatus;
+    }
+    if (req.body.leadStatus === 'Lost') {
+      updateFields.reason = String(req.body.reason ?? req.body.remark ?? '').trim();
     }
 
     if (req.body.type === 'followup') {
@@ -32,10 +46,14 @@ export const createLeadActivity = async (req, res) => {
       if (!updateFields.status) {
         updateFields.status = 'Follow-up';
       }
+      // Logging a follow-up counts as one.
+      incFields.followUpCount = 1;
     }
 
-    if (Object.keys(updateFields).length > 0) {
-      await Lead.findByIdAndUpdate(req.params.leadId, updateFields);
+    if (Object.keys(updateFields).length > 0 || Object.keys(incFields).length > 0) {
+      const update = { ...updateFields };
+      if (Object.keys(incFields).length > 0) update.$inc = incFields;
+      await Lead.findByIdAndUpdate(req.params.leadId, update);
     }
 
     res.status(201).json(activity);

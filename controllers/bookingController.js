@@ -286,12 +286,6 @@ const computeExtraDateCharge = ({
   EXTRA_DATE_AMOUNT *
   Math.max(1, Number(packageCount) || 1);
 
-// EXTRA_DATE_AMOUNT is charged PER PACKAGE, not per day: the total is simply
-// package count x 3000. Two packages on the same day cost the same as two
-// packages on different days.
-const computeItemsExtraDateCharge = (bookingItems = []) =>
-  (Array.isArray(bookingItems) ? bookingItems : []).length * EXTRA_DATE_AMOUNT;
-
 const computeBasePackagePrice = async ({
   packageId,
   regionId,
@@ -495,7 +489,12 @@ const linkLeadsToBooking = async (booking) => {
       }
       lead.status = 'Converted';
       lead.bookingId = booking._id;
-      lead.bookedDate = lead.bookedDate ?? booking.bookingDate ?? new Date();
+      // The lead's "booked date" should mirror the booking's actual event
+      // (service) date, not when the booking was placed — otherwise the lead
+      // card shows a different date than the booking itself. Always resync so a
+      // rescheduled booking stays in step.
+      lead.bookedDate =
+        booking.serviceStart ?? booking.bookingDate ?? new Date();
       // Carry the confirmed address/geography onto the lead so lead reports
       // can be grouped by district, region and pincode.
       lead.address = booking.address || lead.address;
@@ -1100,14 +1099,15 @@ export const createBooking = async (req, res) => {
       fallbackAdvanceAmount: advanceAmount,
       selectedDates: effectiveSchedule.selectedDates,
     });
+    // The ₹3000-per-package charge is the ADVANCE (see finalAdvanceAmount),
+    // NOT an addition to the bill. Total = Σ package base prices + add-ons.
     const finalTotalPrice =
       normalizedBookingItems.length > 0
         ? normalizedBookingItems.reduce(
             (sum, item) => sum + (Number(item.totalPrice) || 0),
             0
           ) +
-          addonsTotal +
-          computeItemsExtraDateCharge(normalizedBookingItems)
+          addonsTotal
         : computedTotalPrice + addonsTotal;
     const finalAdvanceAmount =
       normalizedBookingItems.length > 0
@@ -1145,6 +1145,34 @@ export const createBooking = async (req, res) => {
         pincode,
         status: 'Active',
       });
+    } else {
+      // Keep the client record complete so the client profile shows full
+      // details: fill in anything this booking captured that the customer is
+      // still missing (address/pincode/phone), and replace a placeholder email.
+      const updates = {};
+      if (address && !String(customerExists.address ?? '').trim()) {
+        updates.address = address;
+      }
+      if (pincode && !String(customerExists.pincode ?? '').trim()) {
+        updates.pincode = pincode;
+      }
+      if (phone && !String(customerExists.phone ?? '').trim()) {
+        updates.phone = phone;
+      }
+      if (customerName && !String(customerExists.name ?? '').trim()) {
+        updates.name = customerName;
+      }
+      const existingEmail = String(customerExists.email ?? '');
+      if (normalizedEmail &&
+          (!existingEmail.trim() || existingEmail.includes('@placeholder'))) {
+        updates.email = normalizedEmail;
+      }
+      if (Object.keys(updates).length > 0) {
+        await Customer.updateOne(
+          { _id: customerExists._id },
+          { $set: updates }
+        );
+      }
     }
 
     const booking = await Booking.create({
@@ -1355,14 +1383,15 @@ export const updateBooking = async (req, res) => {
     });
     const finalBookingItems =
       bookingItems != null ? normalizedBookingItems : booking.bookingItems ?? [];
+    // Total = Σ package base prices + add-ons. The ₹3000/package is the advance
+    // (finalAdvanceAmount), never part of the bill.
     const finalTotalPrice =
       bookingItems != null && finalBookingItems.length > 0
         ? finalBookingItems.reduce(
             (sum, item) => sum + (Number(item.totalPrice) || 0),
             0
           ) +
-          addonsTotal +
-          computeItemsExtraDateCharge(finalBookingItems)
+          addonsTotal
         : computedTotalPrice + addonsTotal;
     const finalAdvanceAmount =
       bookingItems != null && finalBookingItems.length > 0

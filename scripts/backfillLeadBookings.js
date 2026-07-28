@@ -84,7 +84,9 @@ const run = async () => {
     if (APPLY) {
       lead.status = 'Converted';
       lead.bookingId = booking._id;
-      lead.bookedDate = lead.bookedDate ?? booking.bookingDate ?? new Date();
+      // Mirror the booking's event (service) date, matching linkLeadsToBooking.
+      lead.bookedDate =
+        booking.serviceStart ?? booking.bookingDate ?? new Date();
       lead.address = booking.address || lead.address;
       lead.pincode = booking.pincode || lead.pincode;
       lead.regionId = booking.regionId || lead.regionId;
