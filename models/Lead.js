@@ -29,6 +29,19 @@ const leadSchema = mongoose.Schema(
       type: String,
       default: 'Individual',
     },
+    // Event Type replaces the free-text Lead Type in the UI (Wedding, Reception, …).
+    eventType: {
+      type: String,
+      default: '',
+    },
+    // Optional secondary contact number. Normalised like `phone` so search and
+    // duplicate checks can match on either number.
+    alternateNumber: {
+      type: String,
+      default: '',
+      trim: true,
+      set: (v) => String(v ?? '').replace(/\s+/g, '').trim(),
+    },
     // Manually set date when the lead was actually received (can be past)
     leadDate: {
       type: Date,
@@ -83,7 +96,15 @@ const leadSchema = mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ['New', 'Contacted', 'Qualified', 'Lost', 'Converted', 'Follow-up'],
+      enum: [
+        'New',
+        'Contacted',
+        'Qualified',
+        'Follow-up',
+        'Pending Lost Approval',
+        'Lost',
+        'Converted',
+      ],
       default: 'New',
     },
     // How likely this lead is to close — tracked separately from the pipeline
@@ -101,6 +122,63 @@ const leadSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // ── Lost-approval workflow ──────────────────────────────────────────────
+    // A Sales Executive who marks a lead Lost does NOT close it; the lead moves
+    // to 'Pending Lost Approval' until a Sales/Regional Manager (or Admin)
+    // approves or rejects it. These fields capture the request + the decision.
+    competitorName: {
+      type: String,
+      default: '',
+    },
+    lostAttachment: {
+      type: String,
+      default: '',
+    },
+    // The stage the lead was in before the lost request, so a rejection can
+    // restore it instead of guessing.
+    previousStatus: {
+      type: String,
+      default: '',
+    },
+    lostRequestedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    lostRequestedAt: {
+      type: Date,
+      default: null,
+    },
+    lostReviewedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    lostReviewedAt: {
+      type: Date,
+      default: null,
+    },
+    lostDecision: {
+      type: String,
+      enum: ['', 'approved', 'rejected'],
+      default: '',
+    },
+    lostReviewNote: {
+      type: String,
+      default: '',
+    },
+    // Append-only trail of notable actions on this lead (lost requested,
+    // approved, rejected, …) for the acceptance-criteria audit log.
+    auditLog: [
+      {
+        action: { type: String, default: '' },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        byName: { type: String, default: '' },
+        note: { type: String, default: '' },
+        at: { type: Date, default: Date.now },
+        _id: false,
+      },
+    ],
   },
   {
     timestamps: true,

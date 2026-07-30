@@ -29,6 +29,10 @@ const customerSchema = mongoose.Schema(
     company: {
       type: String,
     },
+    eventDate: {
+      type: String,
+      default: '',
+    },
     status: {
       type: String,
       enum: ['Active', 'Inactive', 'Prospect'],

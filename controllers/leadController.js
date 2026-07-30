@@ -1,5 +1,43 @@
 import Lead from '../models/Lead.js';
 
+// Roles allowed to approve/reject a lost-lead request. Mirrors
+// `kLostReviewerRoles` in the Flutter sales_leads_screen — keep the two in sync.
+const LOST_REVIEWER_ROLES = ['admin', 'manager', 'sales_manager', 'regional_manager'];
+
+const isLostReviewer = (role) => LOST_REVIEWER_ROLES.includes(role);
+
+// Last 10 digits of a phone number, for tolerant matching regardless of the
+// spaces / +91 prefix a user typed.
+const digits = (v) => String(v ?? '').replace(/\D/g, '');
+const last10 = (v) => digits(v).slice(-10);
+
+// Fields the client must never set directly — they are owned by the lost
+// workflow / server. Stripping them stops a plain create/update from spoofing
+// an approval or forging the audit trail.
+const SERVER_OWNED = [
+  'previousStatus',
+  'lostRequestedBy',
+  'lostRequestedAt',
+  'lostReviewedBy',
+  'lostReviewedAt',
+  'lostDecision',
+  'lostReviewNote',
+  'auditLog',
+];
+
+const stripServerOwned = (data) => {
+  for (const key of SERVER_OWNED) delete data[key];
+  return data;
+};
+
+const auditEntry = (req, action, note = '') => ({
+  action,
+  by: req.user?._id ?? null,
+  byName: req.user?.name ?? '',
+  note,
+  at: new Date(),
+});
+
 export const getLeads = async (req, res) => {
   const page = parseInt(req.query.page) || 1;
   const limit = parseInt(req.query.limit) || 20;
@@ -21,6 +59,7 @@ export const getLeads = async (req, res) => {
     query.$or = [
       { name: { $regex: search, $options: 'i' } },
       { phone: { $regex: search, $options: 'i' } },
+      { alternateNumber: { $regex: search, $options: 'i' } },
       { location: { $regex: search, $options: 'i' } },
     ];
   }
@@ -118,10 +157,33 @@ export const createLead = async (req, res) => {
     // Store current UTC time — Flutter's .toLocal() converts to IST on the device.
     // Do NOT add a manual IST offset (that would cause double-counting: stored as UTC+5:30,
     // then Flutter adds another +5:30 = displayed as UTC+11).
-    const leadData = { ...req.body };
+    const leadData = stripServerOwned({ ...req.body });
+    // The client sets this when the user chose to create a lead despite a
+    // duplicate warning. It's a control flag, not a stored field.
+    const allowDuplicate = leadData.allowDuplicate === true || leadData.allowDuplicate === 'true';
+    delete leadData.allowDuplicate;
     if (req.user && req.user.role === 'sales') {
       leadData.assignedTo = req.user._id;
     }
+
+    // Duplicate validation must consider BOTH the primary and the alternate
+    // number, on either side (a new lead's primary might already exist as
+    // someone's alternate). Match on the last 10 digits so formatting differs.
+    const keys = [last10(leadData.phone), last10(leadData.alternateNumber)]
+      .filter((k) => k.length === 10);
+    if (!allowDuplicate && keys.length) {
+      const rx = keys.map((k) => new RegExp(`${k}$`));
+      const dupe = await Lead.findOne({
+        $or: [{ phone: { $in: rx } }, { alternateNumber: { $in: rx } }],
+      });
+      if (dupe) {
+        return res.status(409).json({
+          message: 'A lead with this phone number already exists.',
+          duplicateId: dupe._id,
+        });
+      }
+    }
+
     const lead = await Lead.create({ ...leadData, leadDate: new Date() });
     res.status(201).json(lead);
   } catch (error) {
@@ -131,7 +193,7 @@ export const createLead = async (req, res) => {
 
 export const updateLead = async (req, res) => {
   try {
-    const leadData = { ...req.body };
+    const leadData = stripServerOwned({ ...req.body });
     if (req.user && req.user.role === 'sales') {
       leadData.assignedTo = req.user._id;
     }
@@ -139,6 +201,18 @@ export const updateLead = async (req, res) => {
     const existing = await Lead.findById(req.params.id);
     if (!existing) {
       return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    // Closing a lead as Lost (or putting it into pending review) must go through
+    // the approval workflow so the reason/remarks are captured and audited — a
+    // plain edit can't set these states directly.
+    if (
+      (leadData.status === 'Lost' || leadData.status === 'Pending Lost Approval') &&
+      existing.status !== leadData.status
+    ) {
+      return res.status(400).json({
+        message: 'Use the lost-approval workflow to mark a lead Lost.',
+      });
     }
 
     // followUpCount is server-owned — ignore whatever the client sent and only
@@ -191,6 +265,106 @@ export const bulkAssignLeads = async (req, res) => {
       message: `${result.modifiedCount} unassigned lead(s) assigned successfully.`,
       modifiedCount: result.modifiedCount,
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// A Sales Executive requests marking a lead Lost. Reason + remarks are
+// mandatory; competitor + attachment are optional. Executives put the lead into
+// 'Pending Lost Approval'; reviewers (managers/admin) close it as Lost outright.
+export const requestLostApproval = async (req, res) => {
+  try {
+    const { reason, remarks, competitorName = '', lostAttachment = '' } = req.body;
+    if (!reason || !String(reason).trim()) {
+      return res.status(400).json({ message: 'A Lost reason is required.' });
+    }
+    if (!remarks || !String(remarks).trim()) {
+      return res.status(400).json({ message: 'Remarks are required.' });
+    }
+
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+    if (lead.status === 'Lost') {
+      return res.status(400).json({ message: 'Lead is already Lost.' });
+    }
+
+    // Remember where the lead was so a rejection can restore it. Don't overwrite
+    // it if a request is already pending (keeps the original stage).
+    if (lead.status !== 'Pending Lost Approval') {
+      lead.previousStatus = lead.status;
+    }
+    lead.reason = String(reason).trim();
+    lead.remarks = String(remarks).trim();
+    lead.competitorName = String(competitorName ?? '').trim();
+    lead.lostAttachment = String(lostAttachment ?? '').trim();
+    lead.lostRequestedBy = req.user?._id ?? null;
+    lead.lostRequestedAt = new Date();
+    lead.lostDecision = '';
+    lead.lostReviewNote = '';
+    lead.lostReviewedBy = null;
+    lead.lostReviewedAt = null;
+
+    const reviewer = isLostReviewer(req.user?.role);
+    if (reviewer) {
+      // Managers/admins close it immediately and self-approve for the record.
+      lead.status = 'Lost';
+      lead.lostDecision = 'approved';
+      lead.lostReviewedBy = req.user?._id ?? null;
+      lead.lostReviewedAt = new Date();
+      lead.auditLog.push(auditEntry(req, 'lost_marked', lead.reason));
+    } else {
+      lead.status = 'Pending Lost Approval';
+      lead.auditLog.push(auditEntry(req, 'lost_requested', lead.reason));
+    }
+
+    await lead.save();
+    res.json(lead);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// A reviewer approves (→ Lost) or rejects (→ restore previous stage) a pending
+// lost request.
+export const reviewLostApproval = async (req, res) => {
+  try {
+    if (!isLostReviewer(req.user?.role)) {
+      return res.status(403).json({ message: 'Not authorised to review lost requests.' });
+    }
+    const { decision, note = '' } = req.body;
+    if (!['approved', 'rejected'].includes(decision)) {
+      return res.status(400).json({ message: 'decision must be "approved" or "rejected".' });
+    }
+
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+    if (lead.status !== 'Pending Lost Approval') {
+      return res.status(400).json({ message: 'This lead has no pending lost request.' });
+    }
+
+    lead.lostDecision = decision;
+    lead.lostReviewNote = String(note ?? '').trim();
+    lead.lostReviewedBy = req.user?._id ?? null;
+    lead.lostReviewedAt = new Date();
+
+    if (decision === 'approved') {
+      lead.status = 'Lost';
+      lead.auditLog.push(auditEntry(req, 'lost_approved', lead.lostReviewNote));
+    } else {
+      // Restore the stage the lead was in before the request (fallback: Contacted).
+      lead.status = lead.previousStatus && lead.previousStatus !== 'Pending Lost Approval'
+        ? lead.previousStatus
+        : 'Contacted';
+      lead.auditLog.push(auditEntry(req, 'lost_rejected', lead.lostReviewNote));
+    }
+
+    await lead.save();
+    res.json(lead);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

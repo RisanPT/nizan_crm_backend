@@ -35,7 +35,7 @@ export const getCustomers = async (req, res) => {
 };
 
 export const createCustomer = async (req, res) => {
-  const { name, email, phone, address, pincode, company, status } = req.body;
+  const { name, email, phone, address, pincode, company, eventDate, status } = req.body;
 
   try {
     // Match by email OR phone to avoid duplicates
@@ -58,6 +58,7 @@ export const createCustomer = async (req, res) => {
       address,
       pincode,
       company,
+      eventDate,
       status,
     });
 
@@ -75,7 +76,7 @@ export const updateCustomer = async (req, res) => {
       return res.status(404).json({ message: 'Customer not found' });
     }
 
-    const { name, email, phone, address, pincode, company, status } = req.body;
+    const { name, email, phone, address, pincode, company, eventDate, status } = req.body;
 
     customer.name = name ?? customer.name;
     customer.email = email ?? customer.email;
@@ -83,6 +84,7 @@ export const updateCustomer = async (req, res) => {
     customer.address = address ?? customer.address;
     customer.pincode = pincode ?? customer.pincode;
     customer.company = company ?? customer.company;
+    customer.eventDate = eventDate ?? customer.eventDate;
     customer.status = status ?? customer.status;
 
     const updated = await customer.save();

@@ -1143,6 +1143,7 @@ export const createBooking = async (req, res) => {
         phone,
         address,
         pincode,
+        eventDate: effectiveSchedule.bookingDateValue,
         status: 'Active',
       });
     } else {
@@ -1161,6 +1162,9 @@ export const createBooking = async (req, res) => {
       }
       if (customerName && !String(customerExists.name ?? '').trim()) {
         updates.name = customerName;
+      }
+      if (effectiveSchedule.bookingDateValue && !String(customerExists.eventDate ?? '').trim()) {
+        updates.eventDate = effectiveSchedule.bookingDateValue;
       }
       const existingEmail = String(customerExists.email ?? '');
       if (normalizedEmail &&
