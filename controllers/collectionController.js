@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Collection from '../models/Collection.js';
 import Booking from '../models/Booking.js';
+import { notifyRoles } from '../utils/notify.js';
 
 const collectionPopulate = [
   { path: 'bookingId', select: 'bookingNumber customerName service totalOverAll status' },
@@ -83,6 +84,17 @@ export const createCollection = async (req, res) => {
     });
 
     await collection.save();
+
+    // Notify Accounts + Admins that a payment came in.
+    await notifyRoles({
+      roles: ['accounts', 'admin'],
+      type: 'payment_received',
+      title: 'Payment received',
+      body: `A payment of ₹${amountNum.toLocaleString('en-IN')} was recorded.`,
+      link: '/accounts/artist-collections',
+      createdBy: req.user?._id ?? null,
+      excludeUserId: req.user?._id ?? null,
+    });
 
     const populated = await Collection.findById(collection._id).populate(collectionPopulate);
     res.status(201).json(populated);

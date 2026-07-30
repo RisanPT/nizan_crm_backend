@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Expense from '../models/Expense.js';
+import { notifyRoles } from '../utils/notify.js';
 
 const expensePopulate = [
   { path: 'bookingId', select: 'bookingNumber customerName service' },
@@ -56,6 +57,17 @@ export const createExpense = async (req, res) => {
     });
 
     await expense.save();
+
+    // Notify Accounts + Admins that a new expense/payable was submitted.
+    await notifyRoles({
+      roles: ['accounts', 'admin'],
+      type: 'expense_recorded',
+      title: 'New expense recorded',
+      body: `A ${expense.category} expense of ₹${amountNum.toLocaleString('en-IN')} was submitted.`,
+      link: '/accounts/bills',
+      createdBy: req.user?._id ?? null,
+      excludeUserId: req.user?._id ?? null,
+    });
 
     const populated = await Expense.findById(expense._id).populate(expensePopulate);
     res.status(201).json(populated);

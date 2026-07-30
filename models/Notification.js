@@ -34,6 +34,13 @@ const notificationSchema = mongoose.Schema(
       ref: 'Booking',
       default: null,
     },
+    // Generic in-app deep-link target (a router path, e.g. '/fleet/assignments').
+    // Lets any department point a notification at the right screen without adding
+    // a dedicated foreign-key field per feature.
+    link: {
+      type: String,
+      default: '',
+    },
     // The follow-up date a due/missed notification refers to, so re-running the
     // sweep does not create duplicates for the same scheduled follow-up.
     forDate: {

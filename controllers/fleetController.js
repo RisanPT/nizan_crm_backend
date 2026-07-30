@@ -3,6 +3,10 @@ import AccidentReport from "../models/AccidentReport.js";
 import DriverReview from "../models/DriverReview.js";
 import ServiceReminder from "../models/ServiceReminder.js";
 import Vehicle from "../models/Vehicle.js";
+import { notifyRoles } from "../utils/notify.js";
+
+// Roles that oversee the fleet.
+const FLEET_MANAGER_ROLES = ["fleet_manager", "admin", "manager"];
 
 // @desc    Get jobs assigned to logged-in driver
 // @route   GET /api/fleet/driver/jobs
@@ -92,6 +96,18 @@ export const completeJob = async (req, res) => {
       await Vehicle.findByIdAndUpdate(job.vehicleId, { parkedLocation: parkedLocation });
     }
 
+    // Notify fleet managers + admins that the trip is done.
+    await notifyRoles({
+      roles: FLEET_MANAGER_ROLES,
+      type: "trip_completed",
+      title: "Trip completed",
+      body: `Job ${job.bookingNumber || ""} for ${job.customerName || "a customer"} was completed.`.replace(/\s+/g, " ").trim(),
+      link: "/fleet/completed-works",
+      bookingId: job._id,
+      createdBy: req.user?._id ?? null,
+      excludeUserId: req.user?._id ?? null,
+    });
+
     // Check if there are remaining jobs for today
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
@@ -148,6 +164,17 @@ export const reportAccident = async (req, res) => {
     if (jobId) {
        await Booking.findByIdAndUpdate(jobId, { tripStatus: 'accident' });
     }
+
+    // Accidents are urgent — alert fleet managers + admins immediately.
+    await notifyRoles({
+      roles: FLEET_MANAGER_ROLES,
+      type: "accident_reported",
+      title: "Accident reported",
+      body: `A driver reported an accident at ${location}.`,
+      link: "/fleet/accidents",
+      createdBy: req.user?._id ?? null,
+      excludeUserId: req.user?._id ?? null,
+    });
 
     res.status(201).json({ message: "Accident reported successfully", accident });
   } catch (error) {

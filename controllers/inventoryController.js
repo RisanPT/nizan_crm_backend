@@ -3,6 +3,7 @@ import InventoryProduct from '../models/InventoryProduct.js';
 import StaffKit from '../models/StaffKit.js';
 import Purchase from '../models/Purchase.js';
 import Vendor from '../models/Vendor.js';
+import { notifyRoles } from '../utils/notify.js';
 
 const STUDIO_ROLES = ['inventory_manager', 'admin', 'manager'];
 
@@ -267,6 +268,9 @@ export const updateProduct = async (req, res) => {
       return res.status(404).json({ message: 'Product not found' });
     }
     const data = cleanProduct(req.body);
+    // Remember the stock level before the edit so we can detect the moment it
+    // crosses into low-stock territory (and alert only once, not every save).
+    const prevQty = product.quantity;
     if (req.body.name != null) product.name = data.name || product.name;
     if (req.body.brand != null) product.brand = data.brand;
     if (req.body.shade != null) product.shade = data.shade;
@@ -286,6 +290,21 @@ export const updateProduct = async (req, res) => {
     }
     if (req.body.notes !== undefined) product.notes = data.notes;
     await product.save();
+
+    // Alert studio managers the first time stock drops to/below its threshold.
+    const threshold = product.lowStockThreshold ?? 0;
+    if (prevQty > threshold && product.quantity <= threshold) {
+      await notifyRoles({
+        roles: STUDIO_ROLES,
+        type: 'low_stock',
+        title: 'Low stock alert',
+        body: `${product.name} is low on stock (${product.quantity} left).`,
+        link: '/inventory/alerts',
+        createdBy: req.user?._id ?? null,
+        excludeUserId: req.user?._id ?? null,
+      });
+    }
+
     res.json(product);
   } catch (error) {
     res.status(500).json({ message: error.message });

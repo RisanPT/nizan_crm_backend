@@ -10,6 +10,7 @@ import {
 import {
   notify,
   getUserIdsByRoles,
+  getUserIdsByEmployeeIds,
   MANAGER_AND_ADMIN_ROLES,
   NOTIFICATION_TYPES,
 } from '../utils/notify.js';
@@ -1260,6 +1261,25 @@ export const createBooking = async (req, res) => {
       });
     } catch (notifyErr) {
       console.error('booking_created notify failed:', notifyErr.message);
+    }
+
+    // If the booking was created with a driver already assigned, tell them.
+    try {
+      if (normalizedDriverId) {
+        const driverUserIds = await getUserIdsByEmployeeIds([normalizedDriverId]);
+        await notify({
+          recipients: driverUserIds,
+          type: 'trip_assigned',
+          title: 'New trip assigned',
+          body: `You have been assigned a trip for ${customerName}.`,
+          link: '/driver/jobs',
+          bookingId: booking._id,
+          createdBy: req.user?._id ?? null,
+          excludeUserId: req.user?._id ?? null,
+        });
+      }
+    } catch (notifyErr) {
+      console.error('trip_assigned notify failed:', notifyErr.message);
     }
 
     let invoiceEmailSent = false;

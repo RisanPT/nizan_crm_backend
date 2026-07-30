@@ -32,6 +32,19 @@ export const getUserIdsByRoles = async (roles) => {
   return users.map((u) => u._id);
 };
 
+/// Resolve the login-user ids linked to the given Employee ids (staff/driver/
+/// artist accounts carry `employeeId`). Lets us notify "the assigned driver"
+/// when the domain object references an employee rather than a user.
+export const getUserIdsByEmployeeIds = async (employeeIds) => {
+  const ids = (employeeIds || []).filter(Boolean);
+  if (ids.length === 0) return [];
+  const users = await User.find({
+    employeeId: { $in: ids },
+    active: { $ne: false },
+  }).select('_id');
+  return users.map((u) => u._id);
+};
+
 /**
  * Fan-out create one Notification per recipient. Never throws — a notification
  * failure must not break the business action that triggered it.
@@ -43,6 +56,7 @@ export const getUserIdsByRoles = async (roles) => {
  * @param {string} opts.body
  * @param {*}      [opts.leadId]
  * @param {*}      [opts.bookingId]
+ * @param {string} [opts.link]       In-app route the notification points at.
  * @param {Date}   [opts.forDate]    Dedup key for time-based follow-up events.
  * @param {*}      [opts.createdBy]  Actor who triggered the event.
  * @param {*}      [opts.excludeUserId] Recipient to drop (usually the actor).
@@ -55,6 +69,7 @@ export const notify = async ({
   body = '',
   leadId = null,
   bookingId = null,
+  link = '',
   forDate = null,
   createdBy = null,
   excludeUserId = null,
@@ -88,6 +103,7 @@ export const notify = async ({
       body,
       leadId,
       bookingId,
+      link,
       forDate,
       createdBy,
     }));
