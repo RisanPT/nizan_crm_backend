@@ -89,6 +89,12 @@ const leadSchema = mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // How many scheduled follow-ups were actioned (lead moved off the Follow-up
+    // stage while a follow-up was pending). Powers the "Completed" dashboard widget.
+    followUpCompletedCount: {
+      type: Number,
+      default: 0,
+    },
     assignedTo: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

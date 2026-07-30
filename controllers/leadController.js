@@ -1,4 +1,10 @@
 import Lead from '../models/Lead.js';
+import {
+  notify,
+  getUserIdsByRoles,
+  MANAGER_AND_ADMIN_ROLES,
+  NOTIFICATION_TYPES,
+} from '../utils/notify.js';
 
 // Roles allowed to approve/reject a lost-lead request. Mirrors
 // `kLostReviewerRoles` in the Flutter sales_leads_screen — keep the two in sync.
@@ -126,11 +132,50 @@ export const getLeads = async (req, res) => {
     missedQuery.status = { $nin: ['Converted', 'Lost'] };
     const missedCount = await Lead.countDocuments(missedQuery);
 
+    // ── Follow-up management widgets (Today's / Pending / Completed / Overdue) ──
+    // Scoped to the same `query` so a Sales Executive only sees their own numbers.
+    const startToday = new Date(now);
+    startToday.setHours(0, 0, 0, 0);
+    const endToday = new Date(now);
+    endToday.setHours(23, 59, 59, 999);
+
+    const [todayCount, pendingCount, overdueCount, completedAgg] = await Promise.all([
+      // Due at any point today (still open).
+      Lead.countDocuments({
+        ...query,
+        status: 'Follow-up',
+        followUpDate: { $gte: startToday, $lte: endToday },
+      }),
+      // Upcoming / not yet due.
+      Lead.countDocuments({
+        ...query,
+        status: 'Follow-up',
+        followUpDate: { $gte: now },
+      }),
+      // Past due, still on the Follow-up stage.
+      Lead.countDocuments({
+        ...query,
+        status: 'Follow-up',
+        followUpDate: { $lt: now },
+      }),
+      // Sum of actioned follow-ups across the scoped leads.
+      Lead.aggregate([
+        { $match: query },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$followUpCompletedCount', 0] } } } },
+      ]),
+    ]);
+
+    // Kept flat (all integer values) because the Flutter PaginatedResponse parses
+    // `stats` as Map<String,int> — a nested object would break that cast.
     const stats = {
       New: 0,
       'Follow-up': 0,
       Closed: 0,
       Missed: missedCount,
+      followUpsToday: todayCount,
+      followUpsPending: pendingCount,
+      followUpsCompleted: completedAgg[0]?.total || 0,
+      followUpsOverdue: overdueCount,
     };
 
     statsAgg.forEach(s => {
@@ -185,6 +230,19 @@ export const createLead = async (req, res) => {
     }
 
     const lead = await Lead.create({ ...leadData, leadDate: new Date() });
+
+    // Notify managers + admins that a new lead arrived (matrix: New Lead).
+    const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+    await notify({
+      recipients: managerAdminIds,
+      type: NOTIFICATION_TYPES.NEW_LEAD,
+      title: 'New lead',
+      body: `${lead.name} was added${lead.source ? ` via ${lead.source}` : ''}.`,
+      leadId: lead._id,
+      createdBy: req.user?._id ?? null,
+      excludeUserId: req.user?._id ?? null,
+    });
+
     res.status(201).json(lead);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -215,9 +273,12 @@ export const updateLead = async (req, res) => {
       });
     }
 
-    // followUpCount is server-owned — ignore whatever the client sent and only
-    // bump it when a genuinely new (or rescheduled) follow-up is being saved.
+    // followUpCount / followUpCompletedCount are server-owned — ignore whatever
+    // the client sent and derive them from the actual transition.
     delete leadData.followUpCount;
+    delete leadData.followUpCompletedCount;
+
+    let followUpScheduled = false; // a new/rescheduled follow-up was saved
     if (leadData.status === 'Follow-up' && leadData.followUpDate) {
       const incoming = new Date(leadData.followUpDate).getTime();
       const previous = existing.followUpDate
@@ -225,13 +286,51 @@ export const updateLead = async (req, res) => {
         : null;
       if (incoming !== previous) {
         leadData.followUpCount = (existing.followUpCount || 0) + 1;
+        followUpScheduled = true;
       }
+    }
+
+    // A pending follow-up was actioned when the lead leaves the Follow-up stage
+    // while a follow-up date was set on it.
+    const followUpCompleted =
+      existing.status === 'Follow-up' &&
+      !!existing.followUpDate &&
+      typeof leadData.status === 'string' &&
+      leadData.status !== 'Follow-up';
+    if (followUpCompleted) {
+      leadData.followUpCompletedCount = (existing.followUpCompletedCount || 0) + 1;
     }
 
     const lead = await Lead.findByIdAndUpdate(req.params.id, leadData, {
       new: true,
       runValidators: true,
     });
+
+    // ── Follow-up notifications (matrix: assigned / rescheduled / completed) ──
+    if (followUpScheduled && lead.assignedTo) {
+      await notify({
+        recipients: [lead.assignedTo],
+        type: NOTIFICATION_TYPES.FOLLOWUP_ASSIGNED,
+        title: 'Follow-up scheduled',
+        body: `A follow-up for ${lead.name} is set. Check the lead for details.`,
+        leadId: lead._id,
+        createdBy: req.user?._id ?? null,
+        excludeUserId: req.user?._id ?? null,
+      });
+    }
+    if (followUpCompleted) {
+      const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+      await notify({
+        recipients: managerAdminIds,
+        type: NOTIFICATION_TYPES.FOLLOWUP_COMPLETED,
+        title: 'Follow-up completed',
+        body: `${lead.name}'s follow-up was actioned (now ${lead.status}).`,
+        leadId: lead._id,
+        createdBy: req.user?._id ?? null,
+        excludeUserId: req.user?._id ?? null,
+      });
+    }
+
     res.json(lead);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -321,6 +420,22 @@ export const requestLostApproval = async (req, res) => {
     }
 
     await lead.save();
+
+    // Matrix: Lost Approval. A pending request pings the reviewers; a direct
+    // close by a reviewer is an FYI to the other managers/admins.
+    const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+    await notify({
+      recipients: managerAdminIds,
+      type: NOTIFICATION_TYPES.LOST_REQUESTED,
+      title: reviewer ? 'Lead marked Lost' : 'Lost approval requested',
+      body: reviewer
+        ? `${lead.name} was closed as Lost by ${req.user?.name ?? 'a manager'}.`
+        : `${req.user?.name ?? 'A sales executive'} requested to mark ${lead.name} as Lost.`,
+      leadId: lead._id,
+      createdBy: req.user?._id ?? null,
+      excludeUserId: req.user?._id ?? null,
+    });
+
     res.json(lead);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -364,6 +479,23 @@ export const reviewLostApproval = async (req, res) => {
     }
 
     await lead.save();
+
+    // Matrix: Lost Approval Result. Tell the executive who requested it (and
+    // keep the other managers/admins informed).
+    const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+    const approved = decision === 'approved';
+    await notify({
+      recipients: [lead.lostRequestedBy, ...managerAdminIds],
+      type: NOTIFICATION_TYPES.LOST_RESULT,
+      title: approved ? 'Lost request approved' : 'Lost request rejected',
+      body: approved
+        ? `${lead.name} was approved as Lost and closed.`
+        : `The Lost request for ${lead.name} was rejected — it is back to ${lead.status}.`,
+      leadId: lead._id,
+      createdBy: req.user?._id ?? null,
+      excludeUserId: req.user?._id ?? null,
+    });
+
     res.json(lead);
   } catch (error) {
     res.status(500).json({ message: error.message });

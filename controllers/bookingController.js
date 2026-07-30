@@ -7,6 +7,12 @@ import {
   sendAdvanceInvoiceEmail,
   sendCompletionInvoiceEmail,
 } from '../utils/bookingInvoiceEmail.js';
+import {
+  notify,
+  getUserIdsByRoles,
+  MANAGER_AND_ADMIN_ROLES,
+  NOTIFICATION_TYPES,
+} from '../utils/notify.js';
 
 const EXTRA_DATE_AMOUNT = 3000;
 
@@ -1238,6 +1244,23 @@ export const createBooking = async (req, res) => {
 
     // A booking for a known lead's number converts that lead automatically.
     await linkLeadsToBooking(booking);
+
+    // Matrix: Booking Created — notify managers + admins.
+    try {
+      const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+      await notify({
+        recipients: managerAdminIds,
+        type: NOTIFICATION_TYPES.BOOKING_CREATED,
+        title: 'New booking created',
+        body: `Booking ${booking.bookingNumber || ''} for ${customerName} was created.`.replace(/\s+/g, ' ').trim(),
+        bookingId: booking._id,
+        leadId: booking.leadId ?? null,
+        createdBy: req.user?._id ?? null,
+        excludeUserId: req.user?._id ?? null,
+      });
+    } catch (notifyErr) {
+      console.error('booking_created notify failed:', notifyErr.message);
+    }
 
     let invoiceEmailSent = false;
     if (
