@@ -474,15 +474,22 @@ const phoneKey = (value = '') => {
 const linkLeadsToBooking = async (booking) => {
   try {
     const key = phoneKey(booking?.phone);
-    if (key.length < 10) return;
+    const leadId = booking?.leadId ? String(booking.leadId) : '';
 
-    // Match on the last 10 digits regardless of how the lead was stored.
-    const candidates = await Lead.find({
-      phone: { $regex: `${key}$` },
-    });
+    // Convert both the explicitly-linked lead (from a Convert-to-Booking) AND any
+    // lead sharing this mobile number. The explicit link still works if the
+    // salesperson corrected the phone number during conversion.
+    const or = [];
+    if (leadId) or.push({ _id: leadId });
+    if (key.length === 10) or.push({ phone: { $regex: `${key}$` } });
+    if (or.length === 0) return;
+
+    const candidates = await Lead.find({ $or: or });
 
     for (const lead of candidates) {
-      if (phoneKey(lead.phone) !== key) continue;
+      const isExplicit = leadId && String(lead._id) === leadId;
+      // Phone-matched (non-explicit) leads must match on the full last 10 digits.
+      if (!isExplicit && phoneKey(lead.phone) !== key) continue;
       // Don't overwrite a lead already tied to another booking.
       if (lead.bookingId && String(lead.bookingId) !== String(booking._id)) {
         continue;
@@ -981,6 +988,7 @@ export const createBooking = async (req, res) => {
   const {
     bookingItems = [],
     packageId,
+    leadId,
     regionId,
     districtId,
     driverId,
@@ -1181,6 +1189,7 @@ export const createBooking = async (req, res) => {
 
     const booking = await Booking.create({
       packageId: summaryPackageId,
+      leadId: normalizeObjectId(leadId),
       regionId: normalizedRegionId,
       districtId: normalizedDistrictId,
       driverId: normalizedDriverId,

@@ -131,6 +131,13 @@ const bookingSchema = mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Package',
     },
+    // Set when this booking was created by converting a lead, so the conversion
+    // is a deterministic link (not only a phone-number match).
+    leadId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Lead',
+      default: null,
+    },
     regionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Region',
