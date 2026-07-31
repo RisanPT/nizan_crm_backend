@@ -34,6 +34,17 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // Allows the user to manage staff in their department (if they have the appropriate role)
+    isDepartmentHead: {
+      type: Boolean,
+      default: false,
+    },
+    // If created by a department head, links this user to that manager
+    managedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
     employeeId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Employee',

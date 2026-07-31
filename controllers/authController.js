@@ -18,6 +18,8 @@ const toAuthResponse = async (user) => ({
     permissions: await permissionsForRole(user.role),
     homeRoute: await homeRouteForRole(user.role),
     inventoryAccess: user.inventoryAccess ?? false,
+    isDepartmentHead: user.isDepartmentHead ?? false,
+    managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
     zoneId: user.zoneId?.toString() ?? null,
     stateId: user.stateId?.toString() ?? null,
@@ -61,6 +63,8 @@ export const getMe = async (req, res) => {
       permissions: await permissionsForRole(req.user.role),
       homeRoute: await homeRouteForRole(req.user.role),
       inventoryAccess: req.user.inventoryAccess ?? false,
+      isDepartmentHead: req.user.isDepartmentHead ?? false,
+      managedBy: req.user.managedBy?.toString() ?? null,
       employeeId: req.user.employeeId?.toString() ?? null,
       zoneId: req.user.zoneId?.toString() ?? null,
       stateId: req.user.stateId?.toString() ?? null,
@@ -116,12 +120,14 @@ export const createUser = async (req, res) => {
   const employeeId = req.body.employeeId ?? null;
 
   // Authorization: admins/managers may add any user; a fleet manager may add
-  // driver logins only. Everyone else is blocked.
+  // driver logins only. Department heads can manage their own team.
   const requesterRole = req.user?.role;
   const isFullAccess = requesterRole === 'admin' || requesterRole === 'manager';
+  const isDepartmentHeadReq = req.user?.isDepartmentHead === true;
   const fleetCanAddDriver =
     requesterRole === 'fleet_manager' && role === 'driver';
-  if (!isFullAccess && !fleetCanAddDriver) {
+  
+  if (!isFullAccess && !fleetCanAddDriver && !isDepartmentHeadReq) {
     return res
       .status(403)
       .json({ message: 'You are not allowed to create this type of user.' });
@@ -152,6 +158,8 @@ export const createUser = async (req, res) => {
     role,
     active: Boolean(active),
     inventoryAccess: Boolean(req.body.inventoryAccess),
+    isDepartmentHead: Boolean(req.body.isDepartmentHead),
+    managedBy: isDepartmentHeadReq && !isFullAccess ? req.user._id : null,
     employeeId: employeeId || null,
     zoneId: req.body.zoneId || null,
     stateId: req.body.stateId || null,
@@ -166,6 +174,8 @@ export const createUser = async (req, res) => {
     email: user.email,
     role: user.role,
     inventoryAccess: user.inventoryAccess ?? false,
+    isDepartmentHead: user.isDepartmentHead ?? false,
+    managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
     zoneId: user.zoneId?.toString() ?? null,
     stateId: user.stateId?.toString() ?? null,
@@ -266,6 +276,9 @@ export const updateUser = async (req, res) => {
   if (req.body.inventoryAccess !== undefined) {
     user.inventoryAccess = Boolean(req.body.inventoryAccess);
   }
+  if (req.body.isDepartmentHead !== undefined) {
+    user.isDepartmentHead = Boolean(req.body.isDepartmentHead);
+  }
   if (req.body.employeeId !== undefined) {
     user.employeeId = req.body.employeeId || null;
   }
@@ -298,6 +311,8 @@ export const updateUser = async (req, res) => {
     email: user.email,
     role: user.role,
     inventoryAccess: user.inventoryAccess ?? false,
+    isDepartmentHead: user.isDepartmentHead ?? false,
+    managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
     zoneId: user.zoneId?.toString() ?? null,
     stateId: user.stateId?.toString() ?? null,
