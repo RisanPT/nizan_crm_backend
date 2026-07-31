@@ -60,10 +60,15 @@ const DEFAULT_ROLES = [
   },
 ];
 
+// Accept a module key ('sales') or a namespaced sub-feature key ('sales.leads').
+// Sub-keys are validated by their PARENT so the backend needs no separate list —
+// the Flutter catalogue (app_permissions.dart) is the source of truth for which
+// sub-features exist.
+const KEY_RE = /^[a-z0-9_]+(?:\.[a-z0-9_]+)?$/;
 const sanitizePermissions = (input = []) =>
   (Array.isArray(input) ? input : [])
     .map((p) => String(p).trim().toLowerCase())
-    .filter((p) => PERMISSION_KEYS.includes(p));
+    .filter((p) => KEY_RE.test(p) && PERMISSION_KEYS.includes(p.split('.')[0]));
 
 const slugify = (value = '') =>
   String(value)

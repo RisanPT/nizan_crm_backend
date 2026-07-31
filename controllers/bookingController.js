@@ -797,6 +797,11 @@ export const getPaginatedBookings = async (req, res) => {
           { 'bookingItems.assignedStaff.employeeId': empId },
         ];
       }
+    } else if (isArtist || isDriver) {
+      // An artist/driver login that isn't linked to an Employee must see NONE of
+      // the bookings — never fall through to returning everyone's. (The real fix
+      // is to link the login to a staff profile; this is the safety net.)
+      baseMatch._id = { $in: [] };
     }
 
     // Apply Financial Year filter if provided (Format: "2024-25")
