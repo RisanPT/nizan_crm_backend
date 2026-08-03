@@ -85,7 +85,7 @@ export const getUsers = async (req, res) => {
     const currentLimit = Math.min(100, Math.max(1, limit || 20));
     const skip = (currentPage - 1) * currentLimit;
 
-    const [items, totalItems] = await Promise.all([
+    const [rawItems, totalItems] = await Promise.all([
       User.find({})
         .select('-password')
         .sort({ createdAt: -1 })
@@ -93,6 +93,26 @@ export const getUsers = async (req, res) => {
         .limit(currentLimit),
       User.countDocuments({}),
     ]);
+
+    const items = rawItems.map((u) => ({
+      _id: u._id.toString(),
+      id: u._id.toString(),
+      name: u.name,
+      email: u.email,
+      role: u.role,
+      active: u.active,
+      inventoryAccess: u.inventoryAccess ?? false,
+      isDepartmentHead: u.isDepartmentHead ?? false,
+      managedBy: u.managedBy?.toString() ?? null,
+      employeeId: u.employeeId?.toString() ?? null,
+      zoneId: u.zoneId?.toString() ?? null,
+      stateId: u.stateId?.toString() ?? null,
+      regionId: u.regionId?.toString() ?? null,
+      districtId: u.districtId?.toString() ?? null,
+      pincodeId: u.pincodeId?.toString() ?? null,
+      createdAt: u.createdAt,
+      updatedAt: u.updatedAt,
+    }));
 
     return res.json({
       items,
@@ -103,11 +123,35 @@ export const getUsers = async (req, res) => {
     });
   }
 
+
   const users = await User.find({})
     .select('-password')
     .sort({ createdAt: -1 });
 
-  return res.json(users);
+  // Explicitly serialize ObjectId fields so clients receive plain strings
+  // instead of raw Mongoose ObjectId objects (fixes managedBy comparison
+  // in the Flutter TeamManagementScreen).
+  const serialized = users.map((u) => ({
+    _id: u._id.toString(),
+    id: u._id.toString(),
+    name: u.name,
+    email: u.email,
+    role: u.role,
+    active: u.active,
+    inventoryAccess: u.inventoryAccess ?? false,
+    isDepartmentHead: u.isDepartmentHead ?? false,
+    managedBy: u.managedBy?.toString() ?? null,
+    employeeId: u.employeeId?.toString() ?? null,
+    zoneId: u.zoneId?.toString() ?? null,
+    stateId: u.stateId?.toString() ?? null,
+    regionId: u.regionId?.toString() ?? null,
+    districtId: u.districtId?.toString() ?? null,
+    pincodeId: u.pincodeId?.toString() ?? null,
+    createdAt: u.createdAt,
+    updatedAt: u.updatedAt,
+  }));
+
+  return res.json(serialized);
 };
 
 export const createUser = async (req, res) => {
