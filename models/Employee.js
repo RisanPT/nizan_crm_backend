@@ -16,12 +16,12 @@ const employeeSchema = mongoose.Schema(
     },
     type: {
       type: String,
-      enum: ['in-house', 'outsource'],
-      default: 'outsource',
+      enum: ['in-house', 'outsource', 'full-time', 'contract'],
+      default: 'in-house',
     },
     artistRole: {
       type: String,
-      enum: ['artist', 'assistant', 'driver'],
+      enum: ['artist', 'assistant', 'driver', 'staff', 'other'],
       default: 'artist',
     },
     specialization: {
@@ -72,12 +72,12 @@ const employeeSchema = mongoose.Schema(
     },
     department: {
       type: String,
-      default: 'Staff',
+      default: 'Operations',
     },
     category: {
       type: String,
-      enum: ['creative', 'administrative', 'it', 'marketing', 'sales', 'admin'],
-      default: 'creative',
+      enum: ['operations', 'administrative', 'creative', 'it', 'marketing', 'sales', 'admin'],
+      default: 'operations',
     },
   },
   {

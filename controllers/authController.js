@@ -2,6 +2,7 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { permissionsForRole, ensureDefaultRoles, homeRouteForRole } from './roleController.js';
 import Role from '../models/Role.js';
+import { syncUserToEmployee } from '../utils/syncUserEmployee.js';
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -165,8 +166,13 @@ export const createUser = async (req, res) => {
     stateId: req.body.stateId || null,
     regionId: req.body.regionId || null,
     districtId: req.body.districtId || null,
-    pincodeId: req.body.pincodeId || null,
   });
+
+  try {
+    await syncUserToEmployee(user);
+  } catch (syncErr) {
+    console.error('Error auto-syncing User to Employee:', syncErr.message);
+  }
 
   return res.status(201).json({
     id: user._id.toString(),
@@ -229,6 +235,12 @@ export const grantDriverLogin = async (req, res) => {
         employeeId,
       });
       created = true;
+    }
+
+    try {
+      await syncUserToEmployee(user);
+    } catch (syncErr) {
+      console.error('Error auto-syncing driver User to Employee:', syncErr.message);
     }
 
     return res.status(created ? 201 : 200).json({
@@ -304,6 +316,12 @@ export const updateUser = async (req, res) => {
   }
 
   await user.save();
+
+  try {
+    await syncUserToEmployee(user);
+  } catch (syncErr) {
+    console.error('Error auto-syncing User to Employee on update:', syncErr.message);
+  }
 
   return res.json({
     id: user._id.toString(),

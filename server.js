@@ -28,6 +28,7 @@ import itTaskRoutes from './routes/itTaskRoutes.js';
 import timeBlockRoutes from './routes/timeBlockRoutes.js';
 import budgetRoutes from './routes/budgetRoutes.js';
 import { seedAdminUser } from './utils/seedAdminUser.js';
+import { migrateAndSyncAll } from './utils/syncUserEmployee.js';
 
 import fleetRoutes from './routes/fleetRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
@@ -173,6 +174,7 @@ const startServer = async () => {
   ) {
     await connectDB();
     await seedAdminUser();
+    await migrateAndSyncAll();
   } else {
     console.log(
       'MongoDB connection skipped: Please provide a valid MONGO_URI in the .env file'

@@ -54,20 +54,32 @@ export const getEmployees = async (req, res) => {
     const query = {};
     const andConditions = [];
 
-    if (req.query.category) {
-      if (req.query.category === 'admin') {
-        andConditions.push({ category: { $in: ['admin', 'administrative'] } });
-      } else if (req.query.category === 'creative') {
+    if (req.query.category && req.query.category !== 'all') {
+      if (req.query.category === 'admin' || req.query.category === 'administrative') {
+        andConditions.push({
+          category: { $in: ['admin', 'administrative', 'it', 'marketing', 'sales', 'finance', 'accounts', 'crm', 'hr'] },
+          artistRole: { $nin: ['driver', 'artist', 'assistant'] },
+        });
+      } else if (req.query.category === 'operations' || req.query.category === 'creative') {
         andConditions.push({
           $or: [
-            { category: 'creative' },
+            { category: { $in: ['operations', 'creative'] } },
+            { artistRole: { $in: ['driver', 'artist', 'assistant'] } },
             { category: { $exists: false } },
-            { category: null }
-          ]
+            { category: null },
+          ],
         });
       } else {
         andConditions.push({ category: req.query.category });
       }
+    }
+
+    if (req.query.department && req.query.department !== 'All' && req.query.department !== 'all') {
+      andConditions.push({ department: req.query.department });
+    }
+
+    if (req.query.artistRole && req.query.artistRole !== 'All' && req.query.artistRole !== 'all') {
+      andConditions.push({ artistRole: req.query.artistRole });
     }
 
     if (req.query.search) {
@@ -78,6 +90,8 @@ export const getEmployees = async (req, res) => {
           { email: searchRegex },
           { phone: searchRegex },
           { specialization: searchRegex },
+          { role: searchRegex },
+          { department: searchRegex },
         ]
       });
     }
@@ -204,12 +218,16 @@ export const createEmployee = async (req, res) => {
     const normalizedSpecialization =
       normalizedWorks[0] ?? String(specialization ?? '').trim();
 
+    const effectiveRole = req.body.role || normalizedSpecialization || 'Staff';
+    const effectiveCategory = category ?? (['artist', 'assistant', 'driver'].includes(artistRole) ? 'operations' : 'administrative');
+    const effectiveDepartment = department ?? (effectiveCategory === 'operations' ? 'Operations' : 'General');
+
     const employee = await Employee.create({
       name,
       email: normalizedEmail,
-      type: type ?? 'outsource',
-      artistRole: artistRole ?? 'artist',
-      specialization: normalizedSpecialization,
+      type: type ?? 'in-house',
+      artistRole: artistRole ?? (effectiveCategory === 'operations' ? 'artist' : 'staff'),
+      specialization: normalizedSpecialization || effectiveRole,
       works: normalizedWorks,
       phone: phone ?? '',
       status: status ?? 'active',
@@ -218,9 +236,9 @@ export const createEmployee = async (req, res) => {
       stateId: normalizedStateId,
       districtId: normalizedDistrictId,
       pincodeId: normalizedPincodeId,
-      role: normalizedSpecialization,
-      department: department ?? 'Staff',
-      category: category ?? 'creative',
+      role: effectiveRole,
+      department: effectiveDepartment,
+      category: effectiveCategory,
       profileImage: profileImage ?? '',
     });
 
@@ -252,6 +270,7 @@ export const updateEmployee = async (req, res) => {
     stateId,
     districtId,
     pincodeId,
+    role,
     category,
     department,
     profileImage,
@@ -302,9 +321,9 @@ export const updateEmployee = async (req, res) => {
     employee.stateId = stateId != null ? normalizedStateId : employee.stateId;
     employee.districtId = districtId != null ? normalizedDistrictId : employee.districtId;
     employee.pincodeId = pincodeId != null ? normalizedPincodeId : employee.pincodeId;
-    employee.role = effectiveSpecialization || employee.role;
-    employee.department = department ?? employee.department ?? 'Staff';
-    employee.category = category ?? employee.category;
+    employee.role = role ?? effectiveSpecialization ?? employee.role;
+    employee.department = department ?? employee.department ?? 'Operations';
+    employee.category = category ?? employee.category ?? 'operations';
     employee.profileImage = profileImage ?? employee.profileImage;
 
     await employee.save();
