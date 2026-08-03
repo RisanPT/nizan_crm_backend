@@ -181,6 +181,7 @@ export const createEmployee = async (req, res) => {
     districtId,
     pincodeId,
     category,
+    department,
     profileImage,
   } = req.body;
 
@@ -218,7 +219,7 @@ export const createEmployee = async (req, res) => {
       districtId: normalizedDistrictId,
       pincodeId: normalizedPincodeId,
       role: normalizedSpecialization,
-      department: 'Staff',
+      department: department ?? 'Staff',
       category: category ?? 'creative',
       profileImage: profileImage ?? '',
     });
@@ -252,6 +253,7 @@ export const updateEmployee = async (req, res) => {
     districtId,
     pincodeId,
     category,
+    department,
     profileImage,
   } = req.body;
 
@@ -301,7 +303,7 @@ export const updateEmployee = async (req, res) => {
     employee.districtId = districtId != null ? normalizedDistrictId : employee.districtId;
     employee.pincodeId = pincodeId != null ? normalizedPincodeId : employee.pincodeId;
     employee.role = effectiveSpecialization || employee.role;
-    employee.department = 'Staff';
+    employee.department = department ?? employee.department ?? 'Staff';
     employee.category = category ?? employee.category;
     employee.profileImage = profileImage ?? employee.profileImage;
 
