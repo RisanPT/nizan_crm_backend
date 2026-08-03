@@ -24,7 +24,7 @@ const DEFAULT_ROLES = [
   {
     key: 'sales',
     label: 'Sales',
-    homeRoute: '/sales/leads',
+    homeRoute: '/sales/home',
     permissions: ['clients', 'calendar', 'bookings', 'sales'],
   },
   {
@@ -86,6 +86,12 @@ export const ensureDefaultRoles = async () => {
       await Role.create({ ...def, isSystem: true });
     }
   }
+  // One-time nudge: point the Sales role at the new personal dashboard, but only
+  // if it's still the previous default (never override an admin's custom home).
+  await Role.updateOne(
+    { key: 'sales', homeRoute: '/sales/leads' },
+    { $set: { homeRoute: '/sales/home' } }
+  );
 };
 
 export const getPermissionCatalogue = async (_req, res) => {
