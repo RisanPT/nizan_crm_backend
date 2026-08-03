@@ -80,6 +80,18 @@ const subscriptionSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // GST Reverse Charge Mechanism for imported services (foreign-currency tools)
+    gstRcm: {
+      type: Boolean,
+      default: false,
+    },
+    // GST rate applicable under RCM (typically 18% for OIDAR services)
+    gstRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

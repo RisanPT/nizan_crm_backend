@@ -17,11 +17,13 @@ export const ADMIN_EXPENSE_CATEGORIES = [
   'rent_utilities',
   'travel_transport',
   'food_beverage',
+  'staff_mess',
   'hardware_equipment',
   'marketing_ads',
   'professional_services',
   'maintenance',
   'training',
+  'staff_welfare',
   'other',
 ];
 

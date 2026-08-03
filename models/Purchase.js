@@ -67,6 +67,24 @@ const purchaseSchema = mongoose.Schema(
       ref: 'Employee',
       default: null,
     },
+    // Job-linked cost tagging (DRP-01 / ASC-01 / PRD-01).
+    // Set to the bride's booking to enable per-event profitability reporting.
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      default: null,
+    },
+    // Mandatory narration for drapist / associate payments
+    drapistName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    associateName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     notes: { type: String, default: '', trim: true },
   },
   { timestamps: true }
