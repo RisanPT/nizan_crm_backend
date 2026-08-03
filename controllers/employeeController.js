@@ -197,6 +197,15 @@ export const createEmployee = async (req, res) => {
     category,
     department,
     profileImage,
+    salaryType,
+    baseSalary,
+    allowances,
+    deductions,
+    bankName,
+    accountNumber,
+    ifscCode,
+    upiId,
+    panNumber,
   } = req.body;
 
   try {
@@ -240,6 +249,15 @@ export const createEmployee = async (req, res) => {
       department: effectiveDepartment,
       category: effectiveCategory,
       profileImage: profileImage ?? '',
+      salaryType: salaryType ?? (effectiveCategory === 'operations' ? 'per_booking' : 'fixed_monthly'),
+      baseSalary: Number(baseSalary) || 0,
+      allowances: Number(allowances) || 0,
+      deductions: Number(deductions) || 0,
+      bankName: bankName ?? '',
+      accountNumber: accountNumber ?? '',
+      ifscCode: ifscCode ?? '',
+      upiId: upiId ?? '',
+      panNumber: panNumber ?? '',
     });
 
     const populatedEmployee = await Employee.findById(employee._id)
@@ -274,6 +292,15 @@ export const updateEmployee = async (req, res) => {
     category,
     department,
     profileImage,
+    salaryType,
+    baseSalary,
+    allowances,
+    deductions,
+    bankName,
+    accountNumber,
+    ifscCode,
+    upiId,
+    panNumber,
   } = req.body;
 
   try {
@@ -325,6 +352,15 @@ export const updateEmployee = async (req, res) => {
     employee.department = department ?? employee.department ?? 'Operations';
     employee.category = category ?? employee.category ?? 'operations';
     employee.profileImage = profileImage ?? employee.profileImage;
+    if (salaryType !== undefined) employee.salaryType = salaryType;
+    if (baseSalary !== undefined) employee.baseSalary = Number(baseSalary) || 0;
+    if (allowances !== undefined) employee.allowances = Number(allowances) || 0;
+    if (deductions !== undefined) employee.deductions = Number(deductions) || 0;
+    if (bankName !== undefined) employee.bankName = bankName;
+    if (accountNumber !== undefined) employee.accountNumber = accountNumber;
+    if (ifscCode !== undefined) employee.ifscCode = ifscCode;
+    if (upiId !== undefined) employee.upiId = upiId;
+    if (panNumber !== undefined) employee.panNumber = panNumber;
 
     await employee.save();
 

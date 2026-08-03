@@ -38,6 +38,7 @@ import trialPackageRoutes from './routes/trialPackageRoutes.js';
 import roleRoutes from './routes/roleRoutes.js';
 import adminExpenseRoutes from './routes/adminExpenseRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
+import salaryRoutes from './routes/salaryRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -156,6 +157,7 @@ app.use('/api/trials', trialRoutes);
 app.use('/api/trial-packages', trialPackageRoutes);
 app.use('/api/admin-expenses', adminExpenseRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
+app.use('/api/salaries', salaryRoutes);
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });

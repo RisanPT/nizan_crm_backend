@@ -5,6 +5,7 @@ import { notifyRoles } from '../utils/notify.js';
 
 const collectionPopulate = [
   { path: 'bookingId', select: 'bookingNumber customerName service totalOverAll status' },
+  { path: 'trialId', select: 'trialNumber clientName status' },
   { path: 'employeeId', select: 'name phone artistRole status' },
   { path: 'verifiedBy', select: 'name role' },
 ];
@@ -29,10 +30,11 @@ const syncBookingCollectedAmount = async (bookingId) => {
 
 export const getCollections = async (req, res) => {
   try {
-    const { status, bookingId, employeeId, paymentMode, startDate, endDate } = req.query;
+    const { status, bookingId, trialId, employeeId, paymentMode, startDate, endDate } = req.query;
     const filter = {};
     if (status) filter.status = status;
     if (bookingId) filter.bookingId = bookingId;
+    if (trialId) filter.trialId = trialId;
     
     // Role-based scoping
     if (req.user && (req.user.role === 'artist' || req.user.role === 'driver')) {
@@ -63,9 +65,16 @@ export const getCollections = async (req, res) => {
 };
 
 export const createCollection = async (req, res) => {
-  const { bookingId, employeeId, amount, date, paymentMode, notes, attachmentUrl } = req.body;
-  
+  const { bookingId, trialId, employeeId, amount, date, paymentMode, notes, attachmentUrl } = req.body;
+
   try {
+    // A collection must attach to a booking OR a trial.
+    if (!bookingId && !trialId) {
+      return res
+        .status(400)
+        .json({ message: 'Select a booking or a trial to collect against.' });
+    }
+
     let finalEmployeeId = employeeId;
     if (req.user && (req.user.role === 'artist' || req.user.role === 'driver')) {
       finalEmployeeId = req.user.employeeId;
@@ -74,7 +83,8 @@ export const createCollection = async (req, res) => {
     const amountNum = Number(amount) || 0;
 
     const collection = new Collection({
-      bookingId,
+      bookingId: bookingId || null,
+      trialId: trialId || null,
       employeeId: finalEmployeeId,
       amount: amountNum,
       date: date ?? new Date(),

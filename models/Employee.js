@@ -79,6 +79,51 @@ const employeeSchema = mongoose.Schema(
       enum: ['operations', 'administrative', 'creative', 'it', 'marketing', 'sales', 'admin'],
       default: 'operations',
     },
+    salaryType: {
+      type: String,
+      enum: ['fixed_monthly', 'per_booking', 'daily', 'hybrid', 'commission'],
+      default: 'fixed_monthly',
+    },
+    baseSalary: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    allowances: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    deductions: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    bankName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    accountNumber: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    ifscCode: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    upiId: {
+      type: String,
+      default: '',
+      trim: true,
+    },
+    panNumber: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   {
     timestamps: true,

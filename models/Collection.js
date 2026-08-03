@@ -2,10 +2,18 @@ import mongoose from 'mongoose';
 
 const collectionSchema = mongoose.Schema(
   {
+    // A collection attaches to EITHER a booking OR a trial (validated in the
+    // controller). Both are optional at the schema level so trial payments can
+    // be recorded without a booking.
     bookingId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Booking',
-      required: [true, 'Please select a booking'],
+      default: null,
+    },
+    trialId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Trial',
+      default: null,
     },
     employeeId: {
       type: mongoose.Schema.Types.ObjectId,
