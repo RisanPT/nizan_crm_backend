@@ -10,11 +10,14 @@ import {
 
 const router = express.Router();
 
-// Only administrators may view or change the permission matrix.
-router.use(protect, admin);
+// GET /roles is readable by any authenticated user (e.g. for role dropdowns)
+router.get('/', protect, getRoles);
 
-router.get('/permissions', getPermissionCatalogue);
-router.route('/').get(getRoles).post(createRole);
-router.route('/:id').put(updateRole).delete(deleteRole);
+// Other endpoints are restricted to administrators only
+router.get('/permissions', protect, admin, getPermissionCatalogue);
+router.post('/', protect, admin, createRole);
+router.route('/:id')
+  .put(protect, admin, updateRole)
+  .delete(protect, admin, deleteRole);
 
 export default router;

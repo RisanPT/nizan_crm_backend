@@ -210,7 +210,22 @@ export const migrateAndSyncAll = async () => {
   let userCount = 0;
   for (const user of users) {
     try {
+      let roleUpdated = false;
+      const roleLower = String(user.role || '').toLowerCase();
+      if (
+        (roleLower.endsWith('manager') ||
+         roleLower.endsWith('admin') ||
+         roleLower === 'inventory_manager' ||
+         roleLower === 'marketing_admin') &&
+        !user.isDepartmentHead
+      ) {
+        user.isDepartmentHead = true;
+        roleUpdated = true;
+      }
       await syncUserToEmployee(user);
+      if (roleUpdated) {
+        await user.save();
+      }
       userCount++;
     } catch (err) {
       console.error(`Error syncing user ${user.email}:`, err.message);

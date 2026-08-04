@@ -168,7 +168,14 @@ export const createUser = async (req, res) => {
   // driver logins only. Department heads can manage their own team.
   const requesterRole = req.user?.role;
   const isFullAccess = requesterRole === 'admin' || requesterRole === 'manager';
-  const isDepartmentHeadReq = req.user?.isDepartmentHead === true;
+  const isDepartmentHeadReq =
+    req.user?.isDepartmentHead === true ||
+    String(requesterRole).endsWith('_manager') ||
+    String(requesterRole).endsWith('manager') ||
+    String(requesterRole).endsWith('_admin') ||
+    String(requesterRole).endsWith('admin') ||
+    requesterRole === 'inventory_manager' ||
+    requesterRole === 'marketing_admin';
   const fleetCanAddDriver =
     requesterRole === 'fleet_manager' && role === 'driver';
   
