@@ -40,6 +40,8 @@ import adminExpenseRoutes from './routes/adminExpenseRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import salaryRoutes from './routes/salaryRoutes.js';
 import salesReturnRoutes from './routes/salesReturnRoutes.js';
+import hrBridgeRoutes from './routes/hrBridgeRoutes.js';
+import timeboxRoutes from './routes/timeboxRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -160,6 +162,8 @@ app.use('/api/admin-expenses', adminExpenseRoutes);
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/salaries', salaryRoutes);
 app.use('/api/sales-returns', salesReturnRoutes);
+app.use('/api/hr', hrBridgeRoutes);               // PHP attendance bridge
+app.use('/api/timebox', timeboxRoutes);           // Timebox attendance + payroll
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });

@@ -1,0 +1,4738 @@
+{
+    "ok": true,
+    "resource": "timebox",
+    "count": 100,
+    "limit": 100,
+    "offset": 0,
+    "has_more": true,
+    "next_offset": 100,
+    "generated_at": "2026-08-03T15:50:47+05:30",
+    "data": [
+        {
+            "id": 1161,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-08-03",
+            "status": "active",
+            "daily_notes": null,
+            "login_time": "2026-08-03T13:10:11+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Website Design",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Test",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "test",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "test",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-08-03T13:10:11+05:30",
+            "updated_at": "2026-08-03T13:10:11+05:30"
+        },
+        {
+            "id": 1160,
+            "employee": {
+                "id": 27,
+                "name": "Test"
+            },
+            "department": "Manager",
+            "date": "2026-08-03",
+            "status": "active",
+            "daily_notes": null,
+            "login_time": "2026-08-03T12:29:22+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-08-03T12:29:22+05:30",
+            "updated_at": "2026-08-03T12:29:22+05:30"
+        },
+        {
+            "id": 1159,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-28",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-28T10:48:23+05:30",
+            "logout_time": "2026-07-28T10:48:23+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "test",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "test",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-28T10:48:23+05:30",
+            "updated_at": "2026-07-29T10:22:59+05:30"
+        },
+        {
+            "id": 1158,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-27",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-27T12:08:41+05:30",
+            "logout_time": "2026-07-27T12:08:41+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "test",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "test",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-27T12:08:41+05:30",
+            "updated_at": "2026-07-28T10:48:29+05:30"
+        },
+        {
+            "id": 1157,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-26",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-26T01:34:38+05:30",
+            "logout_time": "2026-07-26T01:34:38+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "test",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "test",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-26T01:34:38+05:30",
+            "updated_at": "2026-07-27T12:08:39+05:30"
+        },
+        {
+            "id": 1156,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-25",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-25T16:30:58+05:30",
+            "logout_time": "2026-07-25T16:30:58+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "test",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "test",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-25T16:30:58+05:30",
+            "updated_at": "2026-07-26T01:38:30+05:30"
+        },
+        {
+            "id": 1155,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-25",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-25T10:52:52+05:30",
+            "logout_time": "2026-07-25T10:52:52+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Virtual CRM",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-25T10:52:52+05:30",
+            "updated_at": "2026-07-27T12:32:07+05:30"
+        },
+        {
+            "id": 1154,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-24",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-24T12:42:22+05:30",
+            "logout_time": "2026-07-24T12:42:22+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Virtual CRM",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-24T12:42:22+05:30",
+            "updated_at": "2026-07-25T10:52:44+05:30"
+        },
+        {
+            "id": 1153,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-24",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-24T11:51:37+05:30",
+            "logout_time": "2026-07-24T11:51:37+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-24T11:51:37+05:30",
+            "updated_at": "2026-07-25T15:08:13+05:30"
+        },
+        {
+            "id": 1152,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-24",
+            "status": "active",
+            "daily_notes": null,
+            "login_time": "2026-07-24T10:29:15+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-24T10:29:15+05:30",
+            "updated_at": "2026-07-24T10:29:15+05:30"
+        },
+        {
+            "id": 1151,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-23",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-23T16:58:30+05:30",
+            "logout_time": "2026-07-23T17:03:00+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Virtual CRM",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-23T16:58:30+05:30",
+            "updated_at": "2026-07-24T12:42:33+05:30"
+        },
+        {
+            "id": 1150,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-23",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-23T16:04:19+05:30",
+            "logout_time": "2026-07-23T16:04:19+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-23T16:04:19+05:30",
+            "updated_at": "2026-07-24T11:24:52+05:30"
+        },
+        {
+            "id": 1149,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-17",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-17T16:44:01+05:30",
+            "logout_time": "2026-07-18T00:44:01+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-17T16:44:01+05:30",
+            "updated_at": "2026-07-23T16:04:36+05:30"
+        },
+        {
+            "id": 1148,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-17",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-17T12:47:42+05:30",
+            "logout_time": "2026-07-17T17:30:00+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Virtual CRM",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-17T12:47:42+05:30",
+            "updated_at": "2026-07-23T16:58:38+05:30"
+        },
+        {
+            "id": 1147,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-16",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-16T12:50:56+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Case study of Kia India and Jetour Global",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T12:50:56+05:30",
+            "updated_at": "2026-07-16T12:50:59+05:30"
+        },
+        {
+            "id": 1146,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-16",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-16T10:20:06+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T10:20:06+05:30",
+            "updated_at": "2026-07-16T10:20:12+05:30"
+        },
+        {
+            "id": 1145,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-16",
+            "status": "active",
+            "daily_notes": null,
+            "login_time": "2026-07-16T10:11:05+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T10:11:05+05:30",
+            "updated_at": "2026-07-16T14:08:11+05:30"
+        },
+        {
+            "id": 1144,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-16",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-16T10:10:37+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T10:10:37+05:30",
+            "updated_at": "2026-07-16T10:10:39+05:30"
+        },
+        {
+            "id": 1143,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-16",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-16T09:53:30+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Checking e-mail",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T09:53:30+05:30",
+            "updated_at": "2026-07-16T14:09:25+05:30"
+        },
+        {
+            "id": 1142,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-16",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-16T09:52:18+05:30",
+            "logout_time": "2026-07-16T17:30:00+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Virtual CRM",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T09:52:18+05:30",
+            "updated_at": "2026-07-23T16:58:55+05:30"
+        },
+        {
+            "id": 1141,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-16",
+            "status": "active",
+            "daily_notes": null,
+            "login_time": "2026-07-16T09:46:10+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T09:46:10+05:30",
+            "updated_at": "2026-07-16T09:46:10+05:30"
+        },
+        {
+            "id": 1140,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-16",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-16T09:36:47+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "preperation of presentation strategy",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "seperatae the duties for hr crm and finance",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T09:36:47+05:30",
+            "updated_at": "2026-07-16T09:37:41+05:30"
+        },
+        {
+            "id": 1139,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-16",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-16T09:31:24+05:30",
+            "logout_time": "2026-07-16T17:31:24+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T09:31:24+05:30",
+            "updated_at": "2026-07-23T16:04:58+05:30"
+        },
+        {
+            "id": 1138,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-16",
+            "status": "active",
+            "daily_notes": null,
+            "login_time": "2026-07-16T09:24:28+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Case Study of Kia India and Jetour Global",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T09:24:28+05:30",
+            "updated_at": "2026-07-16T09:24:28+05:30"
+        },
+        {
+            "id": 1137,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-16",
+            "status": "active",
+            "daily_notes": null,
+            "login_time": "2026-07-16T09:24:11+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T09:24:11+05:30",
+            "updated_at": "2026-07-16T09:24:11+05:30"
+        },
+        {
+            "id": 1136,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-16",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-16T09:17:24+05:30",
+            "logout_time": "2026-07-16T17:17:24+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T09:17:24+05:30",
+            "updated_at": "2026-07-23T17:15:01+05:30"
+        },
+        {
+            "id": 1135,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-16",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-16T08:11:06+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Checking new leads",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Messages answering",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Follow up",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Create new poster",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Try to call enquires",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-16T08:11:06+05:30",
+            "updated_at": "2026-07-16T08:11:18+05:30"
+        },
+        {
+            "id": 1134,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-16",
+            "status": "completed",
+            "daily_notes": "IKEA Visit in Banglore",
+            "login_time": "2026-07-16T00:47:48+05:30",
+            "logout_time": "2026-07-16T12:36:07+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Ajaml sir salary release",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Travelling expense released to adnan",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Website purchase payment to Shuhaib",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Shoot entry checked in ERP",
+                        "done": true
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Car Wash payment released to adnan",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Payment to Shuhaib for website domain purchase for zeevani.",
+                        "time": "10:32",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Attendence details collecting from Hr and released ajmal sir salary and shared transaction receipt.",
+                        "time": "10:45",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Return ticket and Food exp payment transfer to Adnan. Called and checked expenses and confirmed with sir.",
+                        "time": "11:01",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Checking risan with trial entry adding to ERP.",
+                        "time": "12:00",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Checked shoot income and expense entry added in ERP. Informed nihala to add entry.",
+                        "time": "12:19",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "Car Wash payment released to adnan",
+                        "time": "12:23",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-16T00:47:48+05:30",
+            "updated_at": "2026-07-16T12:36:07+05:30"
+        },
+        {
+            "id": 1133,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-15",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-15T18:57:28+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "ux-outsurce (trial) ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "1 ux shortlist ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Intern -fresher (flutter)",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-15T18:57:28+05:30",
+            "updated_at": "2026-07-15T18:57:50+05:30"
+        },
+        {
+            "id": 1132,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-15",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-15T12:42:04+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Study tour bangloor",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-15T12:42:04+05:30",
+            "updated_at": "2026-07-15T12:42:16+05:30"
+        },
+        {
+            "id": 1131,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-15",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-15T12:41:55+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Team n booking phone handling ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Team n Data preparation ",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-15T12:41:55+05:30",
+            "updated_at": "2026-07-15T12:42:06+05:30"
+        },
+        {
+            "id": 1130,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-15",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-15T10:58:12+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Case study of Kia India and Jetour Global",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-15T10:58:12+05:30",
+            "updated_at": "2026-07-15T10:58:17+05:30"
+        },
+        {
+            "id": 1129,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-15",
+            "status": "active",
+            "daily_notes": null,
+            "login_time": "2026-07-15T10:41:34+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-15T10:41:34+05:30",
+            "updated_at": "2026-07-15T10:41:34+05:30"
+        },
+        {
+            "id": 1128,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-15",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-15T10:39:01+05:30",
+            "logout_time": "2026-07-15T17:30:00+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Virtual CRM",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "zevaani researching ",
+                        "time": "9.45",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "zevaani domain check out and finance request for domain purchase",
+                        "time": "10.30",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-15T10:39:01+05:30",
+            "updated_at": "2026-07-23T16:59:49+05:30"
+        },
+        {
+            "id": 1127,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-15",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-15T10:01:16+05:30",
+            "logout_time": "2026-07-15T19:21:13+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Shoot",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Meeting with maam",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "New brand page handling ",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-15T10:01:16+05:30",
+            "updated_at": "2026-07-15T19:21:13+05:30"
+        },
+        {
+            "id": 1126,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-15",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-15T09:44:57+05:30",
+            "logout_time": "2026-07-15T17:44:57+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Resolved a bug in the masterclass registration page",
+                        "time": "9:40",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Fixed the white screen bug in the timebox website",
+                        "time": "10:00",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Improving the  UI of the timebox/task manager",
+                        "time": "12:30",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-15T09:44:57+05:30",
+            "updated_at": "2026-07-23T16:05:13+05:30"
+        },
+        {
+            "id": 1125,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-15",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-15T09:44:43+05:30",
+            "logout_time": "2026-07-15T20:27:33+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Weddeasy ui ux",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-15T09:44:43+05:30",
+            "updated_at": "2026-07-15T20:27:33+05:30"
+        },
+        {
+            "id": 1124,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-15",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-15T09:43:37+05:30",
+            "logout_time": "2026-07-15T18:43:30+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Checking e-mails ",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Sales workflow chart creation (departments)",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "sales workflow chart with duties of each department",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Submission of workflow charts to CFO",
+                        "done": true
+                    }
+                ],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "workflow chart creation"
+                    },
+                    {
+                        "slot": 2,
+                        "content": "stages of workflow"
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Role of each department in sales pipeline"
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Duties of each department in each stage of sales"
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Responsibilities in each stage"
+                    }
+                ],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Checking e-mail of sales department",
+                        "time": "9.45-10.00",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Evaluation and Preparation of workflow chart diagram ",
+                        "time": "10.00-1.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Preparation of workflow chart based on duties",
+                        "time": "2.30-4.00",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Workflow submission",
+                        "time": "4.15-4.30",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-15T09:43:37+05:30",
+            "updated_at": "2026-07-15T18:43:30+05:30"
+        },
+        {
+            "id": 1123,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-15",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-15T09:39:08+05:30",
+            "logout_time": "2026-07-15T18:23:35+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "Preparing current quarter profit and loss account "
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Tracking expenses wise category and revenue "
+                    }
+                ],
+                "schedule": []
+            },
+            "created_at": "2026-07-15T09:39:08+05:30",
+            "updated_at": "2026-07-15T18:23:35+05:30"
+        },
+        {
+            "id": 1122,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-15",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-15T09:31:05+05:30",
+            "logout_time": "2026-07-15T21:02:58+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Case Study of Kia India and Jetour Global",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Competitor Analysis tool meeting with sir and risan",
+                        "time": "9:30",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Marketing automation research ",
+                        "time": "11:00",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Competitor analysis research",
+                        "time": "2:00",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-15T09:31:05+05:30",
+            "updated_at": "2026-07-15T21:02:58+05:30"
+        },
+        {
+            "id": 1121,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-15",
+            "status": "completed",
+            "daily_notes": "Today one booked",
+            "login_time": "2026-07-15T09:11:15+05:30",
+            "logout_time": "2026-07-15T20:42:38+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Checking new leads",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Replaying messages",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Handle with new strategies",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Followup precious leads",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Need create poster",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "New leads replaying ",
+                        "time": "5.30 am",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Follow up message reply",
+                        "time": "6.30 am",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Send follow up message ",
+                        "time": "9.30 am",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Send message ",
+                        "time": "12 am",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Sending messages not replay cases",
+                        "time": "3 to 7.30",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-15T09:11:15+05:30",
+            "updated_at": "2026-07-15T20:42:38+05:30"
+        },
+        {
+            "id": 1120,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-15",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-15T08:36:38+05:30",
+            "logout_time": "2026-07-15T19:32:45+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Trails feature implementation in CRM",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Bills implementation of accounts and inventory",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Updating second look updating in CRM",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Bills implementation of accounts and inventory both frontend and backend",
+                        "time": "9.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Updating second look updating in CRM",
+                        "time": "2",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Trails feature implementation in CRM in Frontend UI/UX",
+                        "time": "3",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-15T08:36:38+05:30",
+            "updated_at": "2026-07-15T19:32:45+05:30"
+        },
+        {
+            "id": 1119,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-15",
+            "status": "active",
+            "daily_notes": "IN  Bangalore ",
+            "login_time": "2026-07-15T07:44:12+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Salary Release confirmation from Sir.",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Salary processed to second batch",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Irfana Work Expense Release",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Fuel Card recharge and bills",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Salary Release confirmation from Sir. Salary processed to second batch. Shared transaction receipt. Added Rosna beneficiary details.",
+                        "time": "07:43",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Checking Erp and verifying irfana work expense. Informed sir and confirmed the payment. Transfer payment and share receipt.",
+                        "time": "8:39",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Checked mail. Domain purchase mail received from Shuhaib. Checked and informed sir. Confirmed and released the payment. Stuck with OTP.Informed Shuhaib.",
+                        "time": "12:40",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Follow up with Jobin for fuel card recharge and bills.",
+                        "time": "1:02",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-15T07:44:12+05:30",
+            "updated_at": "2026-07-15T13:04:13+05:30"
+        },
+        {
+            "id": 1118,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-14",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-14T12:30:11+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "shahan meet",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "risan crm update",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-14T12:30:11+05:30",
+            "updated_at": "2026-07-14T12:30:19+05:30"
+        },
+        {
+            "id": 1117,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T11:06:33+05:30",
+            "logout_time": "2026-07-14T20:22:26+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Team n booking phone handling ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Team n Data preparation ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Team n calender entry ",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Team n makeovers bookings phone handling ",
+                        "time": "11 am ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Data preparation ",
+                        "time": "2 pm ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Data preparation ",
+                        "time": "6 pn ",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-14T11:06:33+05:30",
+            "updated_at": "2026-07-14T20:22:26+05:30"
+        },
+        {
+            "id": 1116,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "Great day ",
+            "login_time": "2026-07-14T11:04:57+05:30",
+            "logout_time": "2026-07-14T21:19:48+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Case study of Kia India and Jetour Global",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Varification of brides details of ",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Cross cheking of brides details ",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Customer support ",
+                        "done": true
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Details sharing to brides ",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Problem solving ",
+                        "time": "9 .30am",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Cross cheking of brides details ",
+                        "time": "11.30 am ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Details sharing to brides ",
+                        "time": "1.00pm",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Details sharing to staff ",
+                        "time": "2.00pm",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Customer support ",
+                        "time": "5.30pm",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-14T11:04:57+05:30",
+            "updated_at": "2026-07-14T21:19:48+05:30"
+        },
+        {
+            "id": 1115,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T10:28:58+05:30",
+            "logout_time": "2026-07-14T23:59:27+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "“I was working from home So, As instructed by ma’am, I purchased the car mats.",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "“Transferred the amount on behalf of ma",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Prepared the balance report.” ?",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-14T10:28:58+05:30",
+            "updated_at": "2026-07-14T23:59:27+05:30"
+        },
+        {
+            "id": 1114,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T09:57:08+05:30",
+            "logout_time": "2026-07-14T18:19:04+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Shoot",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Purchase ",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Return ",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-14T09:57:08+05:30",
+            "updated_at": "2026-07-14T18:19:04+05:30"
+        },
+        {
+            "id": 1113,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T09:53:10+05:30",
+            "logout_time": "2026-07-14T19:05:56+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Sales data criss checking",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Prepration for banglur study tour",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Collecting april month sales data and enter into excel ",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "May monthsales",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "June month sale",
+                        "time": "",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-14T09:53:10+05:30",
+            "updated_at": "2026-07-14T19:05:56+05:30"
+        },
+        {
+            "id": 1112,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T09:51:56+05:30",
+            "logout_time": "2026-07-14T19:13:22+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "conducted research on Urban Pvt Ltd and prepared a detailed report based on my findings"
+                    }
+                ],
+                "schedule": []
+            },
+            "created_at": "2026-07-14T09:51:56+05:30",
+            "updated_at": "2026-07-14T19:13:22+05:30"
+        },
+        {
+            "id": 1111,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-14T09:51:11+05:30",
+            "logout_time": "2026-07-14T17:30:00+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Virtual CRM",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-14T09:51:11+05:30",
+            "updated_at": "2026-07-23T16:59:51+05:30"
+        },
+        {
+            "id": 1110,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "Leads are low",
+            "login_time": "2026-07-14T09:50:10+05:30",
+            "logout_time": "2026-07-14T22:38:00+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Checke new leads",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Follow up new leads",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Want to create new ideas",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Replaying new messages",
+                        "time": "5.am",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Conversation with new enquiry ",
+                        "time": "7 to 10 ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Follow up",
+                        "time": "11 to12.45",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Answering doubts",
+                        "time": "7.00",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-14T09:50:10+05:30",
+            "updated_at": "2026-07-14T22:38:00+05:30"
+        },
+        {
+            "id": 1109,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T09:44:28+05:30",
+            "logout_time": "2026-07-14T18:09:57+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Discuss the UI/UX design and workflow with the CTO.",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Implement the suggested changes in the Weddeasy platform.",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Refine the user flow based on the discussion.",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Update the UI/UX to improve the overall user experience.",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-14T09:44:28+05:30",
+            "updated_at": "2026-07-14T18:09:57+05:30"
+        },
+        {
+            "id": 1108,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T09:41:39+05:30",
+            "logout_time": "2026-07-14T18:27:59+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Meeting with finance team(Roshna)",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Data collection of total leads, closed&lost rates of last two months(Arjun)",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Data collection of total bookings and cancelled projects(Saranya)",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Discussion with IT team",
+                        "done": true
+                    }
+                ],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "Introduction to CRM tool"
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Booking calendar "
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Advance payment , booking confirmation, and invoice "
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Operation team collection and expenses"
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Average conversion rate as compared to total leads"
+                    },
+                    {
+                        "slot": 6,
+                        "content": "Last two months sales report"
+                    },
+                    {
+                        "slot": 7,
+                        "content": "Working of timebox and how to  schedule a meeting or task"
+                    },
+                    {
+                        "slot": 8,
+                        "content": "Priority and weightage of a task"
+                    }
+                ],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Study through onboarding plan",
+                        "time": "10.00-11.00",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Discussion with finance team member, CRM overview",
+                        "time": "11.00-12.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "checking sales data send by arjun",
+                        "time": "12.30-1.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "IT team explained about timebox ",
+                        "time": "3.15-3.45",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-14T09:41:39+05:30",
+            "updated_at": "2026-07-14T18:27:59+05:30"
+        },
+        {
+            "id": 1107,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T09:36:57+05:30",
+            "logout_time": "2026-07-14T18:05:38+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Mater class website design improvement",
+                        "time": "9:30",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Timebox bug fix",
+                        "time": "3:00",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-14T09:36:57+05:30",
+            "updated_at": "2026-07-14T18:05:38+05:30"
+        },
+        {
+            "id": 1106,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T09:35:38+05:30",
+            "logout_time": "2026-07-14T17:46:52+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Case Study of Kia India and Jetour Global",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": " research  about marketing",
+                        "time": "10:00",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "briefing about dashboard (Jasim sir & rizan",
+                        "time": "12:00",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "zone wise competitor analyze with drive file ",
+                        "time": "4:00",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "briefing about some plans and projects (Sir & Rizan)",
+                        "time": "5:00",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-14T09:35:38+05:30",
+            "updated_at": "2026-07-14T17:46:52+05:30"
+        },
+        {
+            "id": 1105,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T09:32:47+05:30",
+            "logout_time": "2026-07-14T17:46:41+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "CRM Calendar updation frontend",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Artist side pdf updating and fixing ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "designing the new calendar UI/UX with ",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "meeting with Jasim sir and Shahan",
+                        "time": "9.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "designing the new calendar UI/UX",
+                        "time": "12",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Implementing frontend of CRM calendar with multiple filter with backend",
+                        "time": "2",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "fixing artist side pdf pages ,content and data issues",
+                        "time": "5",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-14T09:32:47+05:30",
+            "updated_at": "2026-07-14T17:46:41+05:30"
+        },
+        {
+            "id": 1104,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T09:31:31+05:30",
+            "logout_time": "2026-07-14T18:07:36+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Checking mails and verifying",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Attendance Report prepared-NBV",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Attendance Report Prepared-JBR",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Executive co-ordinator CV shortlisting",
+                        "done": true
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Marketing team CV Checking",
+                        "done": true
+                    }
+                ],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "New joiners salary updtion mail send"
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Discussion with ajmal sir on tomorrow's interview conducting"
+                    }
+                ],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Checking mails and verifying",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Attendance Report prepared-NBV",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Attendance Report Prepared-JBR",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Executive co-ordinator CV shortlisting",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "New joiners salary updtion mail send",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "Marketing team CV Checking",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 7,
+                        "content": "Discussion with ajmal sir on tomorrow's interview conducting",
+                        "time": "",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-14T09:31:31+05:30",
+            "updated_at": "2026-07-14T18:07:36+05:30"
+        },
+        {
+            "id": 1103,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-14",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-14T09:12:40+05:30",
+            "logout_time": "2026-07-14T17:33:44+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Expense updation checking in ERP",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Advance payment need to check updated by rosna.",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Fuel Card issue follow up with jobin",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Checked July 13th Bride:Amaya payments in current account statement and updated in File",
+                        "done": true
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Follow up with Aswani for Bride:Fathima payment transfer to current account.",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Preparing do list",
+                        "time": "09:12",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Follow up with Hr regarding staff mess receipt.",
+                        "time": "9:42",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Checking Erp for expense updation.Expense verified. Collection update checked",
+                        "time": "9:51",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Follow up with adnan for fleet receipt.",
+                        "time": "10:17",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Cash and bank ledger updated with cash account and current ac details.",
+                        "time": "10:30",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "KYC expiry update shown in current account and checking with team. Called jobin for getting axis contact",
+                        "time": "11:30",
+                        "done": false
+                    },
+                    {
+                        "slot": 7,
+                        "content": "Checked July 13th Bride:Amaya payments in current account statement and updated in File",
+                        "time": "12:38",
+                        "done": false
+                    },
+                    {
+                        "slot": 8,
+                        "content": "Follow up with Aswani for Bride:Fathima payment transfer to current account.Shared ac details for transfer.",
+                        "time": "12:49",
+                        "done": false
+                    },
+                    {
+                        "slot": 9,
+                        "content": "Informed Hr to give salary payroll.Taken updates.",
+                        "time": "1:10",
+                        "done": false
+                    },
+                    {
+                        "slot": 10,
+                        "content": "Blue tick payment screenshot added to Zoho",
+                        "time": "1:53",
+                        "done": false
+                    },
+                    {
+                        "slot": 11,
+                        "content": "Informed nihala to update income details in ERP for july 12th work.",
+                        "time": "2:11",
+                        "done": false
+                    },
+                    {
+                        "slot": 12,
+                        "content": "Called saranya to check july 12th bride fathima details.Told her to add details.",
+                        "time": "2:47",
+                        "done": false
+                    },
+                    {
+                        "slot": 13,
+                        "content": "Rosna informed about cash collection of Shiva priya and Anjana,Anusha.",
+                        "time": "3:09",
+                        "done": false
+                    },
+                    {
+                        "slot": 14,
+                        "content": "Follow up with Anjali for july 11th bride Amaya cash submission.",
+                        "time": "3:29",
+                        "done": false
+                    },
+                    {
+                        "slot": 15,
+                        "content": "Fuel Card issue follow up with jobin and adnan.Fuel card recharge and fuel expenses communicated with jasim sir and collecting payment receipt for claim.",
+                        "time": "03:51",
+                        "done": false
+                    },
+                    {
+                        "slot": 16,
+                        "content": "Payment transfer to Jobin and informed him to recharge fuel card.Collecting the Fuel card recharge receipt. Stuck with account issue.Tried and not able to transfer",
+                        "time": "4:09",
+                        "done": false
+                    },
+                    {
+                        "slot": 17,
+                        "content": "Checked Attendence report.New joinees added.",
+                        "time": "5:15",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-14T09:12:40+05:30",
+            "updated_at": "2026-07-14T17:33:44+05:30"
+        },
+        {
+            "id": 1102,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-13",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-13T14:29:02+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Ui -ux meet",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Slaes head meet",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Raci matrix button setting",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-13T14:29:02+05:30",
+            "updated_at": "2026-07-13T14:29:16+05:30"
+        },
+        {
+            "id": 1101,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T13:54:50+05:30",
+            "logout_time": "2026-07-13T21:57:04+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Team n booking phone handling ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Team n Data preparation ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Team n calender entry ",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Team n booking phone handling ",
+                        "time": "11 am ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Team n Data preparation ",
+                        "time": "2 pm ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Team n calender entry ",
+                        "time": "4 pm ",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T13:54:50+05:30",
+            "updated_at": "2026-07-13T21:57:04+05:30"
+        },
+        {
+            "id": 1100,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "Great day ",
+            "login_time": "2026-07-13T12:44:40+05:30",
+            "logout_time": "2026-07-13T22:00:16+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Case study of Kia India and Jetour Global",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Varification of brides details ",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Customer support ",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Details sharing to finance & marketing &sales head",
+                        "done": true
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Calander entry ",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Varification of brides details ",
+                        "time": "9.30am",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Metting with hr",
+                        "time": "11.30am ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Calander entry ",
+                        "time": "1.00pm",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Customer support ",
+                        "time": "2.00pm",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Details sharing to finance,sales, marketing ",
+                        "time": "5.00pm",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "Details sharing to staff ",
+                        "time": "5.30pm",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T12:44:40+05:30",
+            "updated_at": "2026-07-13T22:00:16+05:30"
+        },
+        {
+            "id": 1099,
+            "employee": {
+                "id": 21,
+                "name": "Ajmal K V"
+            },
+            "department": "Management",
+            "date": "2026-07-13",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-13T11:24:33+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Meeting with it team (RACI implementation in timebox)",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Sales manager orientation meeting ",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Wedeasy dev team meeting",
+                        "time": "",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T11:24:33+05:30",
+            "updated_at": "2026-07-13T11:41:24+05:30"
+        },
+        {
+            "id": 1098,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T10:00:34+05:30",
+            "logout_time": "2026-07-13T18:46:31+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Meeting",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Report submissions ",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Content planing ",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Bridal consultation ",
+                        "done": true
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Product sourcing ",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-13T10:00:34+05:30",
+            "updated_at": "2026-07-13T18:46:31+05:30"
+        },
+        {
+            "id": 1097,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T09:56:00+05:30",
+            "logout_time": "2026-07-13T18:09:55+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "SALES BUDGET TASK ALLOCATION",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "SALES DATA COLLECTION",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "RECONCILATION BETWEEN ZOHO AND SALES",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "PREPARING SALES REPORT",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "WEEKLY REPORT SUBMISSION",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "sales analysis",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "count the advance count",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "catogorise day wise sales data for prepartion of analytics",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "reconcilation between zoho and sales",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "week end report preprations",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "cross check monthly which month is defrence",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 7,
+                        "content": "april 51 may 67 june 101 booking in sales please compare this with sales",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 8,
+                        "content": "the april month sales data from sales department please convert to excel",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 9,
+                        "content": "may records please convert this too in additions to that in onther sheet as may sales",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 10,
+                        "content": " june month bookings please add this into that sales excel as  june sales",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 11,
+                        "content": "meeting with hr about bss tour",
+                        "time": "",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T09:56:00+05:30",
+            "updated_at": "2026-07-13T18:09:55+05:30"
+        },
+        {
+            "id": 1096,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T09:44:42+05:30",
+            "logout_time": "2026-07-13T17:52:47+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "Attended training under Amrutha Mam"
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Learned income checking and bank statement comparison ,artist collection & finance checking ,beneficiary addition, payment process and bank statement verfication"
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Added advance payment entry"
+                    }
+                ],
+                "schedule": []
+            },
+            "created_at": "2026-07-13T09:44:42+05:30",
+            "updated_at": "2026-07-13T17:52:47+05:30"
+        },
+        {
+            "id": 1095,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T09:42:04+05:30",
+            "logout_time": "2026-07-13T17:52:42+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Sales meeting with Jasim sir and Ajmal sir",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Meeting with sales and CRM department",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Meeting with preethi",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Report of current workflow",
+                        "done": true
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Report submission ",
+                        "done": true
+                    }
+                ],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "Brief study through corporate sales workflow"
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Pan-asia model luxury bridal sales process discussion with CFO"
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Discussion on leads, conversion, package, follow-up mode of sales"
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Discussion on marketing statergies"
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Study through current work mode"
+                    },
+                    {
+                        "slot": 6,
+                        "content": "Stages of service from enquiry to delivery of service"
+                    }
+                ],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Sales meeting with CFO",
+                        "time": "12.15-12.36",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Meeting with sales and CRM team",
+                        "time": "2.30-3.00",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Meeting with marketing team",
+                        "time": "3.00-3.20",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Report preparation based on current sales workflow",
+                        "time": "3.00-5.30",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T09:42:04+05:30",
+            "updated_at": "2026-07-13T17:52:42+05:30"
+        },
+        {
+            "id": 1094,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T09:39:54+05:30",
+            "logout_time": "2026-07-13T18:01:51+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Fleet Expense releasing for Adnan.",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Operation team expense releasing.",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Training Started to roshna.",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Income checking and follow up with cash payments.",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Training Started to Rosna. Checking Adnan sent travel expense for Risan and Shahul.Informed sir. ",
+                        "time": "09:39",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Checking Erp for Expense and income. Checking Expenses and noted. Informed sir. July 11-irfana,july 12-fidha,july 12-irfana. Called nihala to add work exp and income. Aswani contacted for wrk income transfer.",
+                        "time": "10:22",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Added income entries of july 11th and 12th in income file.",
+                        "time": "11:11",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Releasing fund to adnan,irfana,malu.Swalih beneficiary details added. Shared transaction receipt.",
+                        "time": "11:30",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Income received checking in current account statement. Verified entry in ERP. Follow up with malu and anaswara.",
+                        "time": "11:45",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "Checking Nihala's and Sandra's work expense in Erp.Informed sir",
+                        "time": "12:37",
+                        "done": false
+                    },
+                    {
+                        "slot": 7,
+                        "content": "Preparing Hr report and send mail. In between fleet expense checking with adnan.",
+                        "time": "02:00",
+                        "done": false
+                    },
+                    {
+                        "slot": 8,
+                        "content": "Sorted the Fleet expense and informed sir about the expense. Payment released to Irfana,Sandra,Nihala,Adnan.Shared transaction receipt.",
+                        "time": "03:34",
+                        "done": false
+                    },
+                    {
+                        "slot": 9,
+                        "content": "Data given to rosna and bisna for research.",
+                        "time": "03:56",
+                        "done": false
+                    },
+                    {
+                        "slot": 10,
+                        "content": "Training to Rosna and in between checking fuel card statement. Unnecessary transaction find. Called Adnan and swalih.checking and sorting.",
+                        "time": "04:02",
+                        "done": false
+                    },
+                    {
+                        "slot": 11,
+                        "content": "Adnan sent Bangalore bus ticket expense. Informed sir and confirmed the payment. Released through current account. Ticket rate changed and balance amount forwarded to  adnan.",
+                        "time": "5:21",
+                        "done": false
+                    },
+                    {
+                        "slot": 12,
+                        "content": "Adnan sent shamil work details and informed sir. Releasing the amount",
+                        "time": "05:48",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T09:39:54+05:30",
+            "updated_at": "2026-07-13T18:01:51+05:30"
+        },
+        {
+            "id": 1093,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T09:37:04+05:30",
+            "logout_time": "2026-07-13T17:30:00+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Virtual CRM",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Master class razorpay form testing with payments ",
+                        "time": "9.30",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T09:37:04+05:30",
+            "updated_at": "2026-07-23T16:59:53+05:30"
+        },
+        {
+            "id": 1092,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T09:36:33+05:30",
+            "logout_time": "2026-07-13T18:02:36+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Discuss with weddeasy flow ",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Improve ui ux ",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Hosting with GitHub ",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-13T09:36:33+05:30",
+            "updated_at": "2026-07-13T18:02:36+05:30"
+        },
+        {
+            "id": 1091,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T09:35:56+05:30",
+            "logout_time": "2026-07-13T18:15:49+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Paypal razorpay integration ",
+                        "time": "9:30",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Meeting with Ajmal sir, Jasim sir, IT team about raci matrix integration into time box",
+                        "time": "11:30",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Paypal razorpay integration ",
+                        "time": "11:50",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T09:35:56+05:30",
+            "updated_at": "2026-07-13T18:15:49+05:30"
+        },
+        {
+            "id": 1090,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T09:32:14+05:30",
+            "logout_time": "2026-07-13T18:40:13+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Checking mails and verifying",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Weekly report collection",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "weekly report preparation",
+                        "done": true
+                    }
+                ],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "meeting with jasim sir"
+                    },
+                    {
+                        "slot": 2,
+                        "content": "meeting with amrutha.saranya and bisna on thebanglore trip"
+                    },
+                    {
+                        "slot": 3,
+                        "content": "preparing the Paypal authorisation letter"
+                    },
+                    {
+                        "slot": 4,
+                        "content": "warning message send to the group"
+                    },
+                    {
+                        "slot": 5,
+                        "content": "task shared to bisna for assigning the sales head"
+                    }
+                ],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Checking mails and verifying",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Weekly report collection",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "meeting with jasim sir",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "meeting with amrutha.saranya and bisna on thebanglore trip",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "preparing the Paypal authorisation letter",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "warning message send to the group",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 7,
+                        "content": "task shared to bisna for assigning the sales head",
+                        "time": "",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T09:32:14+05:30",
+            "updated_at": "2026-07-13T18:40:13+05:30"
+        },
+        {
+            "id": 1089,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T09:31:33+05:30",
+            "logout_time": "2026-07-13T18:02:09+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Case Study of Kia India and Jetour Global",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Chennai bridel work ad discussion with kalfhan",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Chennai ad discussion ",
+                        "time": "10:00",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Going to Bangalore ",
+                        "time": "2:00",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T09:31:33+05:30",
+            "updated_at": "2026-07-13T18:02:09+05:30"
+        },
+        {
+            "id": 1088,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-13",
+            "status": "active",
+            "daily_notes": null,
+            "login_time": "2026-07-13T09:29:38+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-13T09:29:38+05:30",
+            "updated_at": "2026-07-13T09:29:38+05:30"
+        },
+        {
+            "id": 1087,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-13T09:12:06+05:30",
+            "logout_time": "2026-07-13T18:05:46+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Fixing UI issues of driver login side",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Fixing backend logic issues in inventory ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Travel to Banglore ",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Working on driver side login issues",
+                        "time": "9.30 ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Fixing backend inventory logic issues ",
+                        "time": "12",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Travel to Bangalore ",
+                        "time": "2",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T09:12:06+05:30",
+            "updated_at": "2026-07-13T18:05:46+05:30"
+        },
+        {
+            "id": 1086,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-13",
+            "status": "completed",
+            "daily_notes": "One conversion ",
+            "login_time": "2026-07-13T08:05:19+05:30",
+            "logout_time": "2026-07-13T20:35:03+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Checking new leads",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Follow up previous leads",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Will make new message strategies",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Try to call leads",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Send follow up message",
+                        "time": "8.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "New leads replying ",
+                        "time": "2.30 to 3",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Replying messages",
+                        "time": "5.00",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Again search and messaged",
+                        "time": "6.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Update google sheet",
+                        "time": "7.00",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-13T08:05:19+05:30",
+            "updated_at": "2026-07-13T20:35:03+05:30"
+        },
+        {
+            "id": 1085,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-12",
+            "status": "completed",
+            "daily_notes": "Yesterday one slot booked. Normal leads. Can't get leads quality ",
+            "login_time": "2026-07-12T09:39:54+05:30",
+            "logout_time": "2026-07-12T19:04:40+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Check new leads reply them",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Previous leads messages checking",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Answer the previous leads questions",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Follow up previous leads",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Make new ideas strategies ",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "New leads checking and replying ",
+                        "time": "9.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Sending few followup messages",
+                        "time": "11.30 ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "New lead conversation ",
+                        "time": "2.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Checking again leads any missed",
+                        "time": "3.30 ",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Try to convert leads",
+                        "time": "4.50 to 6",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-12T09:39:54+05:30",
+            "updated_at": "2026-07-12T19:04:40+05:30"
+        },
+        {
+            "id": 1084,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-11",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-11T12:48:44+05:30",
+            "logout_time": "2026-07-11T23:41:29+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Team n booking phone handling ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Team n Data preparation ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Team n calender entry ",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Tea n booking phone handling ",
+                        "time": "11 am ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Data preparation ",
+                        "time": "2 pm ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Calender entry ",
+                        "time": "5 pn",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-11T12:48:44+05:30",
+            "updated_at": "2026-07-11T23:41:29+05:30"
+        },
+        {
+            "id": 1083,
+            "employee": {
+                "id": 21,
+                "name": "Ajmal K V"
+            },
+            "department": "Management",
+            "date": "2026-07-11",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-11T12:46:49+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Marketing department strategy and job rolls setting   ",
+                        "time": "",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-11T12:46:49+05:30",
+            "updated_at": "2026-07-11T12:47:50+05:30"
+        },
+        {
+            "id": 1082,
+            "employee": {
+                "id": 20,
+                "name": "Abhiram"
+            },
+            "department": "Marketing",
+            "date": "2026-07-11",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-11T10:38:21+05:30",
+            "logout_time": "2026-07-11T21:11:29+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-11T10:38:21+05:30",
+            "updated_at": "2026-07-11T21:11:29+05:30"
+        },
+        {
+            "id": 1081,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-11",
+            "status": "active",
+            "daily_notes": null,
+            "login_time": "2026-07-11T10:28:04+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-11T10:28:04+05:30",
+            "updated_at": "2026-07-11T10:28:04+05:30"
+        },
+        {
+            "id": 1080,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-11",
+            "status": "completed",
+            "daily_notes": "Great day ",
+            "login_time": "2026-07-11T09:53:54+05:30",
+            "logout_time": "2026-07-11T17:31:25+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Case study of Kia India and Jetour Global",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Crm support ",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Details sharing to staff ",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Problem solving ",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Crm support ",
+                        "time": "9.30am ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Crm support ",
+                        "time": "2.00pm",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Problem solving ",
+                        "time": "3.00pm",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Details sharing to staff ",
+                        "time": "5.00pm",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Details sharing to brides ",
+                        "time": "5.30pm",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-11T09:53:54+05:30",
+            "updated_at": "2026-07-11T17:31:25+05:30"
+        },
+        {
+            "id": 1079,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-11",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-11T09:38:59+05:30",
+            "logout_time": "2026-07-11T17:52:37+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "conducted research on Urban Pvt Ltd and prepared a detailed report based on my findings"
+                    }
+                ],
+                "schedule": []
+            },
+            "created_at": "2026-07-11T09:38:59+05:30",
+            "updated_at": "2026-07-11T17:52:37+05:30"
+        },
+        {
+            "id": 1078,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-11",
+            "status": "completed",
+            "daily_notes": "Created and uploaded the masterclass payment registration/payment website",
+            "login_time": "2026-07-11T09:31:32+05:30",
+            "logout_time": "2026-07-11T23:37:40+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-11T09:31:32+05:30",
+            "updated_at": "2026-07-13T10:24:01+05:30"
+        },
+        {
+            "id": 1077,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-11",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-11T09:31:12+05:30",
+            "logout_time": "2026-07-11T17:38:57+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Case Study of Kia India and Jetour Global",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "research about case study",
+                        "time": "10:00",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "trying to access team n kochi Instagram account",
+                        "time": "12:00",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "nizan meta ad account received from yahya sir",
+                        "time": "2:30",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "analyzing meta ad account  ",
+                        "time": "3:30",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-11T09:31:12+05:30",
+            "updated_at": "2026-07-11T17:38:57+05:30"
+        },
+        {
+            "id": 1076,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-11",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-11T09:28:33+05:30",
+            "logout_time": "2026-07-11T22:42:03+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "PROFIT & LOSS ACCOUNT FINAL PRREPRATIONS",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "TDS FILING FOLLOW UP ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "QUATERWISE P&L REPORT PREPRATIONS",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "INCOME TAX FILING FOLLOW UP",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "STOCK RECORDING  GUIDANCE WITH IT TEAM",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "GUIDANCE TO ROSNA IN STOCK GUIDANCE",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "profit and loss account prepration in 10% profit",
+                        "time": "9:30 ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "quattation collecting from chatered accountants ",
+                        "time": "2",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "profit and loss account prepration in 15% profit",
+                        "time": "11",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "1st quater previous yr profit and loss account ",
+                        "time": "2:45",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "profit and loss account preprations in 20%",
+                        "time": "12",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "2nd qauter previous yr profiy and loss account prepration",
+                        "time": "3:20",
+                        "done": false
+                    },
+                    {
+                        "slot": 7,
+                        "content": "quaterwise report preprations",
+                        "time": "4:30 ",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-11T09:28:33+05:30",
+            "updated_at": "2026-07-11T22:42:03+05:30"
+        },
+        {
+            "id": 1075,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-11",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-11T09:28:15+05:30",
+            "logout_time": "2026-07-11T18:01:34+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Meeting with client ",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Sorted and sent options with brides",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Connected tumble dry",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Meeting with Abhi",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-11T09:28:15+05:30",
+            "updated_at": "2026-07-11T18:01:34+05:30"
+        },
+        {
+            "id": 1074,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-11",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-11T09:25:39+05:30",
+            "logout_time": "2026-07-11T17:51:37+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Finance Executive workflow Preparation",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Expense entry added to zoho",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Fuel Card recharge payment release.",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Ring light payment released to megha",
+                        "done": true
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Purchase Bill Added to Zoho",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Preparing do list",
+                        "time": "09:25",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Checking mail and replying. Checked marketing team yearly report. Checked the mail received from hr and preparing workflow for rosna.",
+                        "time": "09:55",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Finance Executive workflow Preparation.",
+                        "time": "10:09",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Megha informed about ring light requirement. Called Megha and taken details. Informed sir and confirmed. Informed megha about approval.Login current account and released fund. Share transaction receipt to megha.",
+                        "time": "10:52",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Follow up with Hr regarding mess receipt.",
+                        "time": "11:28",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "Blue tick payment screenshot follow up with jithya-Not deducted from her account.",
+                        "time": "11:35",
+                        "done": false
+                    },
+                    {
+                        "slot": 7,
+                        "content": "Expense added to Zoho with bills",
+                        "time": "11:42",
+                        "done": false
+                    },
+                    {
+                        "slot": 8,
+                        "content": "Call with bisna and saranya regarding advance payment.",
+                        "time": "1:20",
+                        "done": false
+                    },
+                    {
+                        "slot": 9,
+                        "content": "Continuing Finance Executive Workflow Preparation.",
+                        "time": "01:27",
+                        "done": false
+                    },
+                    {
+                        "slot": 10,
+                        "content": "Purchase Bill Added to Zoho.",
+                        "time": "2:31",
+                        "done": false
+                    },
+                    {
+                        "slot": 11,
+                        "content": "Checking kochi work update with Malu. Informed sir about payment and had call with sir and concluded issue.",
+                        "time": "04:33",
+                        "done": false
+                    },
+                    {
+                        "slot": 12,
+                        "content": "Informed sir about fuel card recharge and confirmed. Called adnan for fleet updation.Informed about baleno light change to sir and confirmed with them.",
+                        "time": "4:58",
+                        "done": false
+                    },
+                    {
+                        "slot": 13,
+                        "content": "Submitted Finance Executive workflow to sir and Hr.",
+                        "time": "5:12",
+                        "done": false
+                    },
+                    {
+                        "slot": 14,
+                        "content": "Follow up with fidha for mail. Malu submitted 3pin bill.Informed and confirmed with sir.Got mail from cfo Regarding fidha salary advance and replied to the mail. Payment released to Adnan,Malu,Fidha.Shared transaction receipt.",
+                        "time": "5:20",
+                        "done": false
+                    },
+                    {
+                        "slot": 15,
+                        "content": "Discussion with sir.",
+                        "time": "5:45",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-11T09:25:39+05:30",
+            "updated_at": "2026-07-11T17:51:37+05:30"
+        },
+        {
+            "id": 1073,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-11",
+            "status": "completed",
+            "daily_notes": "Leads quality is poor\r\nOr no one replaying \r\nReason i don't know i think price issue, maybe leads is not serious ",
+            "login_time": "2026-07-11T09:06:28+05:30",
+            "logout_time": "2026-07-11T19:15:36+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Checking new leads",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Replaying unread mesdages",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Followup previous enquires",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Create new ideas for messageing content",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Add leads in google sheet",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Checking leads and replying ",
+                        "time": "8.45",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Try to call previous leads",
+                        "time": "9.20 to 10.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Send follow up messages ",
+                        "time": "10.30 t011.45",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "New leads conversation ",
+                        "time": "1.30 to 2.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Again messaged leads",
+                        "time": "4.30 to 5.30",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-11T09:06:28+05:30",
+            "updated_at": "2026-07-11T19:15:36+05:30"
+        },
+        {
+            "id": 1072,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-11",
+            "status": "active",
+            "daily_notes": "",
+            "login_time": "2026-07-11T01:39:58+05:30",
+            "logout_time": null,
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Invester pitch - Malaysia",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Marketing dep - SOP",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-11T01:39:58+05:30",
+            "updated_at": "2026-07-11T01:40:58+05:30"
+        },
+        {
+            "id": 1071,
+            "employee": {
+                "id": 21,
+                "name": "Ajmal K V"
+            },
+            "department": "Management",
+            "date": "2026-07-10",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-10T13:30:46+05:30",
+            "logout_time": "2026-07-10T22:41:09+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Marketing workflow meeting at bangalore",
+                        "time": "",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-10T13:30:46+05:30",
+            "updated_at": "2026-07-10T22:41:09+05:30"
+        },
+        {
+            "id": 1070,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-10",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-10T12:42:59+05:30",
+            "logout_time": "2026-07-10T22:53:27+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Team n Data preparation ",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Team n booking phone handling ",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Team n booking phone handling ",
+                        "time": "12 pm",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Data entry ",
+                        "time": "3 pm ",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Calander entry ",
+                        "time": "6pm ",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-10T12:42:59+05:30",
+            "updated_at": "2026-07-10T22:53:27+05:30"
+        },
+        {
+            "id": 1069,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-10",
+            "status": "completed",
+            "daily_notes": null,
+            "login_time": "2026-07-10T12:05:04+05:30",
+            "logout_time": "2026-07-10T17:30:00+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Test",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Test",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Virtual CRM",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-10T12:05:04+05:30",
+            "updated_at": "2026-07-23T16:59:54+05:30"
+        },
+        {
+            "id": 1068,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-10",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-10T10:00:30+05:30",
+            "logout_time": "2026-07-10T20:01:17+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Photo edit",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Report preparation",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Team n page content ",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Model settings ",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": []
+            },
+            "created_at": "2026-07-10T10:00:30+05:30",
+            "updated_at": "2026-07-10T20:01:17+05:30"
+        },
+        {
+            "id": 1067,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-10",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-10T10:00:02+05:30",
+            "logout_time": "2026-07-10T19:08:56+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "checking mails and verifying",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Marketing organizational HR Budget prepared and shared",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "HR Master Budget prepared and shared",
+                        "done": true
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Task assigned to amrutha to prepare the finance executive workflow",
+                        "done": true
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Executive co-ordinator recruitment updation checked",
+                        "done": true
+                    },
+                    {
+                        "slot": 6,
+                        "content": "recruitment poster checked ",
+                        "done": true
+                    },
+                    {
+                        "slot": 7,
+                        "content": "Training scheduled to jasna and shifana",
+                        "done": true
+                    }
+                ],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "Meeting with preethy on whatsapp installation"
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Discussion with saranya on CRM Whatsapp issue"
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Discussion with bisna on sales and CRM Data cross checking issue"
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Tomorrow's work from home notice updated"
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Teebas task manager checked and approved"
+                    },
+                    {
+                        "slot": 6,
+                        "content": "amrutha's task checked and approved"
+                    },
+                    {
+                        "slot": 7,
+                        "content": "task manager updated"
+                    }
+                ],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "checking mails and verifying",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "HR Master Budget prepared and shared",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Discussion with bisna on sales and CRM Data cross checking issue",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Meeting with preethy on whatsapp installation",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Discussion with saranya on CRM Whatsapp issue",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "Marketing organizational HR Budget prepared and shared",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 7,
+                        "content": "Executive co-ordinator recruitment updation checked",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 8,
+                        "content": "recruitment poster checked ",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 9,
+                        "content": "Training scheduled to jasna and shifana",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 10,
+                        "content": "Task assigned to amrutha to prepare the finance executive workflow",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 11,
+                        "content": "Tomorrow's work from home notice updated",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 12,
+                        "content": "Teeba's task manager checked and approved",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 13,
+                        "content": "amrutha's task checked and approved",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 14,
+                        "content": "task manager updated",
+                        "time": "",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-10T10:00:02+05:30",
+            "updated_at": "2026-07-10T19:08:56+05:30"
+        },
+        {
+            "id": 1066,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-10",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-10T09:51:24+05:30",
+            "logout_time": "2026-07-10T17:51:53+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Collecting market budget from Preethi.",
+                        "done": true
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Muhsin repayment entry checked with teeba",
+                        "done": true
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Training to rosna",
+                        "done": true
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Working on Master budget of finance. Submitted Master budget with available details to sir. Need to add correction in sales budget",
+                        "time": "09:51",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Training to Rosna.",
+                        "time": "12:02",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Continuing training to rosna ",
+                        "time": "1:31",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-10T09:51:24+05:30",
+            "updated_at": "2026-07-10T17:51:53+05:30"
+        },
+        {
+            "id": 1065,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-10",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-10T09:49:04+05:30",
+            "logout_time": "2026-07-10T17:43:51+05:30",
+            "items": {
+                "worklist": [],
+                "braindump": [
+                    {
+                        "slot": 1,
+                        "content": "Conducted research and prepared the report"
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Attended training session under Amrutha Mam"
+                    }
+                ],
+                "schedule": []
+            },
+            "created_at": "2026-07-10T09:49:04+05:30",
+            "updated_at": "2026-07-10T17:43:51+05:30"
+        },
+        {
+            "id": 1064,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-10",
+            "status": "completed",
+            "daily_notes": "Today leads are very law\r\nNot hot leads",
+            "login_time": "2026-07-10T09:47:30+05:30",
+            "logout_time": "2026-07-10T18:23:00+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Check new leads",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Checking messages for previous enquires",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Followup previous enquires ",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Making calls",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "Need to prepare new message ideas",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "Checking new leads",
+                        "time": "9.45",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "Follow up",
+                        "time": "10 to 11.15 ",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "Tried to call enquires",
+                        "time": "2 to 3.30",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "Replaing messages",
+                        "time": "3.50",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-10T09:47:30+05:30",
+            "updated_at": "2026-07-10T18:23:00+05:30"
+        },
+        {
+            "id": 1063,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-10",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-10T09:36:10+05:30",
+            "logout_time": "2026-07-10T17:41:10+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "TDS FILING CLARIFICTAION",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "AUDIT MEETING",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "BUDGETING DISCUSSION",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "PROFIT AND LOSS ACCOUNT CLARIFICATION",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "INCOME TAX CHECKING",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": "RECONCILATION OF JULY SALES DATA",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 2,
+                        "content": "INVENTORY DISCUSSION WITH RIZAN ",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 3,
+                        "content": "ZOHO VS CRM",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 4,
+                        "content": "BUDGET PLANNING ",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 5,
+                        "content": "CONCLUSION DISCUSSION ABOUT MISMATCH IN CRM WITH HR",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 6,
+                        "content": "VERIFICATION OF PREVIOUS YEAR DATA ",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 7,
+                        "content": "AUDIT DISCUSSION WITH TEEBA ",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 8,
+                        "content": "INCOME TAX SITE ANALAYSING ABOUT PREVIOUS YEAR TAX FILED",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 9,
+                        "content": "MEETING WITH JASIM SIR AND TEEBA MAM",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 10,
+                        "content": "DSC REGISTARTION DISCUSSION",
+                        "time": "",
+                        "done": false
+                    },
+                    {
+                        "slot": 11,
+                        "content": "CRM AND SALE DATA CROSS CEHCKING ALLOCATION",
+                        "time": "",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-10T09:36:10+05:30",
+            "updated_at": "2026-07-10T17:41:10+05:30"
+        },
+        {
+            "id": 1062,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-10",
+            "status": "completed",
+            "daily_notes": "",
+            "login_time": "2026-07-10T09:32:05+05:30",
+            "logout_time": "2026-07-10T17:46:58+05:30",
+            "items": {
+                "worklist": [
+                    {
+                        "slot": 1,
+                        "content": "Masterclass website ",
+                        "done": false
+                    }
+                ],
+                "braindump": [],
+                "schedule": [
+                    {
+                        "slot": 1,
+                        "content": " Building Master class website with razorpay payment",
+                        "time": "9:30",
+                        "done": false
+                    }
+                ]
+            },
+            "created_at": "2026-07-10T09:32:05+05:30",
+            "updated_at": "2026-07-10T17:46:58+05:30"
+        }
+    ]
+}

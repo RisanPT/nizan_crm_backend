@@ -1,0 +1,4012 @@
+{
+    "ok": true,
+    "resource": "attendance",
+    "count": 200,
+    "limit": 200,
+    "offset": 0,
+    "has_more": true,
+    "next_offset": 200,
+    "generated_at": "2026-08-03T15:50:46+05:30",
+    "data": [
+        {
+            "id": 1161,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-08-03",
+            "status": "active",
+            "login_time": "2026-08-03T13:10:11+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-08-03T13:10:11+05:30",
+            "updated_at": "2026-08-03T13:10:11+05:30"
+        },
+        {
+            "id": 1160,
+            "employee": {
+                "id": 27,
+                "name": "Test"
+            },
+            "department": "Manager",
+            "date": "2026-08-03",
+            "status": "active",
+            "login_time": "2026-08-03T12:29:22+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-08-03T12:29:22+05:30",
+            "updated_at": "2026-08-03T12:29:22+05:30"
+        },
+        {
+            "id": 1159,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-28",
+            "status": "completed",
+            "login_time": "2026-07-28T10:48:23+05:30",
+            "logout_time": "2026-07-28T10:48:23+05:30",
+            "logout_estimated": true,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 0,
+            "worked_hours": 0,
+            "created_at": "2026-07-28T10:48:23+05:30",
+            "updated_at": "2026-07-29T10:22:59+05:30"
+        },
+        {
+            "id": 1158,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-27",
+            "status": "completed",
+            "login_time": "2026-07-27T12:08:41+05:30",
+            "logout_time": "2026-07-27T12:08:41+05:30",
+            "logout_estimated": true,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 0,
+            "worked_hours": 0,
+            "created_at": "2026-07-27T12:08:41+05:30",
+            "updated_at": "2026-07-28T10:48:29+05:30"
+        },
+        {
+            "id": 1157,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-26",
+            "status": "completed",
+            "login_time": "2026-07-26T01:34:38+05:30",
+            "logout_time": "2026-07-26T01:34:38+05:30",
+            "logout_estimated": true,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 0,
+            "worked_hours": 0,
+            "created_at": "2026-07-26T01:34:38+05:30",
+            "updated_at": "2026-07-27T12:08:39+05:30"
+        },
+        {
+            "id": 1156,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-25",
+            "status": "completed",
+            "login_time": "2026-07-25T16:30:58+05:30",
+            "logout_time": "2026-07-25T16:30:58+05:30",
+            "logout_estimated": true,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 0,
+            "worked_hours": 0,
+            "created_at": "2026-07-25T16:30:58+05:30",
+            "updated_at": "2026-07-26T01:38:30+05:30"
+        },
+        {
+            "id": 1155,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-25",
+            "status": "completed",
+            "login_time": "2026-07-25T10:52:52+05:30",
+            "logout_time": "2026-07-25T10:52:52+05:30",
+            "logout_estimated": true,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 0,
+            "worked_hours": 0,
+            "created_at": "2026-07-25T10:52:52+05:30",
+            "updated_at": "2026-07-27T12:32:07+05:30"
+        },
+        {
+            "id": 1154,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-24",
+            "status": "completed",
+            "login_time": "2026-07-24T12:42:22+05:30",
+            "logout_time": "2026-07-24T12:42:22+05:30",
+            "logout_estimated": true,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 0,
+            "worked_hours": 0,
+            "created_at": "2026-07-24T12:42:22+05:30",
+            "updated_at": "2026-07-25T10:52:44+05:30"
+        },
+        {
+            "id": 1153,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-24",
+            "status": "completed",
+            "login_time": "2026-07-24T11:51:37+05:30",
+            "logout_time": "2026-07-24T11:51:37+05:30",
+            "logout_estimated": true,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 0,
+            "worked_hours": 0,
+            "created_at": "2026-07-24T11:51:37+05:30",
+            "updated_at": "2026-07-25T15:08:13+05:30"
+        },
+        {
+            "id": 1152,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-24",
+            "status": "active",
+            "login_time": "2026-07-24T10:29:15+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-24T10:29:15+05:30",
+            "updated_at": "2026-07-24T10:29:15+05:30"
+        },
+        {
+            "id": 1151,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-23",
+            "status": "completed",
+            "login_time": "2026-07-23T16:58:30+05:30",
+            "logout_time": "2026-07-23T17:03:00+05:30",
+            "logout_estimated": true,
+            "lunch_start": "2026-07-23T17:02:55+05:30",
+            "lunch_end": "2026-07-23T17:03:00+05:30",
+            "lunch_minutes": 0,
+            "worked_minutes": 5,
+            "worked_hours": 0.08,
+            "created_at": "2026-07-23T16:58:30+05:30",
+            "updated_at": "2026-07-24T12:42:33+05:30"
+        },
+        {
+            "id": 1150,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-23",
+            "status": "completed",
+            "login_time": "2026-07-23T16:04:19+05:30",
+            "logout_time": "2026-07-23T16:04:19+05:30",
+            "logout_estimated": true,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 0,
+            "worked_hours": 0,
+            "created_at": "2026-07-23T16:04:19+05:30",
+            "updated_at": "2026-07-24T11:24:52+05:30"
+        },
+        {
+            "id": 1149,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-17",
+            "status": "completed",
+            "login_time": "2026-07-17T16:44:01+05:30",
+            "logout_time": "2026-07-18T00:44:01+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 480,
+            "worked_hours": 8,
+            "created_at": "2026-07-17T16:44:01+05:30",
+            "updated_at": "2026-07-23T16:04:36+05:30"
+        },
+        {
+            "id": 1148,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-17",
+            "status": "completed",
+            "login_time": "2026-07-17T12:47:42+05:30",
+            "logout_time": "2026-07-17T17:30:00+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 282,
+            "worked_hours": 4.7,
+            "created_at": "2026-07-17T12:47:42+05:30",
+            "updated_at": "2026-07-23T16:58:38+05:30"
+        },
+        {
+            "id": 1147,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-16",
+            "status": "active",
+            "login_time": "2026-07-16T12:50:56+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-16T12:50:56+05:30",
+            "updated_at": "2026-07-16T12:50:59+05:30"
+        },
+        {
+            "id": 1146,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-16",
+            "status": "active",
+            "login_time": "2026-07-16T10:20:06+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-16T10:20:06+05:30",
+            "updated_at": "2026-07-16T10:20:12+05:30"
+        },
+        {
+            "id": 1145,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-16",
+            "status": "active",
+            "login_time": "2026-07-16T10:11:05+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": "2026-07-16T14:08:11+05:30",
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-16T10:11:05+05:30",
+            "updated_at": "2026-07-16T14:08:11+05:30"
+        },
+        {
+            "id": 1144,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-16",
+            "status": "active",
+            "login_time": "2026-07-16T10:10:37+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-16T10:10:37+05:30",
+            "updated_at": "2026-07-16T10:10:39+05:30"
+        },
+        {
+            "id": 1143,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-16",
+            "status": "active",
+            "login_time": "2026-07-16T09:53:30+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": "2026-07-16T14:09:25+05:30",
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-16T09:53:30+05:30",
+            "updated_at": "2026-07-16T14:09:25+05:30"
+        },
+        {
+            "id": 1142,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-16",
+            "status": "completed",
+            "login_time": "2026-07-16T09:52:18+05:30",
+            "logout_time": "2026-07-16T17:30:00+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 458,
+            "worked_hours": 7.63,
+            "created_at": "2026-07-16T09:52:18+05:30",
+            "updated_at": "2026-07-23T16:58:55+05:30"
+        },
+        {
+            "id": 1141,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-16",
+            "status": "active",
+            "login_time": "2026-07-16T09:46:10+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-16T09:46:10+05:30",
+            "updated_at": "2026-07-16T09:46:10+05:30"
+        },
+        {
+            "id": 1140,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-16",
+            "status": "active",
+            "login_time": "2026-07-16T09:36:47+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-16T09:36:47+05:30",
+            "updated_at": "2026-07-16T09:37:41+05:30"
+        },
+        {
+            "id": 1139,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-16",
+            "status": "completed",
+            "login_time": "2026-07-16T09:31:24+05:30",
+            "logout_time": "2026-07-16T17:31:24+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 480,
+            "worked_hours": 8,
+            "created_at": "2026-07-16T09:31:24+05:30",
+            "updated_at": "2026-07-23T16:04:58+05:30"
+        },
+        {
+            "id": 1138,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-16",
+            "status": "active",
+            "login_time": "2026-07-16T09:24:28+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-16T09:24:28+05:30",
+            "updated_at": "2026-07-16T09:24:28+05:30"
+        },
+        {
+            "id": 1137,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-16",
+            "status": "active",
+            "login_time": "2026-07-16T09:24:11+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-16T09:24:11+05:30",
+            "updated_at": "2026-07-16T09:24:11+05:30"
+        },
+        {
+            "id": 1136,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-16",
+            "status": "completed",
+            "login_time": "2026-07-16T09:17:24+05:30",
+            "logout_time": "2026-07-16T17:17:24+05:30",
+            "logout_estimated": true,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 480,
+            "worked_hours": 8,
+            "created_at": "2026-07-16T09:17:24+05:30",
+            "updated_at": "2026-07-23T17:15:01+05:30"
+        },
+        {
+            "id": 1135,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-16",
+            "status": "active",
+            "login_time": "2026-07-16T08:11:06+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-16T08:11:06+05:30",
+            "updated_at": "2026-07-16T08:11:18+05:30"
+        },
+        {
+            "id": 1134,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-16",
+            "status": "completed",
+            "login_time": "2026-07-16T00:47:48+05:30",
+            "logout_time": "2026-07-16T12:36:07+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 708,
+            "worked_hours": 11.8,
+            "created_at": "2026-07-16T00:47:48+05:30",
+            "updated_at": "2026-07-16T12:36:07+05:30"
+        },
+        {
+            "id": 1133,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-15",
+            "status": "active",
+            "login_time": "2026-07-15T18:57:28+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-15T18:57:28+05:30",
+            "updated_at": "2026-07-15T18:57:50+05:30"
+        },
+        {
+            "id": 1132,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-15",
+            "status": "active",
+            "login_time": "2026-07-15T12:42:04+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-15T12:42:04+05:30",
+            "updated_at": "2026-07-15T12:42:16+05:30"
+        },
+        {
+            "id": 1131,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-15",
+            "status": "active",
+            "login_time": "2026-07-15T12:41:55+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-15T12:41:55+05:30",
+            "updated_at": "2026-07-15T12:42:06+05:30"
+        },
+        {
+            "id": 1130,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-15",
+            "status": "active",
+            "login_time": "2026-07-15T10:58:12+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-15T10:58:12+05:30",
+            "updated_at": "2026-07-15T10:58:17+05:30"
+        },
+        {
+            "id": 1129,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-15",
+            "status": "active",
+            "login_time": "2026-07-15T10:41:34+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-15T10:41:34+05:30",
+            "updated_at": "2026-07-15T10:41:34+05:30"
+        },
+        {
+            "id": 1128,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-15",
+            "status": "completed",
+            "login_time": "2026-07-15T10:39:01+05:30",
+            "logout_time": "2026-07-15T17:30:00+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 411,
+            "worked_hours": 6.85,
+            "created_at": "2026-07-15T10:39:01+05:30",
+            "updated_at": "2026-07-23T16:59:49+05:30"
+        },
+        {
+            "id": 1127,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-15",
+            "status": "completed",
+            "login_time": "2026-07-15T10:01:16+05:30",
+            "logout_time": "2026-07-15T19:21:13+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 560,
+            "worked_hours": 9.33,
+            "created_at": "2026-07-15T10:01:16+05:30",
+            "updated_at": "2026-07-15T19:21:13+05:30"
+        },
+        {
+            "id": 1126,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-15",
+            "status": "completed",
+            "login_time": "2026-07-15T09:44:57+05:30",
+            "logout_time": "2026-07-15T17:44:57+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 480,
+            "worked_hours": 8,
+            "created_at": "2026-07-15T09:44:57+05:30",
+            "updated_at": "2026-07-23T16:05:13+05:30"
+        },
+        {
+            "id": 1125,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-15",
+            "status": "completed",
+            "login_time": "2026-07-15T09:44:43+05:30",
+            "logout_time": "2026-07-15T20:27:33+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 643,
+            "worked_hours": 10.72,
+            "created_at": "2026-07-15T09:44:43+05:30",
+            "updated_at": "2026-07-15T20:27:33+05:30"
+        },
+        {
+            "id": 1124,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-15",
+            "status": "completed",
+            "login_time": "2026-07-15T09:43:37+05:30",
+            "logout_time": "2026-07-15T18:43:30+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-15T13:49:36+05:30",
+            "lunch_end": "2026-07-15T14:33:54+05:30",
+            "lunch_minutes": 44,
+            "worked_minutes": 496,
+            "worked_hours": 8.27,
+            "created_at": "2026-07-15T09:43:37+05:30",
+            "updated_at": "2026-07-15T18:43:30+05:30"
+        },
+        {
+            "id": 1123,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-15",
+            "status": "completed",
+            "login_time": "2026-07-15T09:39:08+05:30",
+            "logout_time": "2026-07-15T18:23:35+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 524,
+            "worked_hours": 8.73,
+            "created_at": "2026-07-15T09:39:08+05:30",
+            "updated_at": "2026-07-15T18:23:35+05:30"
+        },
+        {
+            "id": 1122,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-15",
+            "status": "completed",
+            "login_time": "2026-07-15T09:31:05+05:30",
+            "logout_time": "2026-07-15T21:02:58+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 692,
+            "worked_hours": 11.53,
+            "created_at": "2026-07-15T09:31:05+05:30",
+            "updated_at": "2026-07-15T21:02:58+05:30"
+        },
+        {
+            "id": 1121,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-15",
+            "status": "completed",
+            "login_time": "2026-07-15T09:11:15+05:30",
+            "logout_time": "2026-07-15T20:42:38+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 691,
+            "worked_hours": 11.52,
+            "created_at": "2026-07-15T09:11:15+05:30",
+            "updated_at": "2026-07-15T20:42:38+05:30"
+        },
+        {
+            "id": 1120,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-15",
+            "status": "completed",
+            "login_time": "2026-07-15T08:36:38+05:30",
+            "logout_time": "2026-07-15T19:32:45+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 656,
+            "worked_hours": 10.93,
+            "created_at": "2026-07-15T08:36:38+05:30",
+            "updated_at": "2026-07-15T19:32:45+05:30"
+        },
+        {
+            "id": 1119,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-15",
+            "status": "active",
+            "login_time": "2026-07-15T07:44:12+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-15T07:44:12+05:30",
+            "updated_at": "2026-07-15T13:04:13+05:30"
+        },
+        {
+            "id": 1118,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-14",
+            "status": "active",
+            "login_time": "2026-07-14T12:30:11+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-14T12:30:11+05:30",
+            "updated_at": "2026-07-14T12:30:19+05:30"
+        },
+        {
+            "id": 1117,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T11:06:33+05:30",
+            "logout_time": "2026-07-14T20:22:26+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 556,
+            "worked_hours": 9.27,
+            "created_at": "2026-07-14T11:06:33+05:30",
+            "updated_at": "2026-07-14T20:22:26+05:30"
+        },
+        {
+            "id": 1116,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T11:04:57+05:30",
+            "logout_time": "2026-07-14T21:19:48+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 615,
+            "worked_hours": 10.25,
+            "created_at": "2026-07-14T11:04:57+05:30",
+            "updated_at": "2026-07-14T21:19:48+05:30"
+        },
+        {
+            "id": 1115,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T10:28:58+05:30",
+            "logout_time": "2026-07-14T23:59:27+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 810,
+            "worked_hours": 13.5,
+            "created_at": "2026-07-14T10:28:58+05:30",
+            "updated_at": "2026-07-14T23:59:27+05:30"
+        },
+        {
+            "id": 1114,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:57:08+05:30",
+            "logout_time": "2026-07-14T18:19:04+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 502,
+            "worked_hours": 8.37,
+            "created_at": "2026-07-14T09:57:08+05:30",
+            "updated_at": "2026-07-14T18:19:04+05:30"
+        },
+        {
+            "id": 1113,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:53:10+05:30",
+            "logout_time": "2026-07-14T19:05:56+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 553,
+            "worked_hours": 9.22,
+            "created_at": "2026-07-14T09:53:10+05:30",
+            "updated_at": "2026-07-14T19:05:56+05:30"
+        },
+        {
+            "id": 1112,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:51:56+05:30",
+            "logout_time": "2026-07-14T19:13:22+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 561,
+            "worked_hours": 9.35,
+            "created_at": "2026-07-14T09:51:56+05:30",
+            "updated_at": "2026-07-14T19:13:22+05:30"
+        },
+        {
+            "id": 1111,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:51:11+05:30",
+            "logout_time": "2026-07-14T17:30:00+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 459,
+            "worked_hours": 7.65,
+            "created_at": "2026-07-14T09:51:11+05:30",
+            "updated_at": "2026-07-23T16:59:51+05:30"
+        },
+        {
+            "id": 1110,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:50:10+05:30",
+            "logout_time": "2026-07-14T22:38:00+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 768,
+            "worked_hours": 12.8,
+            "created_at": "2026-07-14T09:50:10+05:30",
+            "updated_at": "2026-07-14T22:38:00+05:30"
+        },
+        {
+            "id": 1109,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:44:28+05:30",
+            "logout_time": "2026-07-14T18:09:57+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 505,
+            "worked_hours": 8.42,
+            "created_at": "2026-07-14T09:44:28+05:30",
+            "updated_at": "2026-07-14T18:09:57+05:30"
+        },
+        {
+            "id": 1108,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:41:39+05:30",
+            "logout_time": "2026-07-14T18:27:59+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-14T13:28:10+05:30",
+            "lunch_end": "2026-07-14T14:01:03+05:30",
+            "lunch_minutes": 33,
+            "worked_minutes": 493,
+            "worked_hours": 8.22,
+            "created_at": "2026-07-14T09:41:39+05:30",
+            "updated_at": "2026-07-14T18:27:59+05:30"
+        },
+        {
+            "id": 1107,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:36:57+05:30",
+            "logout_time": "2026-07-14T18:05:38+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 509,
+            "worked_hours": 8.48,
+            "created_at": "2026-07-14T09:36:57+05:30",
+            "updated_at": "2026-07-14T18:05:38+05:30"
+        },
+        {
+            "id": 1106,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:35:38+05:30",
+            "logout_time": "2026-07-14T17:46:52+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 491,
+            "worked_hours": 8.18,
+            "created_at": "2026-07-14T09:35:38+05:30",
+            "updated_at": "2026-07-14T17:46:52+05:30"
+        },
+        {
+            "id": 1105,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:32:47+05:30",
+            "logout_time": "2026-07-14T17:46:41+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 494,
+            "worked_hours": 8.23,
+            "created_at": "2026-07-14T09:32:47+05:30",
+            "updated_at": "2026-07-14T17:46:41+05:30"
+        },
+        {
+            "id": 1104,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:31:31+05:30",
+            "logout_time": "2026-07-14T18:07:36+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 516,
+            "worked_hours": 8.6,
+            "created_at": "2026-07-14T09:31:31+05:30",
+            "updated_at": "2026-07-14T18:07:36+05:30"
+        },
+        {
+            "id": 1103,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-14",
+            "status": "completed",
+            "login_time": "2026-07-14T09:12:40+05:30",
+            "logout_time": "2026-07-14T17:33:44+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-14T13:16:40+05:30",
+            "lunch_end": "2026-07-14T13:54:07+05:30",
+            "lunch_minutes": 37,
+            "worked_minutes": 464,
+            "worked_hours": 7.73,
+            "created_at": "2026-07-14T09:12:40+05:30",
+            "updated_at": "2026-07-14T17:33:44+05:30"
+        },
+        {
+            "id": 1102,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-13",
+            "status": "active",
+            "login_time": "2026-07-13T14:29:02+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-13T14:29:02+05:30",
+            "updated_at": "2026-07-13T14:29:16+05:30"
+        },
+        {
+            "id": 1101,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T13:54:50+05:30",
+            "logout_time": "2026-07-13T21:57:04+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 482,
+            "worked_hours": 8.03,
+            "created_at": "2026-07-13T13:54:50+05:30",
+            "updated_at": "2026-07-13T21:57:04+05:30"
+        },
+        {
+            "id": 1100,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T12:44:40+05:30",
+            "logout_time": "2026-07-13T22:00:16+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 556,
+            "worked_hours": 9.27,
+            "created_at": "2026-07-13T12:44:40+05:30",
+            "updated_at": "2026-07-13T22:00:16+05:30"
+        },
+        {
+            "id": 1099,
+            "employee": {
+                "id": 21,
+                "name": "Ajmal K V"
+            },
+            "department": "Management",
+            "date": "2026-07-13",
+            "status": "active",
+            "login_time": "2026-07-13T11:24:33+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-13T11:24:33+05:30",
+            "updated_at": "2026-07-13T11:41:24+05:30"
+        },
+        {
+            "id": 1098,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T10:00:34+05:30",
+            "logout_time": "2026-07-13T18:46:31+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 526,
+            "worked_hours": 8.77,
+            "created_at": "2026-07-13T10:00:34+05:30",
+            "updated_at": "2026-07-13T18:46:31+05:30"
+        },
+        {
+            "id": 1097,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T09:56:00+05:30",
+            "logout_time": "2026-07-13T18:09:55+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-13T13:23:41+05:30",
+            "lunch_end": "2026-07-13T14:04:08+05:30",
+            "lunch_minutes": 40,
+            "worked_minutes": 454,
+            "worked_hours": 7.57,
+            "created_at": "2026-07-13T09:56:00+05:30",
+            "updated_at": "2026-07-13T18:09:55+05:30"
+        },
+        {
+            "id": 1096,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T09:44:42+05:30",
+            "logout_time": "2026-07-13T17:52:47+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-13T14:01:55+05:30",
+            "lunch_end": "2026-07-13T14:38:39+05:30",
+            "lunch_minutes": 37,
+            "worked_minutes": 451,
+            "worked_hours": 7.52,
+            "created_at": "2026-07-13T09:44:42+05:30",
+            "updated_at": "2026-07-13T17:52:47+05:30"
+        },
+        {
+            "id": 1095,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T09:42:04+05:30",
+            "logout_time": "2026-07-13T17:52:42+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-13T13:30:10+05:30",
+            "lunch_end": "2026-07-13T14:07:57+05:30",
+            "lunch_minutes": 38,
+            "worked_minutes": 453,
+            "worked_hours": 7.55,
+            "created_at": "2026-07-13T09:42:04+05:30",
+            "updated_at": "2026-07-13T17:52:42+05:30"
+        },
+        {
+            "id": 1094,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T09:39:54+05:30",
+            "logout_time": "2026-07-13T18:01:51+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-13T13:08:25+05:30",
+            "lunch_end": "2026-07-13T13:54:42+05:30",
+            "lunch_minutes": 46,
+            "worked_minutes": 456,
+            "worked_hours": 7.6,
+            "created_at": "2026-07-13T09:39:54+05:30",
+            "updated_at": "2026-07-13T18:01:51+05:30"
+        },
+        {
+            "id": 1093,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T09:37:04+05:30",
+            "logout_time": "2026-07-13T17:30:00+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 473,
+            "worked_hours": 7.88,
+            "created_at": "2026-07-13T09:37:04+05:30",
+            "updated_at": "2026-07-23T16:59:53+05:30"
+        },
+        {
+            "id": 1092,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T09:36:33+05:30",
+            "logout_time": "2026-07-13T18:02:36+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 506,
+            "worked_hours": 8.43,
+            "created_at": "2026-07-13T09:36:33+05:30",
+            "updated_at": "2026-07-13T18:02:36+05:30"
+        },
+        {
+            "id": 1091,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T09:35:56+05:30",
+            "logout_time": "2026-07-13T18:15:49+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 520,
+            "worked_hours": 8.67,
+            "created_at": "2026-07-13T09:35:56+05:30",
+            "updated_at": "2026-07-13T18:15:49+05:30"
+        },
+        {
+            "id": 1090,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T09:32:14+05:30",
+            "logout_time": "2026-07-13T18:40:13+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 548,
+            "worked_hours": 9.13,
+            "created_at": "2026-07-13T09:32:14+05:30",
+            "updated_at": "2026-07-13T18:40:13+05:30"
+        },
+        {
+            "id": 1089,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T09:31:33+05:30",
+            "logout_time": "2026-07-13T18:02:09+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 511,
+            "worked_hours": 8.52,
+            "created_at": "2026-07-13T09:31:33+05:30",
+            "updated_at": "2026-07-13T18:02:09+05:30"
+        },
+        {
+            "id": 1088,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-13",
+            "status": "active",
+            "login_time": "2026-07-13T09:29:38+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-13T09:29:38+05:30",
+            "updated_at": "2026-07-13T09:29:38+05:30"
+        },
+        {
+            "id": 1087,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T09:12:06+05:30",
+            "logout_time": "2026-07-13T18:05:46+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 534,
+            "worked_hours": 8.9,
+            "created_at": "2026-07-13T09:12:06+05:30",
+            "updated_at": "2026-07-13T18:05:46+05:30"
+        },
+        {
+            "id": 1086,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-13",
+            "status": "completed",
+            "login_time": "2026-07-13T08:05:19+05:30",
+            "logout_time": "2026-07-13T20:35:03+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 750,
+            "worked_hours": 12.5,
+            "created_at": "2026-07-13T08:05:19+05:30",
+            "updated_at": "2026-07-13T20:35:03+05:30"
+        },
+        {
+            "id": 1085,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-12",
+            "status": "completed",
+            "login_time": "2026-07-12T09:39:54+05:30",
+            "logout_time": "2026-07-12T19:04:40+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 565,
+            "worked_hours": 9.42,
+            "created_at": "2026-07-12T09:39:54+05:30",
+            "updated_at": "2026-07-12T19:04:40+05:30"
+        },
+        {
+            "id": 1084,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-11",
+            "status": "completed",
+            "login_time": "2026-07-11T12:48:44+05:30",
+            "logout_time": "2026-07-11T23:41:29+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 653,
+            "worked_hours": 10.88,
+            "created_at": "2026-07-11T12:48:44+05:30",
+            "updated_at": "2026-07-11T23:41:29+05:30"
+        },
+        {
+            "id": 1083,
+            "employee": {
+                "id": 21,
+                "name": "Ajmal K V"
+            },
+            "department": "Management",
+            "date": "2026-07-11",
+            "status": "active",
+            "login_time": "2026-07-11T12:46:49+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-11T12:46:49+05:30",
+            "updated_at": "2026-07-11T12:47:50+05:30"
+        },
+        {
+            "id": 1082,
+            "employee": {
+                "id": 20,
+                "name": "Abhiram"
+            },
+            "department": "Marketing",
+            "date": "2026-07-11",
+            "status": "completed",
+            "login_time": "2026-07-11T10:38:21+05:30",
+            "logout_time": "2026-07-11T21:11:29+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 633,
+            "worked_hours": 10.55,
+            "created_at": "2026-07-11T10:38:21+05:30",
+            "updated_at": "2026-07-11T21:11:29+05:30"
+        },
+        {
+            "id": 1081,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-11",
+            "status": "active",
+            "login_time": "2026-07-11T10:28:04+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-11T10:28:04+05:30",
+            "updated_at": "2026-07-11T10:28:04+05:30"
+        },
+        {
+            "id": 1080,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-11",
+            "status": "completed",
+            "login_time": "2026-07-11T09:53:54+05:30",
+            "logout_time": "2026-07-11T17:31:25+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 458,
+            "worked_hours": 7.63,
+            "created_at": "2026-07-11T09:53:54+05:30",
+            "updated_at": "2026-07-11T17:31:25+05:30"
+        },
+        {
+            "id": 1079,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-11",
+            "status": "completed",
+            "login_time": "2026-07-11T09:38:59+05:30",
+            "logout_time": "2026-07-11T17:52:37+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 494,
+            "worked_hours": 8.23,
+            "created_at": "2026-07-11T09:38:59+05:30",
+            "updated_at": "2026-07-11T17:52:37+05:30"
+        },
+        {
+            "id": 1078,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-11",
+            "status": "completed",
+            "login_time": "2026-07-11T09:31:32+05:30",
+            "logout_time": "2026-07-11T23:37:40+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 846,
+            "worked_hours": 14.1,
+            "created_at": "2026-07-11T09:31:32+05:30",
+            "updated_at": "2026-07-13T10:24:01+05:30"
+        },
+        {
+            "id": 1077,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-11",
+            "status": "completed",
+            "login_time": "2026-07-11T09:31:12+05:30",
+            "logout_time": "2026-07-11T17:38:57+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-11T13:32:19+05:30",
+            "lunch_end": "2026-07-11T14:03:49+05:30",
+            "lunch_minutes": 32,
+            "worked_minutes": 456,
+            "worked_hours": 7.6,
+            "created_at": "2026-07-11T09:31:12+05:30",
+            "updated_at": "2026-07-11T17:38:57+05:30"
+        },
+        {
+            "id": 1076,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-11",
+            "status": "completed",
+            "login_time": "2026-07-11T09:28:33+05:30",
+            "logout_time": "2026-07-11T22:42:03+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 794,
+            "worked_hours": 13.23,
+            "created_at": "2026-07-11T09:28:33+05:30",
+            "updated_at": "2026-07-11T22:42:03+05:30"
+        },
+        {
+            "id": 1075,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-11",
+            "status": "completed",
+            "login_time": "2026-07-11T09:28:15+05:30",
+            "logout_time": "2026-07-11T18:01:34+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 513,
+            "worked_hours": 8.55,
+            "created_at": "2026-07-11T09:28:15+05:30",
+            "updated_at": "2026-07-11T18:01:34+05:30"
+        },
+        {
+            "id": 1074,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-11",
+            "status": "completed",
+            "login_time": "2026-07-11T09:25:39+05:30",
+            "logout_time": "2026-07-11T17:51:37+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-11T12:52:41+05:30",
+            "lunch_end": "2026-07-11T13:20:15+05:30",
+            "lunch_minutes": 28,
+            "worked_minutes": 478,
+            "worked_hours": 7.97,
+            "created_at": "2026-07-11T09:25:39+05:30",
+            "updated_at": "2026-07-11T17:51:37+05:30"
+        },
+        {
+            "id": 1073,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-11",
+            "status": "completed",
+            "login_time": "2026-07-11T09:06:28+05:30",
+            "logout_time": "2026-07-11T19:15:36+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 609,
+            "worked_hours": 10.15,
+            "created_at": "2026-07-11T09:06:28+05:30",
+            "updated_at": "2026-07-11T19:15:36+05:30"
+        },
+        {
+            "id": 1072,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-11",
+            "status": "active",
+            "login_time": "2026-07-11T01:39:58+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-11T01:39:58+05:30",
+            "updated_at": "2026-07-11T01:40:58+05:30"
+        },
+        {
+            "id": 1071,
+            "employee": {
+                "id": 21,
+                "name": "Ajmal K V"
+            },
+            "department": "Management",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T13:30:46+05:30",
+            "logout_time": "2026-07-10T22:41:09+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 550,
+            "worked_hours": 9.17,
+            "created_at": "2026-07-10T13:30:46+05:30",
+            "updated_at": "2026-07-10T22:41:09+05:30"
+        },
+        {
+            "id": 1070,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T12:42:59+05:30",
+            "logout_time": "2026-07-10T22:53:27+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 610,
+            "worked_hours": 10.17,
+            "created_at": "2026-07-10T12:42:59+05:30",
+            "updated_at": "2026-07-10T22:53:27+05:30"
+        },
+        {
+            "id": 1069,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T12:05:04+05:30",
+            "logout_time": "2026-07-10T17:30:00+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 325,
+            "worked_hours": 5.42,
+            "created_at": "2026-07-10T12:05:04+05:30",
+            "updated_at": "2026-07-23T16:59:54+05:30"
+        },
+        {
+            "id": 1068,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T10:00:30+05:30",
+            "logout_time": "2026-07-10T20:01:17+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 601,
+            "worked_hours": 10.02,
+            "created_at": "2026-07-10T10:00:30+05:30",
+            "updated_at": "2026-07-10T20:01:17+05:30"
+        },
+        {
+            "id": 1067,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T10:00:02+05:30",
+            "logout_time": "2026-07-10T19:08:56+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 549,
+            "worked_hours": 9.15,
+            "created_at": "2026-07-10T10:00:02+05:30",
+            "updated_at": "2026-07-10T19:08:56+05:30"
+        },
+        {
+            "id": 1066,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T09:51:24+05:30",
+            "logout_time": "2026-07-10T17:51:53+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-10T12:34:04+05:30",
+            "lunch_end": "2026-07-10T13:31:50+05:30",
+            "lunch_minutes": 58,
+            "worked_minutes": 422,
+            "worked_hours": 7.03,
+            "created_at": "2026-07-10T09:51:24+05:30",
+            "updated_at": "2026-07-10T17:51:53+05:30"
+        },
+        {
+            "id": 1065,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T09:49:04+05:30",
+            "logout_time": "2026-07-10T17:43:51+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-10T13:20:28+05:30",
+            "lunch_end": "2026-07-10T13:57:48+05:30",
+            "lunch_minutes": 37,
+            "worked_minutes": 438,
+            "worked_hours": 7.3,
+            "created_at": "2026-07-10T09:49:04+05:30",
+            "updated_at": "2026-07-10T17:43:51+05:30"
+        },
+        {
+            "id": 1064,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T09:47:30+05:30",
+            "logout_time": "2026-07-10T18:23:00+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 516,
+            "worked_hours": 8.6,
+            "created_at": "2026-07-10T09:47:30+05:30",
+            "updated_at": "2026-07-10T18:23:00+05:30"
+        },
+        {
+            "id": 1063,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T09:36:10+05:30",
+            "logout_time": "2026-07-10T17:41:10+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-10T12:46:57+05:30",
+            "lunch_end": "2026-07-10T13:29:45+05:30",
+            "lunch_minutes": 43,
+            "worked_minutes": 442,
+            "worked_hours": 7.37,
+            "created_at": "2026-07-10T09:36:10+05:30",
+            "updated_at": "2026-07-10T17:41:10+05:30"
+        },
+        {
+            "id": 1062,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T09:32:05+05:30",
+            "logout_time": "2026-07-10T17:46:58+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 495,
+            "worked_hours": 8.25,
+            "created_at": "2026-07-10T09:32:05+05:30",
+            "updated_at": "2026-07-10T17:46:58+05:30"
+        },
+        {
+            "id": 1061,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T09:30:38+05:30",
+            "logout_time": "2026-07-10T17:32:27+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-10T13:28:44+05:30",
+            "lunch_end": "2026-07-10T13:49:49+05:30",
+            "lunch_minutes": 21,
+            "worked_minutes": 461,
+            "worked_hours": 7.68,
+            "created_at": "2026-07-10T09:30:38+05:30",
+            "updated_at": "2026-07-10T17:32:27+05:30"
+        },
+        {
+            "id": 1060,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T09:29:16+05:30",
+            "logout_time": "2026-07-10T19:58:24+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 629,
+            "worked_hours": 10.48,
+            "created_at": "2026-07-10T09:29:16+05:30",
+            "updated_at": "2026-07-10T19:58:24+05:30"
+        },
+        {
+            "id": 1059,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-10",
+            "status": "completed",
+            "login_time": "2026-07-10T08:47:54+05:30",
+            "logout_time": "2026-07-10T19:19:39+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 632,
+            "worked_hours": 10.53,
+            "created_at": "2026-07-10T08:47:54+05:30",
+            "updated_at": "2026-07-10T19:19:39+05:30"
+        },
+        {
+            "id": 1058,
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T15:09:06+05:30",
+            "logout_time": "2026-07-09T19:02:08+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 233,
+            "worked_hours": 3.88,
+            "created_at": "2026-07-09T15:09:06+05:30",
+            "updated_at": "2026-07-09T19:02:08+05:30"
+        },
+        {
+            "id": 1057,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-09",
+            "status": "active",
+            "login_time": "2026-07-09T14:01:00+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-09T14:01:00+05:30",
+            "updated_at": "2026-07-09T14:01:17+05:30"
+        },
+        {
+            "id": 1056,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-09",
+            "status": "active",
+            "login_time": "2026-07-09T13:41:52+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-09T13:41:52+05:30",
+            "updated_at": "2026-07-09T13:42:07+05:30"
+        },
+        {
+            "id": 1055,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T11:14:57+05:30",
+            "logout_time": "2026-07-09T20:09:47+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 535,
+            "worked_hours": 8.92,
+            "created_at": "2026-07-09T11:14:57+05:30",
+            "updated_at": "2026-07-09T20:09:47+05:30"
+        },
+        {
+            "id": 1054,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-09",
+            "status": "active",
+            "login_time": "2026-07-09T10:58:42+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-09T10:58:42+05:30",
+            "updated_at": "2026-07-09T10:58:42+05:30"
+        },
+        {
+            "id": 1053,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T10:00:30+05:30",
+            "logout_time": "2026-07-09T20:19:58+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-09T19:32:09+05:30",
+            "lunch_end": "2026-07-09T20:14:29+05:30",
+            "lunch_minutes": 42,
+            "worked_minutes": 577,
+            "worked_hours": 9.62,
+            "created_at": "2026-07-09T10:00:30+05:30",
+            "updated_at": "2026-07-09T20:19:58+05:30"
+        },
+        {
+            "id": 1052,
+            "employee": {
+                "id": 21,
+                "name": "Ajmal K V"
+            },
+            "department": "Management",
+            "date": "2026-07-09",
+            "status": "active",
+            "login_time": "2026-07-09T09:58:32+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-09T09:58:32+05:30",
+            "updated_at": "2026-07-09T09:58:52+05:30"
+        },
+        {
+            "id": 1051,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T09:57:20+05:30",
+            "logout_time": "2026-07-09T18:53:14+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 536,
+            "worked_hours": 8.93,
+            "created_at": "2026-07-09T09:57:20+05:30",
+            "updated_at": "2026-07-09T18:53:14+05:30"
+        },
+        {
+            "id": 1050,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T09:49:57+05:30",
+            "logout_time": "2026-07-09T12:35:23+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 165,
+            "worked_hours": 2.75,
+            "created_at": "2026-07-09T09:49:57+05:30",
+            "updated_at": "2026-07-09T12:35:23+05:30"
+        },
+        {
+            "id": 1049,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T09:45:34+05:30",
+            "logout_time": "2026-07-09T20:09:23+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 624,
+            "worked_hours": 10.4,
+            "created_at": "2026-07-09T09:45:34+05:30",
+            "updated_at": "2026-07-09T20:09:23+05:30"
+        },
+        {
+            "id": 1048,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T09:31:05+05:30",
+            "logout_time": "2026-07-09T17:49:30+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-09T15:05:13+05:30",
+            "lunch_end": "2026-07-09T15:44:22+05:30",
+            "lunch_minutes": 39,
+            "worked_minutes": 459,
+            "worked_hours": 7.65,
+            "created_at": "2026-07-09T09:31:05+05:30",
+            "updated_at": "2026-07-09T17:49:30+05:30"
+        },
+        {
+            "id": 1047,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T09:30:55+05:30",
+            "logout_time": "2026-07-09T17:32:54+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 482,
+            "worked_hours": 8.03,
+            "created_at": "2026-07-09T09:30:55+05:30",
+            "updated_at": "2026-07-09T17:32:54+05:30"
+        },
+        {
+            "id": 1046,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T09:28:50+05:30",
+            "logout_time": "2026-07-09T17:46:34+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-09T13:25:35+05:30",
+            "lunch_end": "2026-07-09T14:15:24+05:30",
+            "lunch_minutes": 50,
+            "worked_minutes": 448,
+            "worked_hours": 7.47,
+            "created_at": "2026-07-09T09:28:50+05:30",
+            "updated_at": "2026-07-09T17:46:34+05:30"
+        },
+        {
+            "id": 1045,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T09:16:57+05:30",
+            "logout_time": "2026-07-09T17:30:24+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 493,
+            "worked_hours": 8.22,
+            "created_at": "2026-07-09T09:16:57+05:30",
+            "updated_at": "2026-07-09T17:30:24+05:30"
+        },
+        {
+            "id": 1044,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-09",
+            "status": "completed",
+            "login_time": "2026-07-09T09:15:53+05:30",
+            "logout_time": "2026-07-09T19:19:39+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 604,
+            "worked_hours": 10.07,
+            "created_at": "2026-07-09T09:15:53+05:30",
+            "updated_at": "2026-07-09T19:19:39+05:30"
+        },
+        {
+            "id": 1043,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-08",
+            "status": "active",
+            "login_time": "2026-07-08T14:57:31+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-08T14:57:31+05:30",
+            "updated_at": "2026-07-08T14:57:45+05:30"
+        },
+        {
+            "id": 1042,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-08",
+            "status": "active",
+            "login_time": "2026-07-08T11:25:16+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-08T11:25:16+05:30",
+            "updated_at": "2026-07-08T11:25:19+05:30"
+        },
+        {
+            "id": 1041,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T10:40:24+05:30",
+            "logout_time": "2026-07-08T18:11:37+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 451,
+            "worked_hours": 7.52,
+            "created_at": "2026-07-08T10:40:24+05:30",
+            "updated_at": "2026-07-08T18:11:37+05:30"
+        },
+        {
+            "id": 1040,
+            "employee": {
+                "id": 20,
+                "name": "Abhiram"
+            },
+            "department": "Marketing",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T10:17:37+05:30",
+            "logout_time": "2026-07-08T23:44:42+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-08T14:38:49+05:30",
+            "lunch_end": "2026-07-08T15:15:55+05:30",
+            "lunch_minutes": 37,
+            "worked_minutes": 770,
+            "worked_hours": 12.83,
+            "created_at": "2026-07-08T10:17:37+05:30",
+            "updated_at": "2026-07-08T23:44:42+05:30"
+        },
+        {
+            "id": 1039,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T10:02:21+05:30",
+            "logout_time": "2026-07-08T23:30:46+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 808,
+            "worked_hours": 13.47,
+            "created_at": "2026-07-08T10:02:21+05:30",
+            "updated_at": "2026-07-08T23:30:46+05:30"
+        },
+        {
+            "id": 1038,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T09:55:28+05:30",
+            "logout_time": "2026-07-08T17:56:11+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-08T14:06:47+05:30",
+            "lunch_end": "2026-07-08T14:49:38+05:30",
+            "lunch_minutes": 43,
+            "worked_minutes": 438,
+            "worked_hours": 7.3,
+            "created_at": "2026-07-08T09:55:28+05:30",
+            "updated_at": "2026-07-08T17:56:11+05:30"
+        },
+        {
+            "id": 1037,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T09:53:21+05:30",
+            "logout_time": "2026-07-08T18:02:04+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-08T14:07:10+05:30",
+            "lunch_end": "2026-07-08T14:50:01+05:30",
+            "lunch_minutes": 43,
+            "worked_minutes": 446,
+            "worked_hours": 7.43,
+            "created_at": "2026-07-08T09:53:21+05:30",
+            "updated_at": "2026-07-08T18:02:04+05:30"
+        },
+        {
+            "id": 1036,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T09:48:59+05:30",
+            "logout_time": "2026-07-08T17:39:07+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-08T14:35:34+05:30",
+            "lunch_end": "2026-07-08T15:04:30+05:30",
+            "lunch_minutes": 29,
+            "worked_minutes": 441,
+            "worked_hours": 7.35,
+            "created_at": "2026-07-08T09:48:59+05:30",
+            "updated_at": "2026-07-08T17:39:07+05:30"
+        },
+        {
+            "id": 1035,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T09:46:51+05:30",
+            "logout_time": "2026-07-08T17:45:51+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 479,
+            "worked_hours": 7.98,
+            "created_at": "2026-07-08T09:46:51+05:30",
+            "updated_at": "2026-07-08T17:45:51+05:30"
+        },
+        {
+            "id": 1034,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T09:44:35+05:30",
+            "logout_time": "2026-07-08T18:15:28+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 511,
+            "worked_hours": 8.52,
+            "created_at": "2026-07-08T09:44:35+05:30",
+            "updated_at": "2026-07-08T18:15:28+05:30"
+        },
+        {
+            "id": 1033,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T09:36:58+05:30",
+            "logout_time": "2026-07-08T18:05:05+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-08T14:19:44+05:30",
+            "lunch_end": "2026-07-08T15:20:53+05:30",
+            "lunch_minutes": 61,
+            "worked_minutes": 447,
+            "worked_hours": 7.45,
+            "created_at": "2026-07-08T09:36:58+05:30",
+            "updated_at": "2026-07-08T18:05:05+05:30"
+        },
+        {
+            "id": 1032,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T09:36:56+05:30",
+            "logout_time": "2026-07-08T17:38:33+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 482,
+            "worked_hours": 8.03,
+            "created_at": "2026-07-08T09:36:56+05:30",
+            "updated_at": "2026-07-08T17:38:33+05:30"
+        },
+        {
+            "id": 1031,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T09:31:41+05:30",
+            "logout_time": "2026-07-08T18:07:14+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 516,
+            "worked_hours": 8.6,
+            "created_at": "2026-07-08T09:31:41+05:30",
+            "updated_at": "2026-07-08T18:07:14+05:30"
+        },
+        {
+            "id": 1030,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-08",
+            "status": "active",
+            "login_time": "2026-07-08T09:31:01+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": "2026-07-08T14:31:17+05:30",
+            "lunch_end": "2026-07-08T15:13:22+05:30",
+            "lunch_minutes": 42,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-08T09:31:01+05:30",
+            "updated_at": "2026-07-08T15:23:18+05:30"
+        },
+        {
+            "id": 1029,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-08",
+            "status": "completed",
+            "login_time": "2026-07-08T09:27:28+05:30",
+            "logout_time": "2026-07-08T17:34:45+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 487,
+            "worked_hours": 8.12,
+            "created_at": "2026-07-08T09:27:28+05:30",
+            "updated_at": "2026-07-08T17:34:45+05:30"
+        },
+        {
+            "id": 1028,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T11:13:15+05:30",
+            "logout_time": "2026-07-07T17:46:27+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 393,
+            "worked_hours": 6.55,
+            "created_at": "2026-07-07T11:13:15+05:30",
+            "updated_at": "2026-07-07T17:46:27+05:30"
+        },
+        {
+            "id": 1027,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T10:01:02+05:30",
+            "logout_time": "2026-07-07T17:13:28+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 432,
+            "worked_hours": 7.2,
+            "created_at": "2026-07-07T10:01:02+05:30",
+            "updated_at": "2026-07-07T17:13:28+05:30"
+        },
+        {
+            "id": 1026,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T10:00:22+05:30",
+            "logout_time": "2026-07-07T18:12:15+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-07T13:02:25+05:30",
+            "lunch_end": "2026-07-07T14:04:59+05:30",
+            "lunch_minutes": 63,
+            "worked_minutes": 429,
+            "worked_hours": 7.15,
+            "created_at": "2026-07-07T10:00:22+05:30",
+            "updated_at": "2026-07-07T18:12:15+05:30"
+        },
+        {
+            "id": 1025,
+            "employee": {
+                "id": 20,
+                "name": "Abhiram"
+            },
+            "department": "Marketing",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:55:53+05:30",
+            "logout_time": "2026-07-07T22:29:24+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-07T13:20:18+05:30",
+            "lunch_end": "2026-07-07T14:19:53+05:30",
+            "lunch_minutes": 60,
+            "worked_minutes": 694,
+            "worked_hours": 11.57,
+            "created_at": "2026-07-07T09:55:53+05:30",
+            "updated_at": "2026-07-07T22:29:24+05:30"
+        },
+        {
+            "id": 1024,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:54:57+05:30",
+            "logout_time": "2026-07-07T22:40:04+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 765,
+            "worked_hours": 12.75,
+            "created_at": "2026-07-07T09:54:57+05:30",
+            "updated_at": "2026-07-07T22:40:04+05:30"
+        },
+        {
+            "id": 1023,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:49:16+05:30",
+            "logout_time": "2026-07-07T17:57:09+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 488,
+            "worked_hours": 8.13,
+            "created_at": "2026-07-07T09:49:16+05:30",
+            "updated_at": "2026-07-07T17:57:09+05:30"
+        },
+        {
+            "id": 1022,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:39:22+05:30",
+            "logout_time": "2026-07-07T17:39:53+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-07T13:03:19+05:30",
+            "lunch_end": "2026-07-07T13:52:20+05:30",
+            "lunch_minutes": 49,
+            "worked_minutes": 432,
+            "worked_hours": 7.2,
+            "created_at": "2026-07-07T09:39:22+05:30",
+            "updated_at": "2026-07-07T17:39:53+05:30"
+        },
+        {
+            "id": 1021,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:37:21+05:30",
+            "logout_time": "2026-07-07T17:30:00+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 473,
+            "worked_hours": 7.88,
+            "created_at": "2026-07-07T09:37:21+05:30",
+            "updated_at": "2026-07-23T16:59:55+05:30"
+        },
+        {
+            "id": 1020,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:33:43+05:30",
+            "logout_time": "2026-07-07T18:31:23+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 538,
+            "worked_hours": 8.97,
+            "created_at": "2026-07-07T09:33:43+05:30",
+            "updated_at": "2026-07-07T18:31:23+05:30"
+        },
+        {
+            "id": 1019,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:31:40+05:30",
+            "logout_time": "2026-07-07T17:38:13+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-07T12:50:12+05:30",
+            "lunch_end": "2026-07-07T13:36:26+05:30",
+            "lunch_minutes": 46,
+            "worked_minutes": 441,
+            "worked_hours": 7.35,
+            "created_at": "2026-07-07T09:31:40+05:30",
+            "updated_at": "2026-07-07T17:38:13+05:30"
+        },
+        {
+            "id": 1018,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:30:42+05:30",
+            "logout_time": "2026-07-07T17:48:40+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 498,
+            "worked_hours": 8.3,
+            "created_at": "2026-07-07T09:30:42+05:30",
+            "updated_at": "2026-07-07T17:48:40+05:30"
+        },
+        {
+            "id": 1017,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:27:07+05:30",
+            "logout_time": "2026-07-07T18:06:29+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 519,
+            "worked_hours": 8.65,
+            "created_at": "2026-07-07T09:27:07+05:30",
+            "updated_at": "2026-07-07T18:06:29+05:30"
+        },
+        {
+            "id": 1016,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:12:01+05:30",
+            "logout_time": "2026-07-07T17:31:26+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 499,
+            "worked_hours": 8.32,
+            "created_at": "2026-07-07T09:12:01+05:30",
+            "updated_at": "2026-07-07T17:31:26+05:30"
+        },
+        {
+            "id": 1015,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-07",
+            "status": "completed",
+            "login_time": "2026-07-07T09:09:20+05:30",
+            "logout_time": "2026-07-07T17:34:10+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-07T13:10:30+05:30",
+            "lunch_end": "2026-07-07T13:41:47+05:30",
+            "lunch_minutes": 31,
+            "worked_minutes": 474,
+            "worked_hours": 7.9,
+            "created_at": "2026-07-07T09:09:20+05:30",
+            "updated_at": "2026-07-07T17:34:10+05:30"
+        },
+        {
+            "id": 1014,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-07",
+            "status": "active",
+            "login_time": "2026-07-07T01:48:35+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-07T01:48:35+05:30",
+            "updated_at": "2026-07-07T01:48:35+05:30"
+        },
+        {
+            "id": 1013,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-06",
+            "status": "active",
+            "login_time": "2026-07-06T17:06:22+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-06T17:06:22+05:30",
+            "updated_at": "2026-07-06T17:06:27+05:30"
+        },
+        {
+            "id": 1012,
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T11:04:41+05:30",
+            "logout_time": "2026-07-06T17:22:56+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 378,
+            "worked_hours": 6.3,
+            "created_at": "2026-07-06T11:04:41+05:30",
+            "updated_at": "2026-07-06T17:22:56+05:30"
+        },
+        {
+            "id": 1011,
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "date": "2026-07-06",
+            "status": "active",
+            "login_time": "2026-07-06T10:40:28+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-06T10:40:28+05:30",
+            "updated_at": "2026-07-06T10:46:06+05:30"
+        },
+        {
+            "id": 1010,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T10:09:34+05:30",
+            "logout_time": "2026-07-06T19:01:38+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 532,
+            "worked_hours": 8.87,
+            "created_at": "2026-07-06T10:09:34+05:30",
+            "updated_at": "2026-07-06T19:01:38+05:30"
+        },
+        {
+            "id": 1009,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T10:06:09+05:30",
+            "logout_time": "2026-07-06T12:43:36+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 157,
+            "worked_hours": 2.62,
+            "created_at": "2026-07-06T10:06:09+05:30",
+            "updated_at": "2026-07-06T12:43:36+05:30"
+        },
+        {
+            "id": 1008,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T09:44:11+05:30",
+            "logout_time": "2026-07-06T18:09:11+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-06T13:09:34+05:30",
+            "lunch_end": "2026-07-06T13:47:03+05:30",
+            "lunch_minutes": 37,
+            "worked_minutes": 468,
+            "worked_hours": 7.8,
+            "created_at": "2026-07-06T09:44:11+05:30",
+            "updated_at": "2026-07-06T18:09:11+05:30"
+        },
+        {
+            "id": 1007,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T09:38:19+05:30",
+            "logout_time": "2026-07-06T18:17:18+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 519,
+            "worked_hours": 8.65,
+            "created_at": "2026-07-06T09:38:19+05:30",
+            "updated_at": "2026-07-06T18:17:18+05:30"
+        },
+        {
+            "id": 1006,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T09:31:21+05:30",
+            "logout_time": "2026-07-06T17:33:56+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-06T13:08:48+05:30",
+            "lunch_end": "2026-07-06T13:51:16+05:30",
+            "lunch_minutes": 42,
+            "worked_minutes": 441,
+            "worked_hours": 7.35,
+            "created_at": "2026-07-06T09:31:21+05:30",
+            "updated_at": "2026-07-06T17:33:56+05:30"
+        },
+        {
+            "id": 1005,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T09:31:10+05:30",
+            "logout_time": "2026-07-06T17:36:07+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 485,
+            "worked_hours": 8.08,
+            "created_at": "2026-07-06T09:31:10+05:30",
+            "updated_at": "2026-07-06T17:36:07+05:30"
+        },
+        {
+            "id": 1004,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T09:30:17+05:30",
+            "logout_time": "2026-07-06T17:41:33+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 491,
+            "worked_hours": 8.18,
+            "created_at": "2026-07-06T09:30:17+05:30",
+            "updated_at": "2026-07-06T17:41:33+05:30"
+        },
+        {
+            "id": 1003,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T09:29:58+05:30",
+            "logout_time": "2026-07-06T17:29:58+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 480,
+            "worked_hours": 8,
+            "created_at": "2026-07-06T09:29:58+05:30",
+            "updated_at": "2026-07-23T16:59:56+05:30"
+        },
+        {
+            "id": 1002,
+            "employee": {
+                "id": 20,
+                "name": "Abhiram"
+            },
+            "department": "Marketing",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T09:23:33+05:30",
+            "logout_time": "2026-07-06T18:10:17+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-06T13:48:55+05:30",
+            "lunch_end": "2026-07-06T14:46:04+05:30",
+            "lunch_minutes": 57,
+            "worked_minutes": 470,
+            "worked_hours": 7.83,
+            "created_at": "2026-07-06T09:23:33+05:30",
+            "updated_at": "2026-07-06T18:10:17+05:30"
+        },
+        {
+            "id": 1001,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T08:53:01+05:30",
+            "logout_time": "2026-07-06T17:27:47+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 515,
+            "worked_hours": 8.58,
+            "created_at": "2026-07-06T08:53:01+05:30",
+            "updated_at": "2026-07-06T17:27:47+05:30"
+        },
+        {
+            "id": 1000,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-06",
+            "status": "completed",
+            "login_time": "2026-07-06T08:52:04+05:30",
+            "logout_time": "2026-07-06T17:34:38+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 523,
+            "worked_hours": 8.72,
+            "created_at": "2026-07-06T08:52:04+05:30",
+            "updated_at": "2026-07-06T17:34:38+05:30"
+        },
+        {
+            "id": 999,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-06",
+            "status": "active",
+            "login_time": "2026-07-06T03:22:22+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-06T03:22:22+05:30",
+            "updated_at": "2026-07-06T03:22:42+05:30"
+        },
+        {
+            "id": 998,
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "date": "2026-07-05",
+            "status": "active",
+            "login_time": "2026-07-05T04:45:09+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-05T04:45:09+05:30",
+            "updated_at": "2026-07-05T04:45:09+05:30"
+        },
+        {
+            "id": 997,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-04",
+            "status": "completed",
+            "login_time": "2026-07-04T23:44:22+05:30",
+            "logout_time": "2026-07-04T23:45:53+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 2,
+            "worked_hours": 0.03,
+            "created_at": "2026-07-04T23:44:22+05:30",
+            "updated_at": "2026-07-04T23:45:53+05:30"
+        },
+        {
+            "id": 996,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-04",
+            "status": "completed",
+            "login_time": "2026-07-04T10:54:36+05:30",
+            "logout_time": "2026-07-04T20:58:21+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 604,
+            "worked_hours": 10.07,
+            "created_at": "2026-07-04T10:54:36+05:30",
+            "updated_at": "2026-07-04T20:58:21+05:30"
+        },
+        {
+            "id": 995,
+            "employee": {
+                "id": 20,
+                "name": "Abhiram"
+            },
+            "department": "Marketing",
+            "date": "2026-07-04",
+            "status": "completed",
+            "login_time": "2026-07-04T10:04:59+05:30",
+            "logout_time": "2026-07-04T19:14:02+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-04T14:24:12+05:30",
+            "lunch_end": "2026-07-04T14:48:29+05:30",
+            "lunch_minutes": 24,
+            "worked_minutes": 525,
+            "worked_hours": 8.75,
+            "created_at": "2026-07-04T10:04:59+05:30",
+            "updated_at": "2026-07-04T19:14:02+05:30"
+        },
+        {
+            "id": 994,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-04",
+            "status": "completed",
+            "login_time": "2026-07-04T10:00:04+05:30",
+            "logout_time": "2026-07-04T19:47:10+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 587,
+            "worked_hours": 9.78,
+            "created_at": "2026-07-04T10:00:04+05:30",
+            "updated_at": "2026-07-04T19:47:10+05:30"
+        },
+        {
+            "id": 993,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-04",
+            "status": "completed",
+            "login_time": "2026-07-04T09:50:48+05:30",
+            "logout_time": "2026-07-04T17:55:08+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-04T13:20:56+05:30",
+            "lunch_end": "2026-07-04T13:52:09+05:30",
+            "lunch_minutes": 31,
+            "worked_minutes": 453,
+            "worked_hours": 7.55,
+            "created_at": "2026-07-04T09:50:48+05:30",
+            "updated_at": "2026-07-04T17:55:08+05:30"
+        },
+        {
+            "id": 992,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-04",
+            "status": "completed",
+            "login_time": "2026-07-04T09:38:18+05:30",
+            "logout_time": "2026-07-04T17:45:16+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 487,
+            "worked_hours": 8.12,
+            "created_at": "2026-07-04T09:38:18+05:30",
+            "updated_at": "2026-07-04T17:45:16+05:30"
+        },
+        {
+            "id": 991,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-04",
+            "status": "completed",
+            "login_time": "2026-07-04T09:33:11+05:30",
+            "logout_time": "2026-07-04T17:45:33+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 492,
+            "worked_hours": 8.2,
+            "created_at": "2026-07-04T09:33:11+05:30",
+            "updated_at": "2026-07-04T17:45:33+05:30"
+        },
+        {
+            "id": 990,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-04",
+            "status": "active",
+            "login_time": "2026-07-04T09:31:29+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-04T09:31:29+05:30",
+            "updated_at": "2026-07-04T10:09:55+05:30"
+        },
+        {
+            "id": 989,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-04",
+            "status": "completed",
+            "login_time": "2026-07-04T09:30:53+05:30",
+            "logout_time": "2026-07-04T17:37:58+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-04T13:13:33+05:30",
+            "lunch_end": "2026-07-04T13:51:21+05:30",
+            "lunch_minutes": 38,
+            "worked_minutes": 449,
+            "worked_hours": 7.48,
+            "created_at": "2026-07-04T09:30:53+05:30",
+            "updated_at": "2026-07-04T17:37:58+05:30"
+        },
+        {
+            "id": 988,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-04",
+            "status": "completed",
+            "login_time": "2026-07-04T09:07:53+05:30",
+            "logout_time": "2026-07-04T17:32:42+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 505,
+            "worked_hours": 8.42,
+            "created_at": "2026-07-04T09:07:53+05:30",
+            "updated_at": "2026-07-04T17:32:42+05:30"
+        },
+        {
+            "id": 987,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T09:42:22+05:30",
+            "logout_time": "2026-07-03T17:46:44+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 484,
+            "worked_hours": 8.07,
+            "created_at": "2026-07-03T16:42:22+05:30",
+            "updated_at": "2026-07-06T10:52:10+05:30"
+        },
+        {
+            "id": 986,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T15:37:47+05:30",
+            "logout_time": "2026-07-03T21:26:25+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 349,
+            "worked_hours": 5.82,
+            "created_at": "2026-07-03T15:37:47+05:30",
+            "updated_at": "2026-07-03T21:26:25+05:30"
+        },
+        {
+            "id": 985,
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "date": "2026-07-03",
+            "status": "active",
+            "login_time": "2026-07-03T14:52:32+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-03T14:52:32+05:30",
+            "updated_at": "2026-07-03T14:53:06+05:30"
+        },
+        {
+            "id": 984,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T10:38:48+05:30",
+            "logout_time": "2026-07-03T17:39:27+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 421,
+            "worked_hours": 7.02,
+            "created_at": "2026-07-03T10:38:48+05:30",
+            "updated_at": "2026-07-03T17:39:27+05:30"
+        },
+        {
+            "id": 983,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T10:01:26+05:30",
+            "logout_time": "2026-07-03T19:20:29+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 559,
+            "worked_hours": 9.32,
+            "created_at": "2026-07-03T10:01:26+05:30",
+            "updated_at": "2026-07-03T19:20:29+05:30"
+        },
+        {
+            "id": 982,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T10:01:05+05:30",
+            "logout_time": "2026-07-03T17:56:24+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 475,
+            "worked_hours": 7.92,
+            "created_at": "2026-07-03T10:01:05+05:30",
+            "updated_at": "2026-07-03T17:56:24+05:30"
+        },
+        {
+            "id": 981,
+            "employee": {
+                "id": 20,
+                "name": "Abhiram"
+            },
+            "department": "Marketing",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T09:57:02+05:30",
+            "logout_time": "2026-07-03T17:53:09+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-03T16:34:16+05:30",
+            "lunch_end": "2026-07-03T17:53:04+05:30",
+            "lunch_minutes": 79,
+            "worked_minutes": 397,
+            "worked_hours": 6.62,
+            "created_at": "2026-07-03T09:57:02+05:30",
+            "updated_at": "2026-07-03T17:53:09+05:30"
+        },
+        {
+            "id": 980,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T09:34:36+05:30",
+            "logout_time": "2026-07-03T17:31:18+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 477,
+            "worked_hours": 7.95,
+            "created_at": "2026-07-03T09:34:36+05:30",
+            "updated_at": "2026-07-03T17:31:18+05:30"
+        },
+        {
+            "id": 979,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T09:32:40+05:30",
+            "logout_time": "2026-07-03T17:30:39+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 478,
+            "worked_hours": 7.97,
+            "created_at": "2026-07-03T09:32:40+05:30",
+            "updated_at": "2026-07-03T17:30:39+05:30"
+        },
+        {
+            "id": 978,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T09:31:14+05:30",
+            "logout_time": "2026-07-03T17:33:01+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-03T13:24:20+05:30",
+            "lunch_end": "2026-07-03T15:05:33+05:30",
+            "lunch_minutes": 101,
+            "worked_minutes": 381,
+            "worked_hours": 6.35,
+            "created_at": "2026-07-03T09:31:14+05:30",
+            "updated_at": "2026-07-03T17:33:01+05:30"
+        },
+        {
+            "id": 977,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T09:28:16+05:30",
+            "logout_time": "2026-07-03T17:18:55+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 471,
+            "worked_hours": 7.85,
+            "created_at": "2026-07-03T09:28:16+05:30",
+            "updated_at": "2026-07-03T17:18:55+05:30"
+        },
+        {
+            "id": 976,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T09:27:09+05:30",
+            "logout_time": "2026-07-03T17:29:57+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 483,
+            "worked_hours": 8.05,
+            "created_at": "2026-07-03T09:27:09+05:30",
+            "updated_at": "2026-07-03T17:29:57+05:30"
+        },
+        {
+            "id": 975,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-03",
+            "status": "completed",
+            "login_time": "2026-07-03T09:27:01+05:30",
+            "logout_time": "2026-07-03T17:33:17+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 486,
+            "worked_hours": 8.1,
+            "created_at": "2026-07-03T09:27:01+05:30",
+            "updated_at": "2026-07-03T17:33:17+05:30"
+        },
+        {
+            "id": 974,
+            "employee": {
+                "id": 21,
+                "name": "Ajmal K V"
+            },
+            "department": "Management",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T13:11:08+05:30",
+            "logout_time": "2026-07-02T19:03:09+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 352,
+            "worked_hours": 5.87,
+            "created_at": "2026-07-02T13:11:08+05:30",
+            "updated_at": "2026-07-02T19:03:09+05:30"
+        },
+        {
+            "id": 973,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T11:01:13+05:30",
+            "logout_time": "2026-07-02T21:49:44+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 649,
+            "worked_hours": 10.82,
+            "created_at": "2026-07-02T11:01:13+05:30",
+            "updated_at": "2026-07-02T21:49:44+05:30"
+        },
+        {
+            "id": 972,
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T11:00:02+05:30",
+            "logout_time": "2026-07-02T17:35:37+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-02T13:24:04+05:30",
+            "lunch_end": "2026-07-02T13:53:57+05:30",
+            "lunch_minutes": 30,
+            "worked_minutes": 366,
+            "worked_hours": 6.1,
+            "created_at": "2026-07-02T11:00:02+05:30",
+            "updated_at": "2026-07-02T17:35:37+05:30"
+        },
+        {
+            "id": 971,
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "date": "2026-07-02",
+            "status": "active",
+            "login_time": "2026-07-02T10:03:08+05:30",
+            "logout_time": null,
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": null,
+            "worked_hours": null,
+            "created_at": "2026-07-02T10:03:08+05:30",
+            "updated_at": "2026-07-02T10:03:10+05:30"
+        },
+        {
+            "id": 970,
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T09:46:02+05:30",
+            "logout_time": "2026-07-02T17:51:07+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 485,
+            "worked_hours": 8.08,
+            "created_at": "2026-07-02T09:46:02+05:30",
+            "updated_at": "2026-07-06T10:51:24+05:30"
+        },
+        {
+            "id": 969,
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T09:42:52+05:30",
+            "logout_time": "2026-07-02T18:19:57+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 517,
+            "worked_hours": 8.62,
+            "created_at": "2026-07-02T09:42:52+05:30",
+            "updated_at": "2026-07-02T18:19:57+05:30"
+        },
+        {
+            "id": 968,
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T09:39:11+05:30",
+            "logout_time": "2026-07-02T17:26:49+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 468,
+            "worked_hours": 7.8,
+            "created_at": "2026-07-02T09:39:11+05:30",
+            "updated_at": "2026-07-02T17:26:49+05:30"
+        },
+        {
+            "id": 967,
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T09:34:05+05:30",
+            "logout_time": "2026-07-02T17:33:44+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 480,
+            "worked_hours": 8,
+            "created_at": "2026-07-02T09:34:05+05:30",
+            "updated_at": "2026-07-02T17:33:44+05:30"
+        },
+        {
+            "id": 966,
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T09:29:09+05:30",
+            "logout_time": "2026-07-03T10:35:18+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 1506,
+            "worked_hours": 25.1,
+            "created_at": "2026-07-02T09:29:09+05:30",
+            "updated_at": "2026-07-03T10:35:18+05:30"
+        },
+        {
+            "id": 965,
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T09:16:15+05:30",
+            "logout_time": "2026-07-02T17:29:09+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 493,
+            "worked_hours": 8.22,
+            "created_at": "2026-07-02T09:16:15+05:30",
+            "updated_at": "2026-07-02T17:29:09+05:30"
+        },
+        {
+            "id": 964,
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T09:13:43+05:30",
+            "logout_time": "2026-07-02T17:42:45+05:30",
+            "logout_estimated": false,
+            "lunch_start": "2026-07-02T13:01:06+05:30",
+            "lunch_end": "2026-07-02T13:37:15+05:30",
+            "lunch_minutes": 36,
+            "worked_minutes": 473,
+            "worked_hours": 7.88,
+            "created_at": "2026-07-02T09:13:43+05:30",
+            "updated_at": "2026-07-02T17:42:45+05:30"
+        },
+        {
+            "id": 963,
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "date": "2026-07-02",
+            "status": "completed",
+            "login_time": "2026-07-02T09:07:21+05:30",
+            "logout_time": "2026-07-02T17:48:49+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 521,
+            "worked_hours": 8.68,
+            "created_at": "2026-07-02T09:07:21+05:30",
+            "updated_at": "2026-07-02T17:48:49+05:30"
+        },
+        {
+            "id": 962,
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "date": "2026-07-01",
+            "status": "completed",
+            "login_time": "2026-07-01T14:48:24+05:30",
+            "logout_time": "2026-07-01T23:57:21+05:30",
+            "logout_estimated": false,
+            "lunch_start": null,
+            "lunch_end": null,
+            "lunch_minutes": null,
+            "worked_minutes": 549,
+            "worked_hours": 9.15,
+            "created_at": "2026-07-01T14:48:24+05:30",
+            "updated_at": "2026-07-01T23:57:21+05:30"
+        }
+    ]
+}

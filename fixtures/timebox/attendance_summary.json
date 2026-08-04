@@ -1,0 +1,436 @@
+{
+    "ok": true,
+    "resource": "attendance_summary",
+    "range": {
+        "from": "2026-07-01",
+        "to": "2026-07-31"
+    },
+    "count": 21,
+    "limit": 5000,
+    "offset": 0,
+    "has_more": false,
+    "next_offset": null,
+    "generated_at": "2026-08-03T16:16:00+05:30",
+    "data": [
+        {
+            "employee": {
+                "id": 2,
+                "name": "Arjun km"
+            },
+            "department": "Sales",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 13,
+            "days_with_logout": 10,
+            "days_no_logout": 3,
+            "days_hours_estimated": 0,
+            "hours_worked": 89.7,
+            "attendance_percent": 57
+        },
+        {
+            "employee": {
+                "id": 3,
+                "name": "SARANYA C "
+            },
+            "department": "CRM",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 14,
+            "days_with_logout": 12,
+            "days_no_logout": 2,
+            "days_hours_estimated": 0,
+            "hours_worked": 104.7,
+            "attendance_percent": 61
+        },
+        {
+            "employee": {
+                "id": 4,
+                "name": "Aysha Mehna.k"
+            },
+            "department": "CRM",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 0,
+            "days_with_logout": 0,
+            "days_no_logout": 0,
+            "days_hours_estimated": 0,
+            "hours_worked": 0,
+            "attendance_percent": 0
+        },
+        {
+            "employee": {
+                "id": 7,
+                "name": "Amrutha N"
+            },
+            "department": "Finance",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 14,
+            "days_with_logout": 13,
+            "days_no_logout": 1,
+            "days_hours_estimated": 0,
+            "hours_worked": 103.3,
+            "attendance_percent": 61
+        },
+        {
+            "employee": {
+                "id": 9,
+                "name": "Nihala"
+            },
+            "department": "HR",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 12,
+            "days_with_logout": 11,
+            "days_no_logout": 1,
+            "days_hours_estimated": 0,
+            "hours_worked": 92.5,
+            "attendance_percent": 52
+        },
+        {
+            "employee": {
+                "id": 10,
+                "name": "shuhaib"
+            },
+            "department": "IT",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 14,
+            "days_with_logout": 14,
+            "days_no_logout": 0,
+            "days_hours_estimated": 3,
+            "hours_worked": 79.8,
+            "attendance_percent": 61
+        },
+        {
+            "employee": {
+                "id": 12,
+                "name": "Bisna"
+            },
+            "department": "Finance",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 14,
+            "days_with_logout": 11,
+            "days_no_logout": 3,
+            "days_hours_estimated": 0,
+            "hours_worked": 97.2,
+            "attendance_percent": 61
+        },
+        {
+            "employee": {
+                "id": 13,
+                "name": "Veena"
+            },
+            "department": "HR",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 0,
+            "days_with_logout": 0,
+            "days_no_logout": 0,
+            "days_hours_estimated": 0,
+            "hours_worked": 0,
+            "attendance_percent": 0
+        },
+        {
+            "employee": {
+                "id": 14,
+                "name": "Risan"
+            },
+            "department": "IT",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 12,
+            "days_with_logout": 11,
+            "days_no_logout": 1,
+            "days_hours_estimated": 0,
+            "hours_worked": 96.6,
+            "attendance_percent": 52
+        },
+        {
+            "employee": {
+                "id": 16,
+                "name": "Muhammed Midlaj K P"
+            },
+            "department": "IT",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 12,
+            "days_with_logout": 11,
+            "days_no_logout": 1,
+            "days_hours_estimated": 1,
+            "hours_worked": 96.1,
+            "attendance_percent": 52
+        },
+        {
+            "employee": {
+                "id": 17,
+                "name": "Akash"
+            },
+            "department": "IT",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 21,
+            "days_with_logout": 21,
+            "days_no_logout": 0,
+            "days_hours_estimated": 6,
+            "hours_worked": 129.7,
+            "attendance_percent": 91
+        },
+        {
+            "employee": {
+                "id": 18,
+                "name": "Preethy Babu"
+            },
+            "department": "Operations",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 14,
+            "days_with_logout": 11,
+            "days_no_logout": 3,
+            "days_hours_estimated": 0,
+            "hours_worked": 107.3,
+            "attendance_percent": 61
+        },
+        {
+            "employee": {
+                "id": 19,
+                "name": "Mohammed Swalih"
+            },
+            "department": "Operations",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 8,
+            "days_with_logout": 1,
+            "days_no_logout": 7,
+            "days_hours_estimated": 0,
+            "hours_worked": 13.5,
+            "attendance_percent": 35
+        },
+        {
+            "employee": {
+                "id": 20,
+                "name": "Abhiram"
+            },
+            "department": "Marketing",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 7,
+            "days_with_logout": 6,
+            "days_no_logout": 1,
+            "days_hours_estimated": 0,
+            "hours_worked": 58.2,
+            "attendance_percent": 30
+        },
+        {
+            "employee": {
+                "id": 21,
+                "name": "Ajmal K V"
+            },
+            "department": "Management",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 6,
+            "days_with_logout": 3,
+            "days_no_logout": 3,
+            "days_hours_estimated": 0,
+            "hours_worked": 23.8,
+            "attendance_percent": 26
+        },
+        {
+            "employee": {
+                "id": 22,
+                "name": "Jasim"
+            },
+            "department": "Management",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 9,
+            "days_with_logout": 1,
+            "days_no_logout": 8,
+            "days_hours_estimated": 0,
+            "hours_worked": 0,
+            "attendance_percent": 39
+        },
+        {
+            "employee": {
+                "id": 23,
+                "name": "Shahan M"
+            },
+            "department": "Marketing",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 13,
+            "days_with_logout": 11,
+            "days_no_logout": 2,
+            "days_hours_estimated": 0,
+            "hours_worked": 85.8,
+            "attendance_percent": 57
+        },
+        {
+            "employee": {
+                "id": 24,
+                "name": "Adithya M Nair"
+            },
+            "department": "Sales",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 7,
+            "days_with_logout": 5,
+            "days_no_logout": 2,
+            "days_hours_estimated": 0,
+            "hours_worked": 38.7,
+            "attendance_percent": 30
+        },
+        {
+            "employee": {
+                "id": 25,
+                "name": "Rosna S"
+            },
+            "department": "Finance",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 10,
+            "days_with_logout": 9,
+            "days_no_logout": 1,
+            "days_hours_estimated": 0,
+            "hours_worked": 64.7,
+            "attendance_percent": 43
+        },
+        {
+            "employee": {
+                "id": 26,
+                "name": "Anagha"
+            },
+            "department": "Sales",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 8,
+            "days_with_logout": 7,
+            "days_no_logout": 1,
+            "days_hours_estimated": 0,
+            "hours_worked": 68.9,
+            "attendance_percent": 35
+        },
+        {
+            "employee": {
+                "id": 27,
+                "name": "Test"
+            },
+            "department": "Manager",
+            "range": {
+                "from": "2026-07-01",
+                "to": "2026-07-31"
+            },
+            "expected_days": 23,
+            "working_days_gross": 23,
+            "excused_leave_days": 0,
+            "days_present": 0,
+            "days_with_logout": 0,
+            "days_no_logout": 0,
+            "days_hours_estimated": 0,
+            "hours_worked": 0,
+            "attendance_percent": 0
+        }
+    ]
+}
