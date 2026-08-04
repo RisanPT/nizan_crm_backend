@@ -166,14 +166,34 @@ async function liveFetch(resource, params = {}) {
     if (rows.length === 0) break;
   }
 
+  let filtered = all;
+  const empId = params.employee_id != null ? Number(params.employee_id) : null;
+  if (empId != null && !Number.isNaN(empId)) {
+    filtered = filtered.filter((r) => {
+      const id = r.employee?.id ?? r.id;
+      return Number(id) === empId;
+    });
+  }
+
+  const from = params.from ? String(params.from).slice(0, 10) : null;
+  const to = params.to ? String(params.to).slice(0, 10) : null;
+  if ((from || to) && resource !== 'employees' && resource !== 'attendance_summary') {
+    filtered = filtered.filter((r) => {
+      const d = recordDateOnly(r);
+      if (from && d < from) return false;
+      if (to && d > to) return false;
+      return true;
+    });
+  }
+
   return {
     ok: true,
     resource,
     range,
     generated_at: generatedAt,
     source: 'live',
-    count: all.length,
-    data: all,
+    count: filtered.length,
+    data: filtered,
   };
 }
 
