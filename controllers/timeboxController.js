@@ -6,11 +6,17 @@
  *   HR   →  employee directory, daily attendance, monthly attendance summary,
  *           and the daily "timebox" worklist / braindump / schedule.
  *   Accounts → attendance-driven payroll: joins each Timebox attendance summary
- *           to the matching CRM Employee (by email, name fallback) and computes
- *           an attendance pro-rated payable, then can generate administrative
- *           salary slips from it.
+ *           to the matching CRM Employee (by timeboxEmployeeId first, then email,
+ *           then name) and computes an attendance pro-rated payable, then can
+ *           generate administrative salary slips from it.
  *
  * Data comes from services/timeboxClient.js which is live-or-demo transparent.
+ *
+ * Matching priority:
+ *   1. CRM Employee.timeboxEmployeeId === Timebox id     → matchedBy: 'id'
+ *   2. CRM Employee.email === Timebox email (normalised) → matchedBy: 'email'
+ *   3. CRM Employee.name === Timebox name (normalised)   → matchedBy: 'name'
+ *   4. No match                                          → matchedBy: 'none'
  */
 
 import { timeboxFetch, timeboxMode } from '../services/timeboxClient.js';
@@ -33,29 +39,46 @@ function defaultRange() {
   return { from: iso(first), to: iso(last) };
 }
 
-/** Build lookup maps of CRM employees keyed by normalised email and name. */
+/**
+ * Build lookup maps of CRM employees keyed by:
+ *   - timeboxEmployeeId (Number)   → for primary binding match
+ *   - normalised email             → for email match
+ *   - normalised name              → for name match
+ */
 async function crmEmployeeIndex() {
   const emps = await Employee.find({}).lean();
+  const byTimeboxId = new Map();
   const byEmail = new Map();
   const byName = new Map();
   for (const e of emps) {
+    if (e.timeboxEmployeeId != null) byTimeboxId.set(Number(e.timeboxEmployeeId), e);
     if (e.email) byEmail.set(norm(e.email), e);
     if (e.name) byName.set(norm(e.name), e);
   }
-  return { byEmail, byName, all: emps };
+  return { byTimeboxId, byEmail, byName, all: emps };
 }
 
-/** Match a Timebox employee record to a CRM employee (email first, then name). */
-function matchCrm(index, { email, name }) {
+/**
+ * Match a Timebox employee record to a CRM employee.
+ * Returns { crm, matchedBy } where matchedBy is 'id' | 'email' | 'name' | 'none'.
+ */
+function matchCrm(index, { id, email, name }) {
+  // 1. Explicit Timebox ID binding (set by sync-employees)
+  if (id != null) {
+    const hit = index.byTimeboxId.get(Number(id));
+    if (hit) return { crm: hit, matchedBy: 'id' };
+  }
+  // 2. Email match
   if (email) {
     const hit = index.byEmail.get(norm(email));
-    if (hit) return hit;
+    if (hit) return { crm: hit, matchedBy: 'email' };
   }
+  // 3. Exact name match
   if (name) {
     const hit = index.byName.get(norm(name));
-    if (hit) return hit;
+    if (hit) return { crm: hit, matchedBy: 'name' };
   }
-  return null;
+  return { crm: null, matchedBy: 'none' };
 }
 
 // ── GET /api/timebox/employees ────────────────────────────────────────────────
@@ -133,6 +156,125 @@ export const getTimeboxDays = async (req, res) => {
   }
 };
 
+// ── POST /api/timebox/sync-employees ─────────────────────────────────────────
+/**
+ * Scan all Timebox employees, find matching CRM employee records by email or
+ * name, and write back the `timeboxEmployeeId` + `timeboxName` onto the CRM
+ * Employee document so future payroll runs use the permanent integer ID match.
+ *
+ * Safe to run multiple times (idempotent). Never creates new CRM employees.
+ *
+ * Returns a summary: { synced, alreadySynced, unmatched, conflicts }
+ */
+export const syncEmployees = async (req, res) => {
+  try {
+    const empRes = await timeboxFetch('employees');
+    const tbEmployees = empRes.data;
+
+    // Build a fresh CRM index (by email + name — NOT by timeboxId yet, since
+    // this is the sync that establishes those bindings).
+    const crmEmps = await Employee.find({}).lean();
+    const byEmail = new Map();
+    const byName = new Map();
+    for (const e of crmEmps) {
+      if (e.email) byEmail.set(norm(e.email), e);
+      if (e.name) byName.set(norm(e.name), e);
+    }
+
+    let synced = 0;
+    let alreadySynced = 0;
+    let unmatched = 0;
+    const conflicts = [];
+    const results = [];
+
+    for (const tb of tbEmployees) {
+      const tbId = Number(tb.id);
+      const tbEmail = norm(tb.email || '');
+      const tbName = tb.full_name || tb.name || '';
+
+      // Attempt match: email first, then name
+      let crmMatch = tbEmail ? byEmail.get(tbEmail) : null;
+      let matchedBy = crmMatch ? 'email' : null;
+
+      if (!crmMatch && tbName) {
+        crmMatch = byName.get(norm(tbName));
+        if (crmMatch) matchedBy = 'name';
+      }
+
+      if (!crmMatch) {
+        unmatched += 1;
+        results.push({ timeboxId: tbId, timeboxName: tbName, matched: false, reason: 'no_crm_match' });
+        continue;
+      }
+
+      // Check for conflicts: two Timebox employees binding to the same CRM employee
+      if (crmMatch.timeboxEmployeeId != null && Number(crmMatch.timeboxEmployeeId) !== tbId) {
+        conflicts.push({
+          timeboxId: tbId,
+          timeboxName: tbName,
+          crmName: crmMatch.name,
+          existingTimeboxId: crmMatch.timeboxEmployeeId,
+        });
+        results.push({
+          timeboxId: tbId,
+          timeboxName: tbName,
+          crmId: String(crmMatch._id),
+          crmName: crmMatch.name,
+          matched: false,
+          reason: 'conflict',
+        });
+        continue;
+      }
+
+      // Already synced with the same ID — skip update
+      if (Number(crmMatch.timeboxEmployeeId) === tbId) {
+        alreadySynced += 1;
+        results.push({
+          timeboxId: tbId,
+          timeboxName: tbName,
+          crmId: String(crmMatch._id),
+          crmName: crmMatch.name,
+          matched: true,
+          matchedBy,
+          action: 'already_synced',
+        });
+        continue;
+      }
+
+      // Write the binding back to CRM
+      await Employee.findByIdAndUpdate(crmMatch._id, {
+        timeboxEmployeeId: tbId,
+        timeboxName: tbName,
+      });
+
+      synced += 1;
+      results.push({
+        timeboxId: tbId,
+        timeboxName: tbName,
+        crmId: String(crmMatch._id),
+        crmName: crmMatch.name,
+        matched: true,
+        matchedBy,
+        action: 'synced',
+      });
+    }
+
+    res.json({
+      ok: true,
+      mode: timeboxMode(),
+      synced,
+      alreadySynced,
+      unmatched,
+      conflictCount: conflicts.length,
+      conflicts,
+      results,
+      message: `Synced ${synced} employees. ${alreadySynced} already linked. ${unmatched} unmatched. ${conflicts.length} conflicts.`,
+    });
+  } catch (err) {
+    res.status(500).json({ ok: false, message: `Timebox sync error: ${err.message}` });
+  }
+};
+
 // ── payroll computation shared by preview + generate ──────────────────────────
 /**
  * Build attendance-pro-rated payroll rows for a date range.
@@ -158,7 +300,7 @@ async function buildPayroll({ from, to }) {
     const email = tb.email || '';
     const name = s.employee?.name || tb.full_name || '';
 
-    const crm = matchCrm(index, { email, name });
+    const { crm, matchedBy } = matchCrm(index, { id: tbId, email, name });
 
     const baseSalary = round0(crm?.baseSalary);
     const allowances = round0(crm?.allowances);
@@ -181,6 +323,7 @@ async function buildPayroll({ from, to }) {
       email,
       department: s.department || tb.department || crm?.department || '',
       matched: !!crm,
+      matchedBy,
       crmEmployeeId: crm?._id ? String(crm._id) : null,
       salaryType: crm?.salaryType || null,
       baseSalary,
@@ -265,6 +408,7 @@ export const generatePayrollFromAttendance = async (req, res) => {
         `Attendance ${r.daysPresent}/${r.expectedDays} days ` +
         `(${r.attendancePercent}%) · ${r.hoursWorked}h worked. ` +
         `Absence deduction ₹${r.absenceDeduction}. ` +
+        `Matched by: ${r.matchedBy}. ` +
         `[Timebox ${range.from}→${range.to}]`;
 
       const existing = await Salary.findOne({
@@ -296,7 +440,7 @@ export const generatePayrollFromAttendance = async (req, res) => {
         existing.approvedAt = new Date();
         await existing.save();
         updated += 1;
-        affected.push({ name: r.name, netAmount, action: 'update' });
+        affected.push({ name: r.name, netAmount, action: 'update', matchedBy: r.matchedBy });
       } else {
         const crm = await Employee.findById(r.crmEmployeeId).lean();
         await Salary.create({
@@ -325,7 +469,7 @@ export const generatePayrollFromAttendance = async (req, res) => {
           approvedAt: new Date(),
         });
         created += 1;
-        affected.push({ name: r.name, netAmount, action: 'create' });
+        affected.push({ name: r.name, netAmount, action: 'create', matchedBy: r.matchedBy });
       }
     }
 

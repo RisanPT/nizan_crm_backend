@@ -124,6 +124,18 @@ const employeeSchema = mongoose.Schema(
       default: '',
       trim: true,
     },
+    // ── Timebox attendance software link ──────────────────────────────────────
+    // Populated by POST /api/timebox/sync-employees. Once set, this is the
+    // primary match key (beats email + name) so renames never break payroll.
+    timeboxEmployeeId: {
+      type: Number,
+      default: null,
+    },
+    timeboxName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
   },
   {
     timestamps: true,

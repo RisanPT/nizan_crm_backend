@@ -7,6 +7,7 @@ import {
   getTimeboxDays,
   getPayrollPreview,
   generatePayrollFromAttendance,
+  syncEmployees,
 } from '../controllers/timeboxController.js';
 
 const router = express.Router();
@@ -20,6 +21,9 @@ router.get('/employees', getTimeboxEmployees);
 router.get('/attendance', getTimeboxAttendance);              // ?from=&to=&employee_id=
 router.get('/attendance-summary', getAttendanceSummary);     // ?from=&to=
 router.get('/days', getTimeboxDays);                         // ?from=&to=&employee_id=
+
+// Sync — write Timebox IDs back onto CRM employees for stable matching
+router.post('/sync-employees', syncEmployees);
 
 // Accounts — attendance-driven payroll
 router.get('/payroll-preview', getPayrollPreview);           // ?from=&to=
