@@ -120,9 +120,27 @@ async function liveFetch(resource, params = {}) {
     qs.set('limit', String(PAGE_SIZE));
     qs.set('offset', String(offset));
 
-    const url = `${TIMEBOX_URL}/${resourcePath}?${qs.toString()}`;
+    let url;
+    if (TIMEBOX_URL.endsWith('.php')) {
+      qs.set('resource', resource);
+      url = `${TIMEBOX_URL}?${qs.toString()}`;
+    } else {
+      url = `${TIMEBOX_URL}/${resourcePath}?${qs.toString()}`;
+    }
+
+    const headers = {};
+    if (TIMEBOX_KEY) {
+      if (TIMEBOX_HEADER.toLowerCase() === 'authorization') {
+        headers[TIMEBOX_HEADER] = TIMEBOX_KEY.toLowerCase().startsWith('bearer ')
+          ? TIMEBOX_KEY
+          : `Bearer ${TIMEBOX_KEY}`;
+      } else {
+        headers[TIMEBOX_HEADER] = TIMEBOX_KEY;
+      }
+    }
+
     const res = await fetch(url, {
-      headers: TIMEBOX_KEY ? { [TIMEBOX_HEADER]: TIMEBOX_KEY } : {},
+      headers,
       signal: AbortSignal.timeout(15_000),
     });
 
