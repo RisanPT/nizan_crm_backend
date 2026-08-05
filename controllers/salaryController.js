@@ -51,6 +51,10 @@ export const getSalaries = async (req, res) => {
     let totalPaid = 0;
     let totalPending = 0;
     let totalNet = 0;
+    let draftCount = 0;
+    let draftAmount = 0;
+    let approvedCount = 0;
+    let approvedAmount = 0;
 
     for (const s of allForPeriod) {
       const net = s.netAmount || 0;
@@ -66,6 +70,13 @@ export const getSalaries = async (req, res) => {
         totalPaid += net;
       } else if (s.status !== 'cancelled') {
         totalPending += net;
+        if (s.status === 'draft') {
+          draftCount++;
+          draftAmount += net;
+        } else if (s.status === 'approved_by_hr') {
+          approvedCount++;
+          approvedAmount += net;
+        }
       }
     }
 
@@ -77,7 +88,11 @@ export const getSalaries = async (req, res) => {
         totalPaid,
         totalPending,
         totalNet,
-        count: salaries.length,
+        draftCount,
+        draftAmount,
+        approvedCount,
+        approvedAmount,
+        count: allForPeriod.length,
       },
     });
   } catch (error) {
@@ -136,15 +151,15 @@ export const generateMonthlySalaries = async (req, res) => {
           bonus,
           deductions,
           netAmount,
-          status: 'approved_by_hr',
+          status: 'draft',
           bankDetails: {
             bankName: emp.bankName || '',
             accountNumber: emp.accountNumber || '',
             ifscCode: emp.ifscCode || '',
             upiId: emp.upiId || '',
           },
-          approvedBy: req.user?._id || null,
-          approvedAt: new Date(),
+          approvedBy: null,
+          approvedAt: null,
         });
         createdCount++;
       } else {
@@ -212,7 +227,7 @@ export const createSalary = async (req, res) => {
       bonus: bon,
       deductions: ded,
       netAmount,
-      status: status || 'approved_by_hr',
+      status: status || 'draft',
       notes: notes || '',
       bankDetails: {
         bankName: employee.bankName || '',
@@ -220,8 +235,8 @@ export const createSalary = async (req, res) => {
         ifscCode: employee.ifscCode || '',
         upiId: employee.upiId || '',
       },
-      approvedBy: req.user?._id || null,
-      approvedAt: new Date(),
+      approvedBy: status === 'approved_by_hr' ? (req.user?._id || null) : null,
+      approvedAt: status === 'approved_by_hr' ? new Date() : null,
     });
 
     const populated = await Salary.findById(salary._id)
@@ -362,6 +377,36 @@ export const deleteSalary = async (req, res) => {
 
     await salary.deleteOne();
     res.json({ message: 'Salary slip removed' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Submit all draft salaries for a specific month/year to Accounts
+// @route   POST /api/salaries/submit
+// @access  Private
+export const submitPayrollToAccounts = async (req, res) => {
+  try {
+    const { month, year } = req.body;
+    if (!month || !year) {
+      return res.status(400).json({ message: 'Month and year are required' });
+    }
+
+    const result = await Salary.updateMany(
+      { month: Number(month), year: Number(year), status: 'draft' },
+      { 
+        $set: { 
+          status: 'approved_by_hr', 
+          approvedBy: req.user?._id || null, 
+          approvedAt: new Date() 
+        } 
+      }
+    );
+
+    res.json({
+      message: `Submitted ${result.modifiedCount} payroll records to Accounts.`,
+      modifiedCount: result.modifiedCount,
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

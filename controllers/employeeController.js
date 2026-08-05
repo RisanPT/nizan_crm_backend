@@ -1,4 +1,5 @@
 import Employee from '../models/Employee.js';
+import SalaryIncrement from '../models/SalaryIncrement.js';
 import mongoose from 'mongoose';
 
 const normalizeWorks = (works, fallbackSpecialization = '') => {
@@ -386,6 +387,51 @@ export const deleteEmployee = async (req, res) => {
 
     await employee.deleteOne();
     res.json({ message: 'Employee removed' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Get employee salary increments
+// @route   GET /api/employees/:id/increments
+// @access  Private
+export const getEmployeeIncrements = async (req, res) => {
+  try {
+    const increments = await SalaryIncrement.find({ employeeId: req.params.id })
+      .populate('appliedBy', 'name')
+      .sort({ createdAt: -1 });
+    res.json(increments);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Add employee salary increment
+// @route   POST /api/employees/:id/increments
+// @access  Private
+export const addEmployeeIncrement = async (req, res) => {
+  const { newSalary, reason, effectiveDate } = req.body;
+  try {
+    const employee = await Employee.findById(req.params.id);
+    if (!employee) {
+      return res.status(404).json({ message: 'Employee not found' });
+    }
+
+    const previousSalary = employee.baseSalary;
+
+    const increment = await SalaryIncrement.create({
+      employeeId: employee._id,
+      previousSalary,
+      newSalary,
+      reason,
+      effectiveDate: effectiveDate || Date.now(),
+      appliedBy: req.user?._id || null,
+    });
+
+    employee.baseSalary = newSalary;
+    await employee.save();
+
+    res.status(201).json(increment);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

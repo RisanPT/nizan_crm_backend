@@ -39,6 +39,20 @@ function defaultRange() {
   return { from: iso(first), to: iso(last) };
 }
 
+/** Helper to count weekend days (Saturdays and Sundays) in a given date range. */
+function countWeekends(fromStr, toStr) {
+  let start = new Date(`${fromStr}T00:00:00`);
+  let end = new Date(`${toStr}T00:00:00`);
+  let count = 0;
+  let current = new Date(start);
+  while (current <= end) {
+    const day = current.getDay();
+    if (day === 0 || day === 6) count++;
+    current.setDate(current.getDate() + 1);
+  }
+  return count;
+}
+
 /**
  * Build lookup maps of CRM employees keyed by:
  *   - timeboxEmployeeId (Number)   → for primary binding match
@@ -306,13 +320,33 @@ async function buildPayroll({ from, to }) {
     const allowances = round0(crm?.allowances);
     const deductions = round0(crm?.deductions);
 
-    const expectedDays = Number(s.expected_days) || 0;
+    let expectedDays = Number(s.expected_days) || 0;
     const daysPresent = Number(s.days_present) || 0;
     const hoursWorked = Number(s.hours_worked) || 0;
-    const attendancePercent = Number(s.attendance_percent) || 0;
+    let attendancePercent = Number(s.attendance_percent) || 0;
+
+    const department = s.department || tb.department || crm?.department || '';
+    
+    // IT Department weekend logic override
+    if (department.toLowerCase() === 'it') {
+      const weekends = countWeekends(range.from, range.to);
+      expectedDays = Math.max(0, expectedDays - weekends);
+      if (expectedDays > 0) {
+        attendancePercent = Math.round(Math.min(100, (daysPresent / expectedDays) * 100));
+      } else {
+        attendancePercent = 100;
+      }
+    }
+
+    // One paid leave per month logic for all departments
+    let effectiveDaysPresent = daysPresent;
+    const absentDays = expectedDays - daysPresent;
+    if (absentDays > 0) {
+      effectiveDaysPresent += Math.min(1, absentDays);
+    }
 
     const factor =
-      expectedDays > 0 ? Math.min(1, daysPresent / expectedDays) : 0;
+      expectedDays > 0 ? Math.min(1, effectiveDaysPresent / expectedDays) : (effectiveDaysPresent > 0 ? 1 : 0);
     const proratedBase = round0(baseSalary * factor);
     const absenceDeduction = Math.max(0, baseSalary - proratedBase);
     const netPayable = Math.max(0, proratedBase + allowances - deductions);
@@ -321,7 +355,7 @@ async function buildPayroll({ from, to }) {
       timeboxId: tbId,
       name,
       email,
-      department: s.department || tb.department || crm?.department || '',
+      department,
       matched: !!crm,
       matchedBy,
       crmEmployeeId: crm?._id ? String(crm._id) : null,
