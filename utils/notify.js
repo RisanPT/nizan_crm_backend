@@ -18,7 +18,14 @@ export const NOTIFICATION_TYPES = {
   LOST_REQUESTED: 'lost_requested',
   LOST_RESULT: 'lost_result',
   BOOKING_CREATED: 'booking_created',
+  MONTH_END_SUMMARY: 'month_end_summary',
 };
+
+// Stakeholders (admin accounts) are not part of the day-to-day operational
+// notification stream — they only want the month-end summary. Any notification
+// whose type is NOT in this set is never delivered to an admin, no matter which
+// roles a controller passes to notify()/notifyRoles().
+export const ADMIN_ALLOWED_TYPES = new Set([NOTIFICATION_TYPES.MONTH_END_SUMMARY]);
 
 const idStr = (v) => (v == null ? '' : String(v._id ?? v));
 
@@ -78,10 +85,25 @@ export const notify = async ({
   try {
     const exclude = idStr(excludeUserId);
     // Unique, non-empty recipient ids, minus the excluded actor.
-    const ids = [...new Set(recipients.map(idStr).filter(Boolean))].filter(
+    let ids = [...new Set(recipients.map(idStr).filter(Boolean))].filter(
       (id) => id !== exclude
     );
     if (ids.length === 0) return;
+
+    // Suppress operational notifications for stakeholders (admins) — they only
+    // receive the month-end summary. Applied centrally so every controller and
+    // every role fan-out (notifyRoles, MANAGER_AND_ADMIN_ROLES, etc.) obeys it.
+    if (!ADMIN_ALLOWED_TYPES.has(type)) {
+      const admins = await User.find({
+        _id: { $in: ids },
+        role: { $in: ADMIN_ROLES },
+      }).select('_id');
+      if (admins.length) {
+        const adminSet = new Set(admins.map((u) => String(u._id)));
+        ids = ids.filter((id) => !adminSet.has(id));
+      }
+      if (ids.length === 0) return;
+    }
 
     let targets = ids;
     if (dedupe) {

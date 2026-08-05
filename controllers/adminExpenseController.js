@@ -1,4 +1,5 @@
 import AdminExpense from '../models/AdminExpense.js';
+import Salary from '../models/Salary.js';
 import { notifyRoles } from '../utils/notify.js';
 
 const expensePopulate = [
@@ -48,9 +49,73 @@ export const getAdminExpenses = async (req, res) => {
 
     const expenses = await AdminExpense.find(filter)
       .populate(expensePopulate)
-      .sort({ date: -1, createdAt: -1 });
+      .lean();
 
-    res.json(expenses);
+    let salaries = [];
+    if (!category || category === 'All' || category === 'other') {
+      const salaryFilter = { status: 'paid' };
+      
+      if (department && department !== 'All') {
+        salaryFilter.department = department;
+      }
+
+      if (startDate || endDate) {
+        salaryFilter.paymentDate = {};
+        if (startDate) {
+          salaryFilter.paymentDate.$gte = new Date(startDate);
+        }
+        if (endDate) {
+          const end = new Date(endDate);
+          end.setHours(23, 59, 59, 999);
+          salaryFilter.paymentDate.$lte = end;
+        }
+      }
+
+      if (search) {
+        const searchRegex = new RegExp(search, 'i');
+        salaryFilter.$or = [
+          { employeeName: searchRegex },
+          { notes: searchRegex }
+        ];
+      }
+
+      salaries = await Salary.find(salaryFilter)
+        .populate('employeeId', 'name phone department artistRole status')
+        .populate('approvedBy', 'name role')
+        .populate('paidBy', 'name role')
+        .lean();
+    }
+
+    const formattedSalaries = salaries.map(s => ({
+      _id: s._id,
+      title: `Salary - ${s.employeeName} (${s.month}/${s.year})`,
+      department: s.department || 'General',
+      category: 'other',
+      amount: s.netAmount || 0,
+      date: s.paymentDate || s.createdAt,
+      paymentMethod: s.paymentMethod || 'bank_transfer',
+      paidBy: s.paidBy,
+      paidByName: s.employeeName,
+      receiptImage: '',
+      invoiceNumber: '',
+      notes: s.notes || 'Auto-integrated from Payroll',
+      status: 'approved',
+      createdBy: s.paidBy,
+      approvedBy: s.approvedBy,
+      approvedAt: s.approvedAt,
+      createdAt: s.createdAt,
+      updatedAt: s.updatedAt,
+      isSalary: true,
+    }));
+
+    const combined = [...expenses, ...formattedSalaries].sort((a, b) => {
+      const dateA = new Date(a.date).getTime();
+      const dateB = new Date(b.date).getTime();
+      if (dateB !== dateA) return dateB - dateA;
+      return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+    });
+
+    res.json(combined);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -88,6 +153,21 @@ export const getAdminExpenseStats = async (req, res) => {
       }
 
       const dept = exp.department || 'General';
+      departmentBreakdown[dept] = (departmentBreakdown[dept] || 0) + amt;
+    }
+
+    const allSalaries = await Salary.find({ status: 'paid' });
+    for (const salary of allSalaries) {
+      const amt = Number(salary.netAmount) || 0;
+      totalAmount += amt;
+      approvedAmount += amt;
+
+      const salaryDate = salary.paymentDate ? new Date(salary.paymentDate) : new Date(salary.year, salary.month - 1, 15);
+      if (salaryDate >= startOfMonth && salaryDate <= endOfMonth) {
+        thisMonthAmount += amt;
+      }
+
+      const dept = salary.department || 'General';
       departmentBreakdown[dept] = (departmentBreakdown[dept] || 0) + amt;
     }
 
