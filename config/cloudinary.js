@@ -36,4 +36,8 @@ const storage = new CloudinaryStorage({
 
 const upload = multer({ storage: storage });
 
-export { cloudinary, upload };
+// For raw document uploads (PDF, Excel) using memory storage
+const memoryStorage = multer.memoryStorage();
+const uploadDoc = multer({ storage: memoryStorage });
+
+export { cloudinary, upload, uploadDoc };
