@@ -203,6 +203,12 @@ export const createAdminExpense = async (req, res) => {
       title,
       department,
       category,
+      expenseHead,
+      vendor,
+      costTag,
+      isRecurring,
+      gstType,
+      gstAmount,
       amount,
       date,
       paymentMethod,
@@ -219,6 +225,12 @@ export const createAdminExpense = async (req, res) => {
       title,
       department: department || 'General',
       category: category || 'other',
+      expenseHead: expenseHead || '',
+      vendor: vendor || '',
+      costTag: costTag || '',
+      isRecurring: isRecurring === true || isRecurring === 'true',
+      gstType: gstType || 'none',
+      gstAmount: Number(gstAmount) || 0,
       amount: amountNum,
       date: date ? new Date(date) : new Date(),
       paymentMethod: paymentMethod || 'bank_transfer',
@@ -261,6 +273,12 @@ export const updateAdminExpense = async (req, res) => {
       title,
       department,
       category,
+      expenseHead,
+      vendor,
+      costTag,
+      isRecurring,
+      gstType,
+      gstAmount,
       amount,
       date,
       paymentMethod,
@@ -275,6 +293,12 @@ export const updateAdminExpense = async (req, res) => {
     if (title !== undefined) expense.title = title;
     if (department !== undefined) expense.department = department;
     if (category !== undefined) expense.category = category;
+    if (expenseHead !== undefined) expense.expenseHead = expenseHead;
+    if (vendor !== undefined) expense.vendor = vendor;
+    if (costTag !== undefined) expense.costTag = costTag;
+    if (isRecurring !== undefined) expense.isRecurring = isRecurring === true || isRecurring === 'true';
+    if (gstType !== undefined) expense.gstType = gstType;
+    if (gstAmount !== undefined) expense.gstAmount = Number(gstAmount) || 0;
     if (amount !== undefined) expense.amount = Number(amount) || 0;
     if (date !== undefined) expense.date = new Date(date);
     if (paymentMethod !== undefined) expense.paymentMethod = paymentMethod;

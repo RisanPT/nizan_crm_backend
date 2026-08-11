@@ -45,7 +45,25 @@ const salarySchema = mongoose.Schema(
       enum: SALARY_TYPES,
       default: 'fixed_monthly',
     },
+    // Basic salary component.
     baseSalary: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // Payroll components per the Expense-Heads doc (Salary & Allowance = Basic +
+    // Incentives + Room Rent + HRA, each on its own line).
+    incentives: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    roomRent: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    hra: {
       type: Number,
       default: 0,
       min: 0,

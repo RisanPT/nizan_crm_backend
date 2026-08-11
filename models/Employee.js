@@ -99,6 +99,21 @@ const employeeSchema = mongoose.Schema(
       default: 0,
       min: 0,
     },
+    // Monthly House Rent Allowance configured for this employee. Paid via the
+    // separate HRA screen (Accounts) — NOT bundled into the salary slip.
+    hra: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // Recurring day-of-month (1–31) on which this employee's HRA is due. Used to
+    // auto-fill the payment date in the HRA screen for the current month. 0 = not set.
+    hraDay: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 31,
+    },
     bankName: {
       type: String,
       default: '',

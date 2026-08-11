@@ -2,6 +2,8 @@ import express from 'express';
 import {
   uploadReport,
   getReports,
+  updateReport,
+  downloadReport,
   deleteReport,
 } from '../controllers/accountReportController.js';
 import { protect } from '../middleware/authMiddleware.js';
@@ -13,7 +15,10 @@ router.route('/')
   .get(protect, getReports)
   .post(protect, uploadDoc.single('file'), uploadReport);
 
+router.get('/:id/download', protect, downloadReport);
+
 router.route('/:id')
+  .put(protect, uploadDoc.single('file'), updateReport)
   .delete(protect, deleteReport);
 
 export default router;

@@ -188,6 +188,8 @@ export const createSalary = async (req, res) => {
       year,
       salaryType,
       baseSalary,
+      incentives,
+      roomRent,
       allowances,
       bonus,
       deductions,
@@ -208,10 +210,14 @@ export const createSalary = async (req, res) => {
       employee.category === 'creative';
 
     const base = Number(baseSalary) || 0;
+    const inc = Number(incentives) || 0;
+    const rr = Number(roomRent) || 0;
     const allow = Number(allowances) || 0;
     const bon = Number(bonus) || 0;
     const ded = Number(deductions) || 0;
-    const netAmount = Math.max(0, base + allow + bon - ded);
+    // HRA is deliberately excluded from the salary net — it is paid separately
+    // via the HRA screen (Accounts). See Employee.hra / HraRecord.
+    const netAmount = Math.max(0, base + inc + rr + allow + bon - ded);
 
     const salary = await Salary.create({
       employeeId: employee._id,
@@ -223,6 +229,9 @@ export const createSalary = async (req, res) => {
       year: Number(year),
       salaryType: salaryType || employee.salaryType || 'fixed_monthly',
       baseSalary: base,
+      incentives: inc,
+      roomRent: rr,
+      hra: 0,
       allowances: allow,
       bonus: bon,
       deductions: ded,
@@ -264,6 +273,8 @@ export const updateSalary = async (req, res) => {
 
     const {
       baseSalary,
+      incentives,
+      roomRent,
       allowances,
       bonus,
       deductions,
@@ -275,6 +286,8 @@ export const updateSalary = async (req, res) => {
     } = req.body;
 
     if (baseSalary !== undefined) salary.baseSalary = Number(baseSalary) || 0;
+    if (incentives !== undefined) salary.incentives = Number(incentives) || 0;
+    if (roomRent !== undefined) salary.roomRent = Number(roomRent) || 0;
     if (allowances !== undefined) salary.allowances = Number(allowances) || 0;
     if (bonus !== undefined) salary.bonus = Number(bonus) || 0;
     if (deductions !== undefined) salary.deductions = Number(deductions) || 0;
@@ -284,9 +297,11 @@ export const updateSalary = async (req, res) => {
     if (department !== undefined) salary.department = department;
     if (role !== undefined) salary.role = role;
 
+    // HRA excluded from salary net (paid separately via the HRA screen).
     salary.netAmount = Math.max(
       0,
-      salary.baseSalary + salary.allowances + salary.bonus - salary.deductions
+      salary.baseSalary + salary.incentives + salary.roomRent +
+          salary.allowances + salary.bonus - salary.deductions,
     );
 
     await salary.save();

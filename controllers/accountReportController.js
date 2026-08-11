@@ -3,102 +3,169 @@ import AccountReport from '../models/AccountReport.js';
 import { cloudinary } from '../config/cloudinary.js';
 import { Readable } from 'stream';
 
+const fileTypeOf = (name = '') => {
+  const ext = String(name).split('.').pop().toLowerCase();
+  if (ext === 'pdf') return 'pdf';
+  if (ext.startsWith('xls')) return 'excel';
+  if (ext === 'csv') return 'csv';
+  return 'other';
+};
+
+/// Upload a raw (PDF / Excel / CSV) buffer to Cloudinary; resolves with result.
+function uploadRaw(buffer) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      {
+        resource_type: 'raw',
+        folder: 'team_n_crm/reports',
+        use_filename: true,
+        unique_filename: true,
+      },
+      (err, result) => (err ? reject(err) : resolve(result)),
+    );
+    Readable.from(buffer).pipe(stream);
+  });
+}
+
+/// Best-effort removal of a raw file from Cloudinary given its secure_url.
+async function destroyRaw(fileUrl) {
+  if (!fileUrl) return;
+  try {
+    const parts = fileUrl.split('/');
+    const i = parts.indexOf('team_n_crm');
+    if (i !== -1) {
+      // For raw files the public_id includes the folder path + extension.
+      const publicId = parts.slice(i).join('/');
+      await cloudinary.uploader.destroy(publicId, { resource_type: 'raw' });
+    }
+  } catch (err) {
+    console.error('Failed to delete file from Cloudinary:', err);
+  }
+}
+
 // @desc    Upload an account report
 // @route   POST /api/account-reports
-// @access  Private
+// @access  Private (accounts team via the app's RBAC)
 const uploadReport = asyncHandler(async (req, res) => {
   if (!req.file) {
     res.status(400);
     throw new Error('No file uploaded');
   }
-
-  const { title } = req.body;
+  const title = (req.body.title || '').trim();
   if (!title) {
     res.status(400);
     throw new Error('Please provide a title for the report');
   }
 
-  const ext = req.file.originalname.split('.').pop().toLowerCase();
-  const fileType = ext === 'pdf' ? 'pdf' : (ext.startsWith('xls') ? 'excel' : 'other');
-
-  // We use resource_type: 'raw' for PDFs and Excel files
-  // Cloudinary's upload_stream allows us to pipe the memory buffer
-  const uploadStream = cloudinary.uploader.upload_stream(
-    {
-      resource_type: 'raw',
-      folder: 'team_n_crm/reports',
-      use_filename: true,
-      unique_filename: true,
-    },
-    async (error, result) => {
-      if (error) {
-        console.error('Cloudinary upload error:', error);
-        res.status(500);
-        return res.json({ message: 'Error uploading file to Cloudinary' });
-      }
-
-      // Save to database
-      const report = new AccountReport({
-        title,
-        fileUrl: result.secure_url,
-        fileType,
-        uploadedBy: req.user._id,
-      });
-
-      const savedReport = await report.save();
-      // Populate the uploader so the client gets the same shape as GET (which
-      // groups reports by uploader name) — otherwise uploadedBy is a bare id.
-      await savedReport.populate('uploadedBy', 'name email');
-
-      res.status(201).json(savedReport);
-    }
-  );
-
-  // Convert buffer to stream and pipe it to cloudinary
-  Readable.from(req.file.buffer).pipe(uploadStream);
+  const result = await uploadRaw(req.file.buffer);
+  const report = new AccountReport({
+    title,
+    fileUrl: result.secure_url,
+    fileType: fileTypeOf(req.file.originalname),
+    fileName: req.file.originalname || '',
+    uploadedBy: req.user._id,
+  });
+  await report.save();
+  // Populate the uploader so the client gets the same shape as GET (which
+  // groups reports by uploader name) — otherwise uploadedBy is a bare id.
+  await report.populate('uploadedBy', 'name email');
+  res.status(201).json(report);
 });
 
-// @desc    Get all account reports
+// @desc    Get all account reports (shared across the accounts team)
 // @route   GET /api/account-reports
 // @access  Private
 const getReports = asyncHandler(async (req, res) => {
   const reports = await AccountReport.find({})
     .populate('uploadedBy', 'name email')
     .sort({ createdAt: -1 });
-
   res.json(reports);
 });
 
-// @desc    Delete an account report
+// @desc    Modify a report — rename the title and/or replace the file
+// @route   PUT /api/account-reports/:id
+// @access  Private
+const updateReport = asyncHandler(async (req, res) => {
+  const report = await AccountReport.findById(req.params.id);
+  if (!report) {
+    res.status(404);
+    throw new Error('Report not found');
+  }
+
+  const title = (req.body.title || '').trim();
+  if (title) report.title = title;
+
+  if (req.file) {
+    // Replace the file: upload the new one, then remove the old from Cloudinary.
+    const oldUrl = report.fileUrl;
+    const result = await uploadRaw(req.file.buffer);
+    report.fileUrl = result.secure_url;
+    report.fileType = fileTypeOf(req.file.originalname);
+    report.fileName = req.file.originalname || report.fileName;
+    await report.save();
+    await destroyRaw(oldUrl);
+  } else {
+    await report.save();
+  }
+
+  await report.populate('uploadedBy', 'name email');
+  res.json(report);
+});
+
+const MIME_BY_TYPE = {
+  pdf: 'application/pdf',
+  excel: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  csv: 'text/csv',
+};
+
+const extByType = { pdf: 'pdf', excel: 'xlsx', csv: 'csv' };
+
+// @desc    Stream a report's file through the API with correct headers.
+//          Avoids Cloudinary raw-delivery quirks (missing extension / inline
+//          content-type) that made direct downloads open as "undefined format".
+// @route   GET /api/account-reports/:id/download
+// @access  Private
+const downloadReport = asyncHandler(async (req, res) => {
+  const report = await AccountReport.findById(req.params.id);
+  if (!report || !report.fileUrl) {
+    res.status(404);
+    throw new Error('Report not found');
+  }
+
+  const upstream = await fetch(report.fileUrl);
+  if (!upstream.ok) {
+    res.status(502);
+    throw new Error(
+      `Could not fetch the stored file (HTTP ${upstream.status}). ` +
+        'If this is a PDF, enable "Allow delivery of PDF and ZIP files" in Cloudinary settings.',
+    );
+  }
+
+  const mime = MIME_BY_TYPE[report.fileType] || 'application/octet-stream';
+  const ext = extByType[report.fileType] || 'bin';
+  const safeName = (report.fileName && report.fileName.trim())
+    ? report.fileName.trim()
+    : `${(report.title || 'report').replace(/[^\w.-]+/g, '_')}.${ext}`;
+
+  const buf = Buffer.from(await upstream.arrayBuffer());
+  res.setHeader('Content-Type', mime);
+  res.setHeader('Content-Disposition', `attachment; filename="${safeName.replace(/"/g, '')}"`);
+  res.setHeader('Content-Length', buf.length);
+  res.send(buf);
+});
+
+// @desc    Delete an account report (and its Cloudinary file)
 // @route   DELETE /api/account-reports/:id
 // @access  Private
 const deleteReport = asyncHandler(async (req, res) => {
   const report = await AccountReport.findById(req.params.id);
-
-  if (report) {
-    // Optionally delete from Cloudinary as well
-    if (report.fileUrl) {
-      try {
-        // Extract public_id from raw file URL
-        // Example: https://res.cloudinary.com/demo/raw/upload/v12345/folder/file.pdf
-        const urlParts = report.fileUrl.split('/');
-        const folderIndex = urlParts.indexOf('team_n_crm');
-        if (folderIndex !== -1) {
-          const publicIdWithExt = urlParts.slice(folderIndex).join('/');
-          // For raw files in Cloudinary, the public_id includes the extension
-          await cloudinary.uploader.destroy(publicIdWithExt, { resource_type: 'raw' });
-        }
-      } catch (err) {
-        console.error('Failed to delete file from Cloudinary:', err);
-      }
-    }
-
-    await report.deleteOne();
-    res.json({ message: 'Report removed' });
-  } else {
+  if (!report) {
     res.status(404);
     throw new Error('Report not found');
   }
+  await destroyRaw(report.fileUrl);
+  await report.deleteOne();
+  res.json({ message: 'Report removed' });
 });
 
-export { uploadReport, getReports, deleteReport };
+export { uploadReport, getReports, updateReport, downloadReport, deleteReport };

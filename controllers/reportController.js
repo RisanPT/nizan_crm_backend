@@ -2,6 +2,7 @@ import Collection from '../models/Collection.js';
 import Expense from '../models/Expense.js';
 import Booking from '../models/Booking.js';
 import Lead from '../models/Lead.js';
+import SalesReturn from '../models/SalesReturn.js';
 import PDFDocument from 'pdfkit';
 import { Parser } from 'json2csv';
 
@@ -188,6 +189,16 @@ export const getFinancialAnalystReport = async (req, res) => {
       .lean();
     const cashCollected = collections.reduce((s, c) => s + (c.amount || 0), 0);
 
+    // Sales returns (credit notes) reduce revenue — count approved/processed
+    // credit notes dated in this month (SRT-01, per the Expense-Heads doc).
+    const salesReturnDocs = await SalesReturn.find({
+      date: { $gte: start, $lte: end },
+      status: { $in: ['approved', 'processed'] },
+    })
+      .select('amount')
+      .lean();
+    const salesReturnsTotal = salesReturnDocs.reduce((s, r) => s + (r.amount || 0), 0);
+
     // Receivables aging — outstanding balances on all non-cancelled bookings,
     // aged by event date (serviceEnd || bookingDate).
     const openBookings = await Booking.find({
@@ -228,6 +239,9 @@ export const getFinancialAnalystReport = async (req, res) => {
       },
       finance: {
         cashCollected,
+        salesReturns: salesReturnsTotal,
+        grossRevenue: salesTotals.totalRevenue,
+        netRevenue: Math.max(0, salesTotals.totalRevenue - salesReturnsTotal),
         receivablesAging: aging,
       },
     });

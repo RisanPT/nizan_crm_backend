@@ -11,8 +11,13 @@ const accountReportSchema = mongoose.Schema(
       required: true,
     },
     fileType: {
-      type: String, // 'pdf', 'excel', etc.
+      type: String, // 'pdf', 'excel', 'csv', etc.
       required: true,
+    },
+    // Original filename (with extension) — used to name the download correctly.
+    fileName: {
+      type: String,
+      default: '',
     },
     uploadedBy: {
       type: mongoose.Schema.Types.ObjectId,

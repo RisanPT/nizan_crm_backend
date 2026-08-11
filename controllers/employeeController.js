@@ -202,6 +202,8 @@ export const createEmployee = async (req, res) => {
     baseSalary,
     allowances,
     deductions,
+    hra,
+    hraDay,
     bankName,
     accountNumber,
     ifscCode,
@@ -254,6 +256,8 @@ export const createEmployee = async (req, res) => {
       baseSalary: Number(baseSalary) || 0,
       allowances: Number(allowances) || 0,
       deductions: Number(deductions) || 0,
+      hra: Number(hra) || 0,
+      hraDay: Number(hraDay) || 0,
       bankName: bankName ?? '',
       accountNumber: accountNumber ?? '',
       ifscCode: ifscCode ?? '',
@@ -297,6 +301,8 @@ export const updateEmployee = async (req, res) => {
     baseSalary,
     allowances,
     deductions,
+    hra,
+    hraDay,
     bankName,
     accountNumber,
     ifscCode,
@@ -357,6 +363,8 @@ export const updateEmployee = async (req, res) => {
     if (baseSalary !== undefined) employee.baseSalary = Number(baseSalary) || 0;
     if (allowances !== undefined) employee.allowances = Number(allowances) || 0;
     if (deductions !== undefined) employee.deductions = Number(deductions) || 0;
+    if (hra !== undefined) employee.hra = Number(hra) || 0;
+    if (hraDay !== undefined) employee.hraDay = Number(hraDay) || 0;
     if (bankName !== undefined) employee.bankName = bankName;
     if (accountNumber !== undefined) employee.accountNumber = accountNumber;
     if (ifscCode !== undefined) employee.ifscCode = ifscCode;
