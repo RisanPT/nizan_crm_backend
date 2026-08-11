@@ -43,6 +43,44 @@ async function destroyRaw(fileUrl) {
   }
 }
 
+const isAdmin = (user) => user?.role === 'admin';
+
+/// Parse a `sharedWith` payload into a clean array of id strings. Accepts a real
+/// array (JSON body), repeated form fields, a JSON-encoded string, or a
+/// comma-separated string — whatever the multipart/JSON client sends.
+const parseSharedWith = (raw) => {
+  if (raw == null) return [];
+  let arr = raw;
+  if (typeof raw === 'string') {
+    const s = raw.trim();
+    if (!s) return [];
+    try {
+      const parsed = JSON.parse(s);
+      arr = Array.isArray(parsed) ? parsed : [parsed];
+    } catch {
+      arr = s.split(',');
+    }
+  }
+  if (!Array.isArray(arr)) arr = [arr];
+  return [...new Set(arr.map((v) => String(v).trim()).filter(Boolean))];
+};
+
+/// Whether [user] is allowed to view [report]: the uploader, anyone in
+/// sharedWith, or an admin.
+const canView = (report, user) => {
+  if (isAdmin(user)) return true;
+  const me = String(user._id);
+  if (String(report.uploadedBy?._id ?? report.uploadedBy) === me) return true;
+  return (report.sharedWith || []).some(
+    (u) => String(u?._id ?? u) === me,
+  );
+};
+
+/// Only the uploader or an admin may modify a report (rename/replace, change
+/// access, or delete).
+const isOwnerOrAdmin = (report, user) =>
+  isAdmin(user) || String(report.uploadedBy?._id ?? report.uploadedBy) === String(user._id);
+
 // @desc    Upload an account report
 // @route   POST /api/account-reports
 // @access  Private (accounts team via the app's RBAC)
@@ -64,20 +102,33 @@ const uploadReport = asyncHandler(async (req, res) => {
     fileType: fileTypeOf(req.file.originalname),
     fileName: req.file.originalname || '',
     uploadedBy: req.user._id,
+    // Optional list of viewers chosen at upload time (never includes the owner,
+    // who always has access). Empty = private to the uploader.
+    sharedWith: parseSharedWith(req.body.sharedWith).filter(
+      (id) => id !== String(req.user._id),
+    ),
   });
   await report.save();
   // Populate the uploader so the client gets the same shape as GET (which
   // groups reports by uploader name) — otherwise uploadedBy is a bare id.
   await report.populate('uploadedBy', 'name email');
+  await report.populate('sharedWith', 'name email');
   res.status(201).json(report);
 });
 
-// @desc    Get all account reports (shared across the accounts team)
+// @desc    Get account reports the current user is allowed to see.
+//          Admins see everything; everyone else sees only what they uploaded
+//          or what was explicitly shared with them.
 // @route   GET /api/account-reports
 // @access  Private
 const getReports = asyncHandler(async (req, res) => {
-  const reports = await AccountReport.find({})
+  const filter = isAdmin(req.user)
+    ? {}
+    : { $or: [{ uploadedBy: req.user._id }, { sharedWith: req.user._id }] };
+
+  const reports = await AccountReport.find(filter)
     .populate('uploadedBy', 'name email')
+    .populate('sharedWith', 'name email')
     .sort({ createdAt: -1 });
   res.json(reports);
 });
@@ -90,6 +141,10 @@ const updateReport = asyncHandler(async (req, res) => {
   if (!report) {
     res.status(404);
     throw new Error('Report not found');
+  }
+  if (!isOwnerOrAdmin(report, req.user)) {
+    res.status(403);
+    throw new Error('Only the uploader can modify this report');
   }
 
   const title = (req.body.title || '').trim();
@@ -109,6 +164,32 @@ const updateReport = asyncHandler(async (req, res) => {
   }
 
   await report.populate('uploadedBy', 'name email');
+  await report.populate('sharedWith', 'name email');
+  res.json(report);
+});
+
+// @desc    Replace a report's access list (who may view it).
+// @route   PUT /api/account-reports/:id/access
+// @access  Private (uploader or admin only)
+const updateReportAccess = asyncHandler(async (req, res) => {
+  const report = await AccountReport.findById(req.params.id);
+  if (!report) {
+    res.status(404);
+    throw new Error('Report not found');
+  }
+  if (!isOwnerOrAdmin(report, req.user)) {
+    res.status(403);
+    throw new Error('Only the uploader can change who can view this report');
+  }
+
+  // Never store the owner in their own share list — they always have access.
+  report.sharedWith = parseSharedWith(req.body.sharedWith).filter(
+    (id) => id !== String(report.uploadedBy),
+  );
+  await report.save();
+
+  await report.populate('uploadedBy', 'name email');
+  await report.populate('sharedWith', 'name email');
   res.json(report);
 });
 
@@ -130,6 +211,10 @@ const downloadReport = asyncHandler(async (req, res) => {
   if (!report || !report.fileUrl) {
     res.status(404);
     throw new Error('Report not found');
+  }
+  if (!canView(report, req.user)) {
+    res.status(403);
+    throw new Error('You do not have access to this report');
   }
 
   const upstream = await fetch(report.fileUrl);
@@ -163,9 +248,20 @@ const deleteReport = asyncHandler(async (req, res) => {
     res.status(404);
     throw new Error('Report not found');
   }
+  if (!isOwnerOrAdmin(report, req.user)) {
+    res.status(403);
+    throw new Error('Only the uploader can delete this report');
+  }
   await destroyRaw(report.fileUrl);
   await report.deleteOne();
   res.json({ message: 'Report removed' });
 });
 
-export { uploadReport, getReports, updateReport, downloadReport, deleteReport };
+export {
+  uploadReport,
+  getReports,
+  updateReport,
+  updateReportAccess,
+  downloadReport,
+  deleteReport,
+};

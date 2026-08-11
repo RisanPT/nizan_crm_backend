@@ -24,6 +24,13 @@ const accountReportSchema = mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    // Per-document access control. A report is visible only to its uploader,
+    // any user listed here, and admins. Empty = private to the uploader (+admins).
+    // The uploader manages this list; it is the whole point of the feature.
+    sharedWith: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'User' }],
+      default: [],
+    },
   },
   {
     timestamps: true,
