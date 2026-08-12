@@ -1,6 +1,7 @@
 import AdminExpense from '../models/AdminExpense.js';
 import Salary from '../models/Salary.js';
 import { notifyRoles } from '../utils/notify.js';
+import { postDoc, safePost } from '../services/posting.js';
 
 const expensePopulate = [
   { path: 'paidBy', select: 'name phone department artistRole status' },
@@ -255,6 +256,9 @@ export const createAdminExpense = async (req, res) => {
       excludeUserId: req.user?._id ?? null,
     });
 
+    // Post to the ledger (expense payment voucher). Best-effort.
+    await safePost(() => postDoc('AdminExpense', expense.toObject(), req.user?._id || null));
+
     const populated = await AdminExpense.findById(expense._id).populate(expensePopulate);
     res.status(201).json(populated);
   } catch (error) {
@@ -311,6 +315,9 @@ export const updateAdminExpense = async (req, res) => {
 
     await expense.save();
 
+    // Re-post to the ledger to reflect the change. Best-effort.
+    await safePost(() => postDoc('AdminExpense', expense.toObject(), req.user?._id || null));
+
     const populated = await AdminExpense.findById(expense._id).populate(expensePopulate);
     res.json(populated);
   } catch (error) {
@@ -335,6 +342,9 @@ export const verifyAdminExpense = async (req, res) => {
     expense.approvedAt = status !== 'pending' ? new Date() : null;
 
     await expense.save();
+
+    // Re-post to the ledger to reflect the change. Best-effort.
+    await safePost(() => postDoc('AdminExpense', expense.toObject(), req.user?._id || null));
 
     const populated = await AdminExpense.findById(expense._id).populate(expensePopulate);
     res.json(populated);

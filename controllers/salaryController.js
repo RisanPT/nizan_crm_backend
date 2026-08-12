@@ -1,5 +1,6 @@
 import Salary from '../models/Salary.js';
 import Employee from '../models/Employee.js';
+import { postDoc, safePost } from '../services/posting.js';
 
 // @desc    Get salaries with optional filters (month, year, category, status, department)
 // @route   GET /api/salaries
@@ -306,6 +307,9 @@ export const updateSalary = async (req, res) => {
 
     await salary.save();
 
+    // Post paid salaries to the ledger (best-effort).
+    await safePost(() => postDoc('Salary', salary.toObject(), req.user?._id || null));
+
     const populated = await Salary.findById(salary._id)
       .populate('employeeId')
       .populate('approvedBy', 'name email')
@@ -364,6 +368,9 @@ export const paySalary = async (req, res) => {
     salary.paidAt = new Date();
 
     await salary.save();
+
+    // Post paid salaries to the ledger (best-effort).
+    await safePost(() => postDoc('Salary', salary.toObject(), req.user?._id || null));
 
     const populated = await Salary.findById(salary._id)
       .populate('employeeId')

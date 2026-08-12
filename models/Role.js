@@ -12,6 +12,7 @@ export const PERMISSION_KEYS = [
   'staff',
   'sales',
   'finance',
+  'company_finance',
   'payables',
   'inventory',
   'marketing',

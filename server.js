@@ -44,6 +44,8 @@ import hrBridgeRoutes from './routes/hrBridgeRoutes.js';
 import timeboxRoutes from './routes/timeboxRoutes.js';
 import hraRoutes from './routes/hraRoutes.js';
 import accountReportRoutes from './routes/accountReportRoutes.js';
+import assetRoutes from './routes/assetRoutes.js';
+import accountingRoutes from './routes/accountingRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -168,6 +170,8 @@ app.use('/api/hr', hrBridgeRoutes);               // PHP attendance bridge
 app.use('/api/timebox', timeboxRoutes);           // Timebox attendance + payroll
 app.use('/api/hra', hraRoutes);                   // House Rent Allowance (separate from salary)
 app.use('/api/account-reports', accountReportRoutes);
+app.use('/api/assets', assetRoutes);              // Company asset register (Finance)
+app.use('/api/accounting', accountingRoutes);     // Double-entry ledger (Finance)
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });

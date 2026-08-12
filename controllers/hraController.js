@@ -1,6 +1,7 @@
 import HraRecord from '../models/HraRecord.js';
 import Employee from '../models/Employee.js';
 import AdminExpense from '../models/AdminExpense.js';
+import { postDoc, safePost } from '../services/posting.js';
 
 const populateEmp = { path: 'employeeId', select: 'name department email profileImage' };
 
@@ -130,6 +131,8 @@ export const createHraRecord = async (req, res) => {
     });
     await record.save();
     await syncMirror(record, req.user?._id);
+    // Post paid HRA to the ledger (best-effort).
+    await safePost(() => postDoc('HraRecord', record.toObject(), req.user?._id || null));
     const populated = await HraRecord.findById(record._id).populate(populateEmp);
     res.status(201).json(populated);
   } catch (err) {
@@ -158,6 +161,8 @@ export const updateHraRecord = async (req, res) => {
 
     await record.save();
     await syncMirror(record, req.user?._id);
+    // Post paid HRA to the ledger (best-effort).
+    await safePost(() => postDoc('HraRecord', record.toObject(), req.user?._id || null));
     const populated = await HraRecord.findById(record._id).populate(populateEmp);
     res.json(populated);
   } catch (err) {

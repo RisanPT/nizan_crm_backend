@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import Collection from '../models/Collection.js';
 import Booking from '../models/Booking.js';
 import { notifyRoles } from '../utils/notify.js';
+import { postDoc, safePost } from '../services/posting.js';
 
 const collectionPopulate = [
   { path: 'bookingId', select: 'bookingNumber customerName service totalOverAll status' },
@@ -141,6 +142,10 @@ export const verifyCollection = async (req, res) => {
     // screen always has an accurate balance without a separate query.
     await syncBookingCollectedAmount(collection.bookingId);
     // ──────────────────────────────────────────────────────────────────────────
+
+    // Post to the ledger (verified → receipt voucher; rejected → clear any
+    // prior entry). Best-effort — a ledger hiccup never blocks verification.
+    await safePost(() => postDoc('Collection', collection.toObject(), req.user?._id || null));
 
     const populated = await Collection.findById(collection._id).populate(collectionPopulate);
     res.json(populated);

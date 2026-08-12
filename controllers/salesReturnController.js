@@ -1,5 +1,6 @@
 import SalesReturn from '../models/SalesReturn.js';
 import { notifyRoles } from '../utils/notify.js';
+import { postDoc, safePost } from '../services/posting.js';
 
 const populate = [
   { path: 'bookingId', select: 'bookingDate customer package totalAmount' },
@@ -137,6 +138,7 @@ export const createSalesReturn = async (req, res) => {
       excludeUserId: req.user?._id ?? null,
     });
 
+    await safePost(() => postDoc('SalesReturn', doc.toObject(), req.user?._id || null));
     const populated = await SalesReturn.findById(doc._id).populate(populate);
     res.status(201).json(populated);
   } catch (err) {
@@ -180,6 +182,7 @@ export const updateSalesReturn = async (req, res) => {
     if (notes !== undefined) doc.notes = notes;
 
     await doc.save();
+    await safePost(() => postDoc('SalesReturn', doc.toObject(), req.user?._id || null));
     const populated = await SalesReturn.findById(doc._id).populate(populate);
     res.json(populated);
   } catch (err) {
@@ -214,6 +217,7 @@ export const updateSalesReturnStatus = async (req, res) => {
     }
 
     await doc.save();
+    await safePost(() => postDoc('SalesReturn', doc.toObject(), req.user?._id || null));
     const populated = await SalesReturn.findById(doc._id).populate(populate);
     res.json(populated);
   } catch (err) {

@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import FuelExpense from '../models/FuelExpense.js';
+import { postDoc, safePost } from '../services/posting.js';
 
 const normalizeObjectId = (value) => {
   const normalized = String(value ?? '').trim();
@@ -105,6 +106,7 @@ export const createFuelExpense = async (req, res) => {
       status: 'pending',
     });
 
+    await safePost(() => postDoc('FuelExpense', expense.toObject(), req.user?._id || null));
     const populated = await FuelExpense.findById(expense._id).populate(expensePopulate);
     res.status(201).json(populated);
   } catch (error) {
@@ -161,6 +163,7 @@ export const updateFuelExpense = async (req, res) => {
 
     await expense.save();
 
+    await safePost(() => postDoc('FuelExpense', expense.toObject(), req.user?._id || null));
     const populated = await FuelExpense.findById(expense._id).populate(expensePopulate);
     res.json(populated);
   } catch (error) {

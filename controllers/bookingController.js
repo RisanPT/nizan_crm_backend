@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Booking from '../models/Booking.js';
+import { postDoc, safePost } from '../services/posting.js';
 import Customer from '../models/Customer.js';
 import ServicePackage from '../models/Package.js';
 import Lead from '../models/Lead.js';
@@ -1300,6 +1301,9 @@ export const createBooking = async (req, res) => {
       }
     }
 
+    // Post the sales invoice to the ledger (best-effort).
+    await safePost(() => postDoc('Booking', booking.toObject(), req.user?._id || null));
+
     res.status(201).json({
       ...booking.toObject(),
       invoiceEmailSent,
@@ -1589,6 +1593,9 @@ export const updateBooking = async (req, res) => {
         console.error('Failed to send completion invoice email:', emailError);
       }
     }
+
+    // Re-post the sales invoice to reflect the update (best-effort).
+    await safePost(() => postDoc('Booking', updatedBooking.toObject(), req.user?._id || null));
 
     res.json({
       ...updatedBooking.toObject(),
