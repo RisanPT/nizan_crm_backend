@@ -85,6 +85,8 @@ const CORE_ACCOUNTS = [
   { code: '4090', name: 'Other Income', nature: 'income', group: 'Indirect Income' },
   // Expenses (core, beyond the AdminExpense heads)
   { code: '5010', name: 'House Rent Allowance', nature: 'expense', group: 'Payroll' },
+  { code: '5020', name: 'Salary Incentives', nature: 'expense', group: 'Payroll' },
+  { code: '5030', name: 'Room Rent Allowance', nature: 'expense', group: 'Payroll' },
   { code: '5900', name: 'Depreciation', nature: 'expense', group: 'Non-cash' },
 ];
 
@@ -98,7 +100,7 @@ const seedAccounts = async (req, res) => {
     const heads = EXPENSE_HEADS.map((h) => ({
       code: h.code,
       name: h.label,
-      nature: 'expense',
+      nature: h.nature || 'expense', // SRT-01 is contra-revenue (income)
       group: h.group || 'Operating Expense',
     }));
     const seed = [...CORE_ACCOUNTS, ...heads];
@@ -391,10 +393,10 @@ const getProfitAndLoss = async (req, res) => {
       const m = mv.get(String(a._id)) || { debit: 0, credit: 0 };
       if (a.nature === 'income') {
         const amt = round2(m.credit - m.debit);
-        if (amt !== 0) { income.push({ code: a.code, name: a.name, group: a.group, amount: amt }); totalIncome += amt; }
+        if (amt !== 0) { income.push({ accountId: a._id, code: a.code, name: a.name, group: a.group, amount: amt }); totalIncome += amt; }
       } else {
         const amt = round2(m.debit - m.credit);
-        if (amt !== 0) { expense.push({ code: a.code, name: a.name, group: a.group, amount: amt }); totalExpense += amt; }
+        if (amt !== 0) { expense.push({ accountId: a._id, code: a.code, name: a.name, group: a.group, amount: amt }); totalExpense += amt; }
       }
     }
     res.json({
@@ -442,13 +444,13 @@ const getBalanceSheet = async (req, res) => {
 
       if (a.nature === 'asset') {
         const bal = round2(drTotal - crTotal);
-        if (bal !== 0) { assets.push({ code: a.code, name: a.name, group: a.group, amount: bal }); totalAssets += bal; }
+        if (bal !== 0) { assets.push({ accountId: a._id, code: a.code, name: a.name, group: a.group, amount: bal }); totalAssets += bal; }
       } else if (a.nature === 'liability') {
         const bal = round2(crTotal - drTotal);
-        if (bal !== 0) { liabilities.push({ code: a.code, name: a.name, group: a.group, amount: bal }); totalLiabilities += bal; }
+        if (bal !== 0) { liabilities.push({ accountId: a._id, code: a.code, name: a.name, group: a.group, amount: bal }); totalLiabilities += bal; }
       } else if (a.nature === 'equity') {
         const bal = round2(crTotal - drTotal);
-        if (bal !== 0) { equity.push({ code: a.code, name: a.name, group: a.group, amount: bal }); totalEquity += bal; }
+        if (bal !== 0) { equity.push({ accountId: a._id, code: a.code, name: a.name, group: a.group, amount: bal }); totalEquity += bal; }
       } else if (a.nature === 'income') {
         retained += m.credit - m.debit;
       } else if (a.nature === 'expense') {
@@ -476,13 +478,24 @@ const getBalanceSheet = async (req, res) => {
 };
 
 // Age a number of days into a bucket key.
+// Bucket by days OVERDUE (measured from the due date to the as-of date).
+// Negative days → the due date is still in the future = not yet due.
 const ageBucket = (days) =>
-  days <= 30 ? 'current' : days <= 60 ? 'days30' : days <= 90 ? 'days60' : 'days90';
+  days < 0 ? 'notYetDue'
+  : days <= 30 ? 'current'
+  : days <= 60 ? 'days30'
+  : days <= 90 ? 'days60'
+  : 'days90';
 
-const emptyTotals = () => ({ current: 0, days30: 0, days60: 0, days90: 0, outstanding: 0 });
+const emptyTotals = () => ({ notYetDue: 0, current: 0, days30: 0, days60: 0, days90: 0, outstanding: 0 });
+
+// Whole days from a due date to the as-of date (negative = not yet due).
+const daysTo = (due, asOf) =>
+  Math.floor((asOf.getTime() - new Date(due).getTime()) / 86400000);
 
 // Roll a set of {name, phone, amount, days} obligations into an aging report.
-const buildAging = (items) => {
+// `days` is days overdue vs the as-of date; negative means upcoming (not due).
+const buildAging = (items, asOf) => {
   const parties = new Map();
   const totals = emptyTotals();
   for (const it of items) {
@@ -494,28 +507,36 @@ const buildAging = (items) => {
     if (!parties.has(key)) {
       parties.set(key, {
         name: it.name, phone: it.phone || '',
-        outstanding: 0, current: 0, days30: 0, days60: 0, days90: 0, oldestDays: 0, count: 0,
+        outstanding: 0, notYetDue: 0, current: 0, days30: 0, days60: 0, days90: 0, oldestDays: 0, count: 0,
       });
     }
     const p = parties.get(key);
     p.outstanding += it.amount;
     p[bucket] += it.amount;
-    p.oldestDays = Math.max(p.oldestDays, it.days);
+    if (it.days > p.oldestDays) p.oldestDays = it.days; // oldest days overdue (0 if none overdue)
     p.count += 1;
   }
-  const r2 = (o) => {
-    for (const k of ['outstanding', 'current', 'days30', 'days60', 'days90']) o[k] = round2(o[k]);
-    return o;
+  const overdueOf = (o) => o.current + o.days30 + o.days60 + o.days90;
+  const finishParty = (p) => {
+    p.overdue = round2(overdueOf(p));
+    for (const k of ['outstanding', 'notYetDue', 'current', 'days30', 'days60', 'days90']) p[k] = round2(p[k]);
+    return p;
   };
   return {
+    asOf,
     totalOutstanding: round2(totals.outstanding),
-    buckets: { current: round2(totals.current), days30: round2(totals.days30), days60: round2(totals.days60), days90: round2(totals.days90) },
-    parties: [...parties.values()].map(r2).sort((a, b) => b.outstanding - a.outstanding),
+    totalOverdue: round2(overdueOf(totals)),
+    totalNotYetDue: round2(totals.notYetDue),
+    buckets: {
+      current: round2(totals.current),
+      days30: round2(totals.days30),
+      days60: round2(totals.days60),
+      days90: round2(totals.days90),
+    },
+    // Overdue parties first (that's the point of the report), then by amount.
+    parties: [...parties.values()].map(finishParty).sort((a, b) => (b.overdue - a.overdue) || (b.outstanding - a.outstanding)),
   };
 };
-
-const daysSince = (date) =>
-  Math.max(0, Math.floor((Date.now() - new Date(date).getTime()) / 86400000));
 
 // @desc    Receivables aging — who owes us, from bookings' unpaid balance.
 // @route   GET /api/accounting/receivables
@@ -524,8 +545,9 @@ const getReceivables = async (req, res) => {
     return res.status(403).json({ message: 'No finance access' });
   }
   try {
+    const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
     const bookings = await Booking.find({})
-      .select('customerName phone totalPrice collectedAmount bookingDate createdAt status')
+      .select('customerName phone totalPrice collectedAmount bookingDate serviceStart createdAt status')
       .limit(20000)
       .lean();
     const items = [];
@@ -534,9 +556,11 @@ const getReceivables = async (req, res) => {
       if (['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'].includes(st)) continue;
       const amount = round2((b.totalPrice || 0) - (b.collectedAmount || 0));
       if (amount <= 0.5) continue;
-      items.push({ name: b.customerName || 'Unknown', phone: b.phone || '', amount, days: daysSince(b.bookingDate || b.createdAt) });
+      // The balance is due by the event (serviceStart); overdue once it passes.
+      const due = b.serviceStart || b.bookingDate || b.createdAt;
+      items.push({ name: b.customerName || 'Unknown', phone: b.phone || '', amount, days: daysTo(due, asOf) });
     }
-    res.json(buildAging(items));
+    res.json(buildAging(items, asOf));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -549,6 +573,7 @@ const getPayables = async (req, res) => {
     return res.status(403).json({ message: 'No finance access' });
   }
   try {
+    const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
     const purchases = await Purchase.find({ paid: { $ne: true } })
       .populate('vendor', 'name')
       .select('supplier vendor total gstAmount amountPaid paid date dueDate')
@@ -560,9 +585,9 @@ const getPayables = async (req, res) => {
       const amount = round2(grand - (p.amountPaid || 0));
       if (amount <= 0.5) continue;
       const name = (p.vendor && p.vendor.name) || p.supplier || 'Unknown vendor';
-      items.push({ name, phone: '', amount, days: daysSince(p.dueDate || p.date) });
+      items.push({ name, phone: '', amount, days: daysTo(p.dueDate || p.date, asOf) });
     }
-    res.json(buildAging(items));
+    res.json(buildAging(items, asOf));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

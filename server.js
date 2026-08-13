@@ -46,6 +46,7 @@ import hraRoutes from './routes/hraRoutes.js';
 import accountReportRoutes from './routes/accountReportRoutes.js';
 import assetRoutes from './routes/assetRoutes.js';
 import accountingRoutes from './routes/accountingRoutes.js';
+import salesReportRoutes from './routes/salesReportRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -172,6 +173,7 @@ app.use('/api/hra', hraRoutes);                   // House Rent Allowance (separ
 app.use('/api/account-reports', accountReportRoutes);
 app.use('/api/assets', assetRoutes);              // Company asset register (Finance)
 app.use('/api/accounting', accountingRoutes);     // Double-entry ledger (Finance)
+app.use('/api/sales-reports', salesReportRoutes); // Sales analytics reports
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });

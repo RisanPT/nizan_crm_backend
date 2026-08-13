@@ -1,6 +1,6 @@
 import Salary from '../models/Salary.js';
 import Employee from '../models/Employee.js';
-import { postDoc, safePost } from '../services/posting.js';
+import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 
 // @desc    Get salaries with optional filters (month, year, category, status, department)
 // @route   GET /api/salaries
@@ -398,6 +398,7 @@ export const deleteSalary = async (req, res) => {
     }
 
     await salary.deleteOne();
+    await safePost(() => unpostDoc('Salary', salary._id));
     res.json({ message: 'Salary slip removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -355,6 +355,17 @@ const bookingSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // The User who created this booking (set server-side from req.user._id).
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    // Denormalized creator name so the UI can display it without a join.
+    createdByName: {
+      type: String,
+      default: '',
+    },
   },
   {
     timestamps: true,

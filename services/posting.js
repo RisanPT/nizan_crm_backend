@@ -307,6 +307,18 @@ export const postDoc = async (model, doc, createdBy = null) => {
   return postSpec({ model, id: doc._id, createdBy, ...spec });
 };
 
+/// Remove the auto voucher for a source doc that was DELETED, so the ledger
+/// doesn't keep an orphan entry (open period only). Call from delete handlers.
+export const unpostDoc = async (model, id) => {
+  await ensureLockDate();
+  const res = await JournalEntry.deleteMany({
+    'source.model': model,
+    'source.id': id,
+    ...lockFilter(),
+  });
+  return { status: 'ok', removed: res.deletedCount || 0 };
+};
+
 /// Best-effort wrapper for live controller hooks — never throws.
 export const safePost = async (fn) => {
   try {

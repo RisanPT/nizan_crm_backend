@@ -45,6 +45,8 @@ const assetSchema = mongoose.Schema(
     location: { type: String, default: '', trim: true },
     condition: { type: String, default: '', trim: true }, // new | good | fair | poor
     serialNumber: { type: String, default: '', trim: true },
+    // Photo of the physical asset (Cloudinary URL).
+    imageUrl: { type: String, default: '', trim: true },
     // ── Digital-only ──
     provider: { type: String, default: '', trim: true }, // registrar / platform
     url: { type: String, default: '', trim: true },

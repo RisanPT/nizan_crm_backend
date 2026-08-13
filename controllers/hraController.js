@@ -1,7 +1,7 @@
 import HraRecord from '../models/HraRecord.js';
 import Employee from '../models/Employee.js';
 import AdminExpense from '../models/AdminExpense.js';
-import { postDoc, safePost } from '../services/posting.js';
+import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 
 const populateEmp = { path: 'employeeId', select: 'name department email profileImage' };
 
@@ -177,6 +177,7 @@ export const deleteHraRecord = async (req, res) => {
     const record = await HraRecord.findById(req.params.id);
     if (!record) return res.status(404).json({ message: 'HRA record not found' });
     await record.deleteOne();
+    await safePost(() => unpostDoc('HraRecord', record._id));
     // Remove the mirrored administrative expense too.
     try {
       await AdminExpense.deleteOne({ sourceHraId: record._id });

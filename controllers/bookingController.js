@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import Booking from '../models/Booking.js';
-import { postDoc, safePost } from '../services/posting.js';
+import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 import Customer from '../models/Customer.js';
 import ServicePackage from '../models/Package.js';
 import Lead from '../models/Lead.js';
@@ -1247,6 +1247,8 @@ export const createBooking = async (req, res) => {
       pocId: pocId ?? '',
       pocName: pocName ?? '',
       pocPhone: pocPhone ?? '',
+      createdBy: req.user?._id ?? null,
+      createdByName: req.user?.name ?? '',
     });
 
     // A booking for a known lead's number converts that lead automatically.
@@ -1259,7 +1261,7 @@ export const createBooking = async (req, res) => {
         recipients: managerAdminIds,
         type: NOTIFICATION_TYPES.BOOKING_CREATED,
         title: 'New booking created',
-        body: `Booking ${booking.bookingNumber || ''} for ${customerName} was created.`.replace(/\s+/g, ' ').trim(),
+        body: `Booking ${booking.bookingNumber || ''} for ${customerName} was created${req.user?.name ? ` by ${req.user.name}` : ''}.`.replace(/\s+/g, ' ').trim(),
         bookingId: booking._id,
         leadId: booking.leadId ?? null,
         createdBy: req.user?._id ?? null,
@@ -1613,6 +1615,8 @@ export const deleteBooking = async (req, res) => {
 
     if (booking) {
       await booking.deleteOne();
+      // Remove its ledger voucher too, so revenue/A/R don't keep an orphan.
+      await safePost(() => unpostDoc('Booking', booking._id));
       res.json({ message: 'Booking removed' });
     } else {
       res.status(404).json({ message: 'Booking not found' });

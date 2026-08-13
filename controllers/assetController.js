@@ -29,6 +29,7 @@ const cleanAsset = (body) => {
     location: String(body.location ?? '').trim(),
     condition: String(body.condition ?? '').trim(),
     serialNumber: String(body.serialNumber ?? '').trim(),
+    imageUrl: String(body.imageUrl ?? '').trim(),
     provider: String(body.provider ?? '').trim(),
     url: String(body.url ?? '').trim(),
     expiryDate: toDate(body.expiryDate),

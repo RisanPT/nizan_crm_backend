@@ -237,7 +237,7 @@ export const createLead = async (req, res) => {
       recipients: managerAdminIds,
       type: NOTIFICATION_TYPES.NEW_LEAD,
       title: 'New lead',
-      body: `${lead.name} was added${lead.source ? ` via ${lead.source}` : ''}.`,
+      body: `${lead.name} was added${lead.source ? ` via ${lead.source}` : ''}${req.user?.name ? ` by ${req.user.name}` : ''}.`,
       leadId: lead._id,
       createdBy: req.user?._id ?? null,
       excludeUserId: req.user?._id ?? null,

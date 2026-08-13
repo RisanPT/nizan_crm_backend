@@ -1,7 +1,7 @@
 import AdminExpense from '../models/AdminExpense.js';
 import Salary from '../models/Salary.js';
 import { notifyRoles } from '../utils/notify.js';
-import { postDoc, safePost } from '../services/posting.js';
+import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 
 const expensePopulate = [
   { path: 'paidBy', select: 'name phone department artistRole status' },
@@ -361,6 +361,7 @@ export const deleteAdminExpense = async (req, res) => {
     }
 
     await expense.deleteOne();
+    await safePost(() => unpostDoc('AdminExpense', expense._id));
     res.json({ message: 'Expense deleted successfully' });
   } catch (error) {
     res.status(500).json({ message: error.message });

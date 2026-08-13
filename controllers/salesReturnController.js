@@ -1,6 +1,6 @@
 import SalesReturn from '../models/SalesReturn.js';
 import { notifyRoles } from '../utils/notify.js';
-import { postDoc, safePost } from '../services/posting.js';
+import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 
 const populate = [
   { path: 'bookingId', select: 'bookingDate customer package totalAmount' },
@@ -231,6 +231,7 @@ export const deleteSalesReturn = async (req, res) => {
     const doc = await SalesReturn.findById(req.params.id);
     if (!doc) return res.status(404).json({ message: 'Sales return not found' });
     await doc.deleteOne();
+    await safePost(() => unpostDoc('SalesReturn', doc._id));
     res.json({ message: 'Sales return deleted successfully' });
   } catch (err) {
     res.status(500).json({ message: err.message });

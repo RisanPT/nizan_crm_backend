@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import Collection from '../models/Collection.js';
 import Booking from '../models/Booking.js';
 import { notifyRoles } from '../utils/notify.js';
-import { postDoc, safePost } from '../services/posting.js';
+import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 
 const collectionPopulate = [
   { path: 'bookingId', select: 'bookingNumber customerName service totalOverAll status' },
@@ -174,6 +174,7 @@ export const deleteCollection = async (req, res) => {
 
     const bookingId = collection.bookingId;
     await collection.deleteOne();
+    await safePost(() => unpostDoc('Collection', collection._id));
 
     // ─── Sync booking.collectedAmount after deletion ───────────────────────────
     // If the deleted collection was verified, the booking balance must be updated.

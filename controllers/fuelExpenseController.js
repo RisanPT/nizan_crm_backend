@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
 import FuelExpense from '../models/FuelExpense.js';
-import { postDoc, safePost } from '../services/posting.js';
+import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 
 const normalizeObjectId = (value) => {
   const normalized = String(value ?? '').trim();
@@ -183,6 +183,7 @@ export const deleteFuelExpense = async (req, res) => {
     }
 
     await expense.deleteOne();
+    await safePost(() => unpostDoc('FuelExpense', expense._id));
     res.json({ message: 'Fuel expense removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });
