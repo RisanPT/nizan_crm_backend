@@ -34,6 +34,14 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // For artist users who ALSO run the studio inventory: grants the full
+    // inventory-manager toolset (studio stock writes, purchases, vendors, all
+    // kits) on top of their artist role. Drives the in-app "workspace switcher"
+    // so one person can act as artist and inventory manager from a single login.
+    inventoryManage: {
+      type: Boolean,
+      default: false,
+    },
     // Allows the user to manage staff in their department (if they have the appropriate role)
     isDepartmentHead: {
       type: Boolean,

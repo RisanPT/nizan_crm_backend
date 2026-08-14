@@ -193,7 +193,7 @@ export const sendAdvanceInvoiceEmail = async (booking) => {
   const fromEmail =
     process.env.NODEMAILER_EMAIL ||
     'noreply@teamnmakeover.local';
-  const companyName = process.env.COMPANY_NAME || 'Team N Makeovers';
+  const companyName = process.env.COMPANY_NAME || 'Team N ERP';
   const { items, totalAmount, totalAdvance } = toInvoiceTotals(booking);
 
   return sendMail(transporter, {
@@ -244,7 +244,7 @@ export const sendCompletionInvoiceEmail = async (booking) => {
   const fromEmail =
     process.env.NODEMAILER_EMAIL ||
     'noreply@teamnmakeover.local';
-  const companyName = process.env.COMPANY_NAME || 'Team N Makeovers';
+  const companyName = process.env.COMPANY_NAME || 'Team N ERP';
   const { items, totalAmount, totalAdvance } = toInvoiceTotals(booking);
 
   const discountAmt = Number(booking.discountAmount) || 0;

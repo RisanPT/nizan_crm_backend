@@ -7,7 +7,12 @@ import { notifyRoles } from '../utils/notify.js';
 
 const STUDIO_ROLES = ['inventory_manager', 'admin', 'manager'];
 
-const canManageStudio = (user) => STUDIO_ROLES.includes(user.role);
+// A studio manager is anyone in a manager role OR an artist who has been given
+// the inventoryManage capability (the "workspace switcher" dual-role case) —
+// they get the full studio toolset regardless of which workspace their client
+// is currently showing.
+const canManageStudio = (user) =>
+  STUDIO_ROLES.includes(user.role) || !!user?.inventoryManage;
 
 const hasInventoryAccess = (user) =>
   canManageStudio(user) || (user.role === 'artist' && !!user.inventoryAccess);

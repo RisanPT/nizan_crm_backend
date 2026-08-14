@@ -19,6 +19,7 @@ const toAuthResponse = async (user) => ({
     permissions: await permissionsForRole(user.role),
     homeRoute: await homeRouteForRole(user.role),
     inventoryAccess: user.inventoryAccess ?? false,
+    inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
@@ -64,6 +65,7 @@ export const getMe = async (req, res) => {
       permissions: await permissionsForRole(req.user.role),
       homeRoute: await homeRouteForRole(req.user.role),
       inventoryAccess: req.user.inventoryAccess ?? false,
+      inventoryManage: req.user.inventoryManage ?? false,
       isDepartmentHead: req.user.isDepartmentHead ?? false,
       managedBy: req.user.managedBy?.toString() ?? null,
       employeeId: req.user.employeeId?.toString() ?? null,
@@ -102,6 +104,7 @@ export const getUsers = async (req, res) => {
       role: u.role,
       active: u.active,
       inventoryAccess: u.inventoryAccess ?? false,
+      inventoryManage: u.inventoryManage ?? false,
       isDepartmentHead: u.isDepartmentHead ?? false,
       managedBy: u.managedBy?.toString() ?? null,
       employeeId: u.employeeId?.toString() ?? null,
@@ -139,6 +142,7 @@ export const getUsers = async (req, res) => {
     role: u.role,
     active: u.active,
     inventoryAccess: u.inventoryAccess ?? false,
+    inventoryManage: u.inventoryManage ?? false,
     isDepartmentHead: u.isDepartmentHead ?? false,
     managedBy: u.managedBy?.toString() ?? null,
     employeeId: u.employeeId?.toString() ?? null,
@@ -210,6 +214,7 @@ export const createUser = async (req, res) => {
     role,
     active: Boolean(active),
     inventoryAccess: Boolean(req.body.inventoryAccess),
+    inventoryManage: Boolean(req.body.inventoryManage),
     isDepartmentHead: Boolean(req.body.isDepartmentHead),
     managedBy: isDepartmentHeadReq && !isFullAccess ? req.user._id : null,
     employeeId: employeeId || null,
@@ -231,6 +236,7 @@ export const createUser = async (req, res) => {
     email: user.email,
     role: user.role,
     inventoryAccess: user.inventoryAccess ?? false,
+    inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
@@ -339,6 +345,9 @@ export const updateUser = async (req, res) => {
   if (req.body.inventoryAccess !== undefined) {
     user.inventoryAccess = Boolean(req.body.inventoryAccess);
   }
+  if (req.body.inventoryManage !== undefined) {
+    user.inventoryManage = Boolean(req.body.inventoryManage);
+  }
   if (req.body.isDepartmentHead !== undefined) {
     user.isDepartmentHead = Boolean(req.body.isDepartmentHead);
   }
@@ -380,6 +389,7 @@ export const updateUser = async (req, res) => {
     email: user.email,
     role: user.role,
     inventoryAccess: user.inventoryAccess ?? false,
+    inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
