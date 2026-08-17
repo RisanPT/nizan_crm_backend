@@ -14,6 +14,11 @@ import {
   updateDecision,
   deleteDecision,
 } from '../controllers/ceoDecisionController.js';
+import {
+  listDepartments,
+  getDepartmentReport,
+  saveDepartmentReport,
+} from '../controllers/deptReportController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -31,5 +36,10 @@ router.get('/decisions', protect, getDecisions);
 router.post('/decisions', protect, createDecision);
 router.put('/decisions/:id', protect, updateDecision);
 router.delete('/decisions/:id', protect, deleteDecision);
+
+// Departmental month-end reviews + planning (Sales/Marketing/HR/Ops/CRM/IT/Inventory).
+router.get('/departments', protect, listDepartments);
+router.get('/department/:dept', protect, getDepartmentReport);
+router.put('/department/:dept', protect, saveDepartmentReport);
 
 export default router;
