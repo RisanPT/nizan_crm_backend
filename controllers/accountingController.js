@@ -1058,4 +1058,7 @@ export {
   getGstSummary,
   getGstr1,
   backfillLedger,
+  // Reused by the Month-End Review aggregation so its figures match these reports.
+  accountMovements,
+  round2,
 };
