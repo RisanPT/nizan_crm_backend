@@ -4,6 +4,8 @@ import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 import Customer from '../models/Customer.js';
 import ServicePackage from '../models/Package.js';
 import Lead from '../models/Lead.js';
+import { regionScopedMatch, isFullGeoAccess } from '../utils/geoScope.js';
+import { slotAvailability } from './slotController.js';
 import {
   sendAdvanceInvoiceEmail,
   sendCompletionInvoiceEmail,
@@ -744,7 +746,9 @@ const buildBookingSortPipeline = (search = '') => {
 
 export const getBookings = async (req, res) => {
   try {
-    const bookings = await Booking.find({}).sort({ createdAt: -1 });
+    // Scope to the caller's territory (full-access sees all).
+    const geo = await regionScopedMatch(req.user);
+    const bookings = await Booking.find(geo).sort({ createdAt: -1 });
     res.json(bookings);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -857,28 +861,29 @@ export const getPaginatedBookings = async (req, res) => {
       }
     }
 
-    // Geographic filtering logic
-    const zoneId = String(req.query.zoneId ?? '').trim();
-    const stateId = String(req.query.stateId ?? '').trim();
-    const regionId = String(req.query.regionId ?? '').trim();
-    const districtId = String(req.query.districtId ?? '').trim();
+    // Territory scoping. A full-access user (admin/manager) may filter by any
+    // geo via query params. A scoped user is LOCKED to their own territory —
+    // their query params are ignored and their own region set is enforced.
+    if (isFullGeoAccess(req.user)) {
+      const zoneId = String(req.query.zoneId ?? '').trim();
+      const stateId = String(req.query.stateId ?? '').trim();
+      const regionId = String(req.query.regionId ?? '').trim();
+      const districtId = String(req.query.districtId ?? '').trim();
 
-    if (districtId && mongoose.Types.ObjectId.isValid(districtId)) {
-      baseMatch.districtId = new mongoose.Types.ObjectId(districtId);
-    } else if (regionId && mongoose.Types.ObjectId.isValid(regionId)) {
-      baseMatch.regionId = new mongoose.Types.ObjectId(regionId);
-    } else if (stateId && mongoose.Types.ObjectId.isValid(stateId)) {
-      const mongoose = await import('mongoose');
-      const RegionModel = mongoose.model('Region');
-      const regions = await RegionModel.find({ state: stateId }).select('_id').lean();
-      baseMatch.regionId = { $in: regions.map(r => r._id) };
-    } else if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
-      const mongoose = await import('mongoose');
-      const StateModel = mongoose.model('State');
-      const RegionModel = mongoose.model('Region');
-      const states = await StateModel.find({ zone: zoneId }).select('_id').lean();
-      const regions = await RegionModel.find({ state: { $in: states.map(s => s._id) } }).select('_id').lean();
-      baseMatch.regionId = { $in: regions.map(r => r._id) };
+      if (districtId && mongoose.Types.ObjectId.isValid(districtId)) {
+        baseMatch.districtId = new mongoose.Types.ObjectId(districtId);
+      } else if (regionId && mongoose.Types.ObjectId.isValid(regionId)) {
+        baseMatch.regionId = new mongoose.Types.ObjectId(regionId);
+      } else if (stateId && mongoose.Types.ObjectId.isValid(stateId)) {
+        const regions = await mongoose.model('Region').find({ state: stateId }).select('_id').lean();
+        baseMatch.regionId = { $in: regions.map((r) => r._id) };
+      } else if (zoneId && mongoose.Types.ObjectId.isValid(zoneId)) {
+        const states = await mongoose.model('State').find({ zone: zoneId }).select('_id').lean();
+        const regions = await mongoose.model('Region').find({ state: { $in: states.map((s) => s._id) } }).select('_id').lean();
+        baseMatch.regionId = { $in: regions.map((r) => r._id) };
+      }
+    } else {
+      Object.assign(baseMatch, await regionScopedMatch(req.user));
     }
 
     const duplicateGroups = await Booking.aggregate(
@@ -1002,6 +1007,7 @@ export const createBooking = async (req, res) => {
     bookingItems = [],
     packageId,
     leadId,
+    salesPersonId,
     regionId,
     districtId,
     driverId,
@@ -1200,9 +1206,31 @@ export const createBooking = async (req, res) => {
       }
     }
 
+    // Slot capacity gate: refuse a booking whose date + slot half is full.
+    // Fail-OPEN — a capacity-check error must never block a real booking.
+    if (req.user) {
+      try {
+        const slot = await slotAvailability(effectiveSchedule.bookingDateValue, summaryEventSlot);
+        if (slot.full) {
+          return res.status(409).json({
+            message: slot.blocked
+              ? 'This date has been blocked by HR — no bookings can be added. Please choose another date.'
+              : `That date is fully booked — all ${slot.capacity} slots are taken (${slot.booked}/${slot.capacity}). Please choose another date.`,
+          });
+        }
+      } catch (_) {
+        // ignore — never prevent booking creation because the check failed
+      }
+    }
+
     const booking = await Booking.create({
       packageId: summaryPackageId,
       leadId: normalizeObjectId(leadId),
+      // Credit the salesperson: an explicit id, else the creating user when they
+      // are a salesperson (reports still fall back to the lead's owner otherwise).
+      salesPersonId:
+        normalizeObjectId(salesPersonId) ||
+        (req.user?.role === 'sales' ? req.user._id : null),
       regionId: normalizedRegionId,
       districtId: normalizedDistrictId,
       driverId: normalizedDriverId,

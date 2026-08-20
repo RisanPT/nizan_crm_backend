@@ -22,11 +22,25 @@
 import { timeboxFetch, timeboxMode } from '../services/timeboxClient.js';
 import Employee from '../models/Employee.js';
 import Salary from '../models/Salary.js';
+import Department from '../models/Department.js';
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 const norm = (s) => String(s || '').trim().toLowerCase();
 const round0 = (n) => Math.round((Number(n) || 0));
+
+// Timebox department name → CRM Employee.category enum.
+const categoryForDept = (dept) => {
+  const n = norm(dept);
+  if (n === 'sales') return 'sales';
+  if (n === 'it') return 'it';
+  if (n === 'marketing') return 'marketing';
+  // Timebox staff are office/administrative staff (HR/Accounts/Finance/CRM/etc.)
+  // — NEVER the creative/operations (makeup) team. Any other department name
+  // (incl. "Operations") collapses to administrative so imported staff never
+  // land in creative/operations and leak into artist pickers.
+  return 'administrative';
+};
 
 /** Default reporting range = the current calendar month (IST-ish). */
 function defaultRange() {
@@ -195,7 +209,17 @@ export const syncEmployees = async (req, res) => {
       if (e.name) byName.set(norm(e.name), e);
     }
 
+    // Map a Timebox department name → our Department entity id (by name or key).
+    const departments = await Department.find({}).lean();
+    const deptByName = new Map(departments.map((d) => [norm(d.name), d._id]));
+    const deptByKey = new Map(departments.map((d) => [d.key, d._id]));
+    const deptIdForTimebox = (tbDept) => {
+      const n = norm(tbDept);
+      return deptByName.get(n) || deptByKey.get(n) || null;
+    };
+
     let synced = 0;
+    let created = 0;
     let alreadySynced = 0;
     let unmatched = 0;
     const conflicts = [];
@@ -215,9 +239,36 @@ export const syncEmployees = async (req, res) => {
         if (crmMatch) matchedBy = 'name';
       }
 
+      // No CRM match → CREATE the Timebox person as an administrative Employee,
+      // slotted into their department. This is how Timebox staff are saved into
+      // our DB and shown under the departments.
       if (!crmMatch) {
-        unmatched += 1;
-        results.push({ timeboxId: tbId, timeboxName: tbName, matched: false, reason: 'no_crm_match' });
+        const newEmp = await Employee.create({
+          name: tbName || tb.email || `Timebox #${tbId}`,
+          email: tb.email || '',
+          role: 'staff',
+          // Imported staff are administrative by default. `artistRole` is the
+          // real role classifier and its schema default is 'artist', so we MUST
+          // set it explicitly here — otherwise every imported admin/ops person
+          // is silently treated as an artist and leaks into artist pickers.
+          artistRole: 'staff',
+          category: categoryForDept(tb.department),
+          department: tb.department || 'Administrative',
+          departmentId: deptIdForTimebox(tb.department),
+          status: tb.active === false ? 'inactive' : 'active',
+          timeboxEmployeeId: tbId,
+          timeboxName: tbName,
+        });
+        created += 1;
+        results.push({
+          timeboxId: tbId,
+          timeboxName: tbName,
+          crmId: String(newEmp._id),
+          crmName: newEmp.name,
+          matched: true,
+          action: 'created',
+          department: newEmp.department,
+        });
         continue;
       }
 
@@ -240,8 +291,12 @@ export const syncEmployees = async (req, res) => {
         continue;
       }
 
-      // Already synced with the same ID — skip update
+      // Already synced with the same ID — just backfill the department if unset.
       if (Number(crmMatch.timeboxEmployeeId) === tbId) {
+        if (!crmMatch.departmentId) {
+          const did = deptIdForTimebox(tb.department);
+          if (did) await Employee.findByIdAndUpdate(crmMatch._id, { departmentId: did });
+        }
         alreadySynced += 1;
         results.push({
           timeboxId: tbId,
@@ -255,11 +310,13 @@ export const syncEmployees = async (req, res) => {
         continue;
       }
 
-      // Write the binding back to CRM
-      await Employee.findByIdAndUpdate(crmMatch._id, {
-        timeboxEmployeeId: tbId,
-        timeboxName: tbName,
-      });
+      // Write the binding back to CRM (+ slot into their department if unset).
+      const patch = { timeboxEmployeeId: tbId, timeboxName: tbName };
+      if (!crmMatch.departmentId) {
+        const did = deptIdForTimebox(tb.department);
+        if (did) patch.departmentId = did;
+      }
+      await Employee.findByIdAndUpdate(crmMatch._id, patch);
 
       synced += 1;
       results.push({
@@ -276,13 +333,14 @@ export const syncEmployees = async (req, res) => {
     res.json({
       ok: true,
       mode: timeboxMode(),
+      created,
       synced,
       alreadySynced,
       unmatched,
       conflictCount: conflicts.length,
       conflicts,
       results,
-      message: `Synced ${synced} employees. ${alreadySynced} already linked. ${unmatched} unmatched. ${conflicts.length} conflicts.`,
+      message: `Imported ${created} new staff, linked ${synced}, ${alreadySynced} already up to date${conflicts.length ? `, ${conflicts.length} conflicts` : ''}.`,
     });
   } catch (err) {
     res.status(500).json({ ok: false, message: `Timebox sync error: ${err.message}` });

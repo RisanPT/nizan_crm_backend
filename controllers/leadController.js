@@ -1,4 +1,5 @@
 import Lead from '../models/Lead.js';
+import { regionScopedMatch } from '../utils/geoScope.js';
 import {
   notify,
   getUserIdsByRoles,
@@ -107,6 +108,11 @@ export const getLeads = async (req, res) => {
   }
 
   try {
+    // Territory scoping: full-access sees all; a scoped user is limited to the
+    // regions their login covers (sales users are already limited to their own
+    // leads above — this narrows managers to their region).
+    Object.assign(query, await regionScopedMatch(req.user));
+
     const totalItems = await Lead.countDocuments(query);
     const leads = await Lead.find(query)
       .populate('assignedTo', 'name email role')

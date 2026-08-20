@@ -138,6 +138,13 @@ const bookingSchema = mongoose.Schema(
       ref: 'Lead',
       default: null,
     },
+    // The salesperson credited with this sale. Reports fall back to the
+    // converted lead's owner (leadId → Lead.assignedTo) when this is unset.
+    salesPersonId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
     regionId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Region',

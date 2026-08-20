@@ -74,6 +74,13 @@ const employeeSchema = mongoose.Schema(
       type: String,
       default: 'Operations',
     },
+    // Link to the Department entity (org structure). Set on Timebox import and
+    // when a member is assigned to a department.
+    departmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department',
+      default: null,
+    },
     category: {
       type: String,
       enum: ['operations', 'administrative', 'creative', 'it', 'marketing', 'sales', 'admin'],

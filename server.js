@@ -36,6 +36,7 @@ import marketingRoutes from './routes/marketingRoutes.js';
 import trialRoutes from './routes/trialRoutes.js';
 import trialPackageRoutes from './routes/trialPackageRoutes.js';
 import roleRoutes from './routes/roleRoutes.js';
+import departmentRoutes from './routes/departmentRoutes.js';
 import adminExpenseRoutes from './routes/adminExpenseRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import salaryRoutes from './routes/salaryRoutes.js';
@@ -47,6 +48,7 @@ import accountReportRoutes from './routes/accountReportRoutes.js';
 import assetRoutes from './routes/assetRoutes.js';
 import accountingRoutes from './routes/accountingRoutes.js';
 import salesReportRoutes from './routes/salesReportRoutes.js';
+import slotRoutes from './routes/slotRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -134,6 +136,7 @@ app.use(express.json());
 // Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/roles', roleRoutes);
+app.use('/api/departments', departmentRoutes);
 app.use('/api/employees', employeeRoutes);
 app.use('/api/customers', customerRoutes);
 app.use('/api/leads', leadRoutes);
@@ -174,6 +177,7 @@ app.use('/api/account-reports', accountReportRoutes);
 app.use('/api/assets', assetRoutes);              // Company asset register (Finance)
 app.use('/api/accounting', accountingRoutes);     // Double-entry ledger (Finance)
 app.use('/api/sales-reports', salesReportRoutes); // Sales analytics reports
+app.use('/api/slots', slotRoutes);                // Day-wise booking slot capacity
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });

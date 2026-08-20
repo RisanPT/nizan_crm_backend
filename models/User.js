@@ -42,6 +42,13 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // The department this user belongs to (Department entity). Formalises the
+    // old free-text department string; drives division/role delegation & scoping.
+    departmentId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Department',
+      default: null,
+    },
     // Allows the user to manage staff in their department (if they have the appropriate role)
     isDepartmentHead: {
       type: Boolean,

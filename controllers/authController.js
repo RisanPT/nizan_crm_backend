@@ -23,6 +23,7 @@ const toAuthResponse = async (user) => ({
     isDepartmentHead: user.isDepartmentHead ?? false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
+    departmentId: user.departmentId?.toString() ?? null,
     zoneId: user.zoneId?.toString() ?? null,
     stateId: user.stateId?.toString() ?? null,
     regionId: user.regionId?.toString() ?? null,
@@ -69,6 +70,7 @@ export const getMe = async (req, res) => {
       isDepartmentHead: req.user.isDepartmentHead ?? false,
       managedBy: req.user.managedBy?.toString() ?? null,
       employeeId: req.user.employeeId?.toString() ?? null,
+      departmentId: req.user.departmentId?.toString() ?? null,
       zoneId: req.user.zoneId?.toString() ?? null,
       stateId: req.user.stateId?.toString() ?? null,
       regionId: req.user.regionId?.toString() ?? null,
@@ -108,6 +110,7 @@ export const getUsers = async (req, res) => {
       isDepartmentHead: u.isDepartmentHead ?? false,
       managedBy: u.managedBy?.toString() ?? null,
       employeeId: u.employeeId?.toString() ?? null,
+      departmentId: u.departmentId?.toString() ?? null,
       zoneId: u.zoneId?.toString() ?? null,
       stateId: u.stateId?.toString() ?? null,
       regionId: u.regionId?.toString() ?? null,
@@ -146,6 +149,7 @@ export const getUsers = async (req, res) => {
     isDepartmentHead: u.isDepartmentHead ?? false,
     managedBy: u.managedBy?.toString() ?? null,
     employeeId: u.employeeId?.toString() ?? null,
+    departmentId: u.departmentId?.toString() ?? null,
     zoneId: u.zoneId?.toString() ?? null,
     stateId: u.stateId?.toString() ?? null,
     regionId: u.regionId?.toString() ?? null,
@@ -216,6 +220,7 @@ export const createUser = async (req, res) => {
     inventoryAccess: Boolean(req.body.inventoryAccess),
     inventoryManage: Boolean(req.body.inventoryManage),
     isDepartmentHead: Boolean(req.body.isDepartmentHead),
+    departmentId: req.body.departmentId || null,
     managedBy: isDepartmentHeadReq && !isFullAccess ? req.user._id : null,
     employeeId: employeeId || null,
     zoneId: req.body.zoneId || null,
@@ -240,6 +245,7 @@ export const createUser = async (req, res) => {
     isDepartmentHead: user.isDepartmentHead ?? false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
+    departmentId: user.departmentId?.toString() ?? null,
     zoneId: user.zoneId?.toString() ?? null,
     stateId: user.stateId?.toString() ?? null,
     regionId: user.regionId?.toString() ?? null,
@@ -354,6 +360,9 @@ export const updateUser = async (req, res) => {
   if (req.body.employeeId !== undefined) {
     user.employeeId = req.body.employeeId || null;
   }
+  if (req.body.departmentId !== undefined) {
+    user.departmentId = req.body.departmentId || null;
+  }
   if (req.body.zoneId !== undefined) {
     user.zoneId = req.body.zoneId || null;
   }
@@ -393,6 +402,7 @@ export const updateUser = async (req, res) => {
     isDepartmentHead: user.isDepartmentHead ?? false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
+    departmentId: user.departmentId?.toString() ?? null,
     zoneId: user.zoneId?.toString() ?? null,
     stateId: user.stateId?.toString() ?? null,
     regionId: user.regionId?.toString() ?? null,

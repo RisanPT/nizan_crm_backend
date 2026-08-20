@@ -2,6 +2,7 @@ import Booking from '../models/Booking.js';
 import Collection from '../models/Collection.js';
 import Lead from '../models/Lead.js';
 import User from '../models/User.js';
+import { regionScopedMatch } from '../utils/geoScope.js';
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
 const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
@@ -24,9 +25,11 @@ const dateFilter = (field, from, to) => {
 };
 
 // All revenue bookings in the window.
-const saleBookings = async (from, to) => {
-  const bookings = await Booking.find(dateFilter('bookingDate', from, to))
-    .select('customerName phone service totalPrice collectedAmount bookingDate status leadId')
+const saleBookings = async (from, to, user) => {
+  // Territory scoping: full-access sees all; a scoped user only their regions.
+  const geo = await regionScopedMatch(user);
+  const bookings = await Booking.find({ ...dateFilter('bookingDate', from, to), ...geo })
+    .select('customerName phone service totalPrice collectedAmount bookingDate status leadId salesPersonId')
     .limit(50000)
     .lean();
   return bookings.filter(isSale);
@@ -67,7 +70,7 @@ export const salesByCustomer = async (req, res) => {
   if (!guard(req, res)) return;
   try {
     const { from, to } = req.query;
-    const bookings = await saleBookings(from, to);
+    const bookings = await saleBookings(from, to, req.user);
     const map = new Map();
     for (const b of bookings) {
       const key = `${b.customerName || 'Unknown'}|${b.phone || ''}`;
@@ -92,7 +95,7 @@ export const salesByPackage = async (req, res) => {
   if (!guard(req, res)) return;
   try {
     const { from, to } = req.query;
-    const bookings = await saleBookings(from, to);
+    const bookings = await saleBookings(from, to, req.user);
     const map = new Map();
     for (const b of bookings) {
       const key = (b.service && b.service.trim()) || 'Unspecified';
@@ -114,18 +117,23 @@ export const salesBySalesperson = async (req, res) => {
   if (!guard(req, res)) return;
   try {
     const { from, to } = req.query;
-    const bookings = await saleBookings(from, to);
+    const bookings = await saleBookings(from, to, req.user);
 
     const leadIds = [...new Set(bookings.filter((b) => b.leadId).map((b) => String(b.leadId)))];
     const leads = await Lead.find({ _id: { $in: leadIds } }).select('assignedTo').lean();
     const leadToUser = new Map(leads.map((l) => [String(l._id), l.assignedTo ? String(l.assignedTo) : null]));
-    const userIds = [...new Set([...leadToUser.values()].filter(Boolean))];
+    // The salesperson credited: the booking's own salesPersonId, else the
+    // converted lead's owner.
+    const uidFor = (b) =>
+      (b.salesPersonId ? String(b.salesPersonId) : null) ||
+      (b.leadId ? leadToUser.get(String(b.leadId)) : null);
+    const userIds = [...new Set(bookings.map(uidFor).filter(Boolean))];
     const users = await User.find({ _id: { $in: userIds } }).select('name').lean();
     const userName = new Map(users.map((u) => [String(u._id), u.name || 'Unknown']));
 
     const map = new Map();
     for (const b of bookings) {
-      const uid = b.leadId ? leadToUser.get(String(b.leadId)) : null;
+      const uid = uidFor(b);
       const name = uid ? userName.get(uid) || 'Unknown' : 'Direct / Unassigned';
       if (!map.has(name)) map.set(name, { label: name, sublabel: '', count: 0, amount: 0, received: 0 });
       const r = map.get(name);
@@ -146,7 +154,7 @@ export const salesSummary = async (req, res) => {
   try {
     const { from, to } = req.query;
     const groupBy = req.query.groupBy === 'month' ? 'month' : 'day';
-    const bookings = await saleBookings(from, to);
+    const bookings = await saleBookings(from, to, req.user);
     const map = new Map();
     for (const b of bookings) {
       const d = new Date(b.bookingDate || Date.now());

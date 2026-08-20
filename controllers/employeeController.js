@@ -1,6 +1,7 @@
 import Employee from '../models/Employee.js';
 import SalaryIncrement from '../models/SalaryIncrement.js';
 import mongoose from 'mongoose';
+import { flatGeoMatch, isFullGeoAccess } from '../utils/geoScope.js';
 
 const normalizeWorks = (works, fallbackSpecialization = '') => {
   if (Array.isArray(works)) {
@@ -97,20 +98,18 @@ export const getEmployees = async (req, res) => {
       });
     }
 
-    if (req.query.zoneId) {
-      andConditions.push({ zoneId: req.query.zoneId });
-    }
-    if (req.query.stateId) {
-      andConditions.push({ stateId: req.query.stateId });
-    }
-    if (req.query.regionId) {
-      andConditions.push({ regionId: req.query.regionId });
-    }
-    if (req.query.districtId) {
-      andConditions.push({ districtId: req.query.districtId });
-    }
-    if (req.query.pincodeId) {
-      andConditions.push({ pincodeId: req.query.pincodeId });
+    // Territory scoping. A full-access user (admin/manager) may filter by any
+    // geo via query params. A scoped user is LOCKED to their own territory and
+    // cannot widen it — their query params are ignored and their own geo wins.
+    if (isFullGeoAccess(req.user)) {
+      if (req.query.zoneId) andConditions.push({ zoneId: req.query.zoneId });
+      if (req.query.stateId) andConditions.push({ stateId: req.query.stateId });
+      if (req.query.regionId) andConditions.push({ regionId: req.query.regionId });
+      if (req.query.districtId) andConditions.push({ districtId: req.query.districtId });
+      if (req.query.pincodeId) andConditions.push({ pincodeId: req.query.pincodeId });
+    } else {
+      const geo = flatGeoMatch(req.user);
+      if (Object.keys(geo).length) andConditions.push(geo);
     }
 
     if (andConditions.length > 0) {
