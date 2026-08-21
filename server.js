@@ -49,6 +49,7 @@ import assetRoutes from './routes/assetRoutes.js';
 import accountingRoutes from './routes/accountingRoutes.js';
 import salesReportRoutes from './routes/salesReportRoutes.js';
 import slotRoutes from './routes/slotRoutes.js';
+import bankAccountRoutes from './routes/bankAccountRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -178,6 +179,7 @@ app.use('/api/assets', assetRoutes);              // Company asset register (Fin
 app.use('/api/accounting', accountingRoutes);     // Double-entry ledger (Finance)
 app.use('/api/sales-reports', salesReportRoutes); // Sales analytics reports
 app.use('/api/slots', slotRoutes);                // Day-wise booking slot capacity
+app.use('/api/bank-accounts', bankAccountRoutes); // Manual bank balances (Finance)
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });
