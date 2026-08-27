@@ -66,10 +66,28 @@ const attachBookingEventDates = async (customers) => {
   return customers;
 };
 
+const SORT_MAP = {
+  newest: { createdAt: -1 },
+  oldest: { createdAt: 1 },
+  name_asc: { name: 1 },
+  name_desc: { name: -1 },
+};
+
 export const getCustomers = async (req, res) => {
   try {
     const page = Number.parseInt(req.query.page, 10);
     const limit = Number.parseInt(req.query.limit, 10);
+
+    // Search across name / phone / email / company, filter by status, and sort.
+    const query = {};
+    const search = String(req.query.search ?? '').trim();
+    if (search) {
+      const rx = new RegExp(search.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
+      query.$or = [{ name: rx }, { phone: rx }, { email: rx }, { company: rx }];
+    }
+    const status = String(req.query.status ?? '').trim();
+    if (status && status !== 'All') query.status = status;
+    const sort = SORT_MAP[String(req.query.sort ?? 'newest')] || SORT_MAP.newest;
 
     if (Number.isFinite(page) || Number.isFinite(limit)) {
       const currentPage = Math.max(1, page || 1);
@@ -77,12 +95,12 @@ export const getCustomers = async (req, res) => {
       const skip = (currentPage - 1) * currentLimit;
 
       const [items, totalItems] = await Promise.all([
-        Customer.find({})
-          .sort({ createdAt: -1 })
+        Customer.find(query)
+          .sort(sort)
           .skip(skip)
           .limit(currentLimit)
           .lean(),
-        Customer.countDocuments({}),
+        Customer.countDocuments(query),
       ]);
       await attachBookingEventDates(items);
 
@@ -95,7 +113,7 @@ export const getCustomers = async (req, res) => {
       });
     }
 
-    const customers = await Customer.find({}).sort({ createdAt: -1 }).lean();
+    const customers = await Customer.find(query).sort(sort).lean();
     await attachBookingEventDates(customers);
     res.json(customers);
   } catch (error) {

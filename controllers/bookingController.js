@@ -463,6 +463,12 @@ const normalizeBookingItems = async ({
       totalPrice: computedTotalPrice,
       advanceAmount: computedAdvanceAmount,
       assignedStaff: normalizeAssignedStaff(item?.assignedStaff ?? []),
+      // Per-item overrides — preserve whatever the client sent; empty = inherit
+      // from the booking-level fields when displaying on the frontend.
+      outfitDetails: String(item?.outfitDetails ?? '').trim(),
+      mapUrl: String(item?.mapUrl ?? '').trim(),
+      startTime: String(item?.startTime ?? '').trim(),
+      endTime: String(item?.endTime ?? '').trim(),
     });
   }
 
@@ -1024,6 +1030,7 @@ export const createBooking = async (req, res) => {
     driverName,
     status,
     mapUrl,
+    dateMaps,
     travelMode,
     travelTime,
     travelDistanceKm,
@@ -1052,6 +1059,7 @@ export const createBooking = async (req, res) => {
     pocId,
     pocName,
     pocPhone,
+    createdAt,
   } = req.body;
 
   try {
@@ -1223,7 +1231,13 @@ export const createBooking = async (req, res) => {
       }
     }
 
+    // Optional backdated "booking made" date for a late-entered (forgotten)
+    // booking. Mongoose respects an explicit createdAt on insert.
+    const bookedCreatedAt = createdAt ? new Date(createdAt) : null;
+    const hasBookedDate = bookedCreatedAt && !Number.isNaN(bookedCreatedAt.getTime());
+
     const booking = await Booking.create({
+      ...(hasBookedDate ? { createdAt: bookedCreatedAt } : {}),
       packageId: summaryPackageId,
       leadId: normalizeObjectId(leadId),
       // Credit the salesperson: an explicit id, else the creating user when they
@@ -1247,6 +1261,7 @@ export const createBooking = async (req, res) => {
       driverName,
       status: normalizedStatus,
       mapUrl,
+      dateMaps: dateMaps || {},
       travelMode,
       travelTime,
       travelDistanceKm,
@@ -1254,6 +1269,7 @@ export const createBooking = async (req, res) => {
       requiredRoomDetail,
       secondaryContact,
       outfitDetails,
+      looks: Array.isArray(looks) ? looks : [],
       referenceImages: Array.isArray(referenceImages) ? referenceImages : [],
       captureStaffDetails,
       temporaryStaffDetails,
@@ -1370,6 +1386,7 @@ export const updateBooking = async (req, res) => {
       driverName,
       status,
       mapUrl,
+      dateMaps,
       travelMode,
       travelTime,
       travelDistanceKm,
@@ -1377,7 +1394,8 @@ export const updateBooking = async (req, res) => {
       requiredRoomDetail,
       secondaryContact,
       outfitDetails,
-    referenceImages,
+      referenceImages,
+      looks,
       captureStaffDetails,
       temporaryStaffDetails,
       staffInstructions,
@@ -1397,6 +1415,7 @@ export const updateBooking = async (req, res) => {
       pocId,
       pocName,
       pocPhone,
+      createdAt,
     } = req.body;
 
     const previousStatus = String(booking.status ?? '').toLowerCase();
@@ -1542,6 +1561,15 @@ export const updateBooking = async (req, res) => {
     booking.driverName = driverName ?? booking.driverName;
     booking.status = status ?? booking.status;
     booking.mapUrl = mapUrl ?? booking.mapUrl;
+    if (dateMaps !== undefined) booking.dateMaps = dateMaps;
+    // Correcting the "booking made" date (createdAt) — e.g. a late entry. It is
+    // applied via a raw write AFTER save because Mongoose's timestamps plugin
+    // marks createdAt immutable (so booking.createdAt = ... / $set are ignored).
+    let bookedAtOverride = null;
+    if (createdAt) {
+      const d = new Date(createdAt);
+      if (!Number.isNaN(d.getTime())) bookedAtOverride = d;
+    }
     booking.travelMode = travelMode ?? booking.travelMode;
     booking.travelTime = travelTime ?? booking.travelTime;
     booking.travelDistanceKm = travelDistanceKm ?? booking.travelDistanceKm;
@@ -1550,6 +1578,9 @@ export const updateBooking = async (req, res) => {
       requiredRoomDetail ?? booking.requiredRoomDetail;
     booking.secondaryContact = secondaryContact ?? booking.secondaryContact;
     booking.outfitDetails = outfitDetails ?? booking.outfitDetails;
+    if (looks !== undefined) {
+      booking.looks = Array.isArray(looks) ? looks : [];
+    }
     if (referenceImages !== undefined) {
       booking.referenceImages = Array.isArray(referenceImages)
         ? referenceImages.filter((u) => String(u ?? '').trim())
@@ -1581,6 +1612,13 @@ export const updateBooking = async (req, res) => {
     booking.pocPhone = pocPhone ?? booking.pocPhone;
 
     const updatedBooking = await booking.save();
+    if (bookedAtOverride) {
+      await Booking.collection.updateOne(
+        { _id: booking._id },
+        { $set: { createdAt: bookedAtOverride } },
+      );
+      updatedBooking.createdAt = bookedAtOverride;
+    }
     const shouldSendAdvanceInvoice =
       previousStatus != 'confirmed' &&
       String(updatedBooking.status ?? '').toLowerCase() == 'confirmed';

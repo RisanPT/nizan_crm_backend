@@ -115,6 +115,25 @@ const bookingItemSchema = mongoose.Schema(
       type: [assignedStaffSchema],
       default: [],
     },
+    // Per-item details — allow each package/date to have its own
+    // outfit, venue, and time independently of the other items.
+    outfitDetails: {
+      type: String,
+      default: '',
+    },
+    mapUrl: {
+      type: String,
+      default: '',
+    },
+    // "HH:MM" 24-h strings, e.g. "09:30". Empty = inherit booking-level time.
+    startTime: {
+      type: String,
+      default: '',
+    },
+    endTime: {
+      type: String,
+      default: '',
+    },
   },
   { _id: false }
 );
@@ -214,6 +233,15 @@ const bookingSchema = mongoose.Schema(
     mapUrl: {
       type: String,
       default: '',
+    },
+    // Per-date map/venue overrides for a MULTI-DATE booking (no separate
+    // bookingItems). Keyed by 'YYYY-MM-DD' → map URL, so each date can have its
+    // own venue without bleeding into the booking's other dates. Falls back to
+    // the booking-level `mapUrl` for any date not present here.
+    dateMaps: {
+      type: Map,
+      of: String,
+      default: {},
     },
     travelMode: {
       type: String,
