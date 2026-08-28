@@ -862,6 +862,29 @@ export const getPaginatedBookings = async (req, res) => {
       };
     }
 
+    // Apply an explicit date range (from / to). Filters on the same field as the
+    // basis (event date = bookingDate, booking date = createdAt) and takes
+    // precedence over FY / month so a specific date search narrows the results.
+    const fromRaw = String(req.query.from ?? '').trim();
+    const toRaw = String(req.query.to ?? '').trim();
+    if (fromRaw || toRaw) {
+      const dateField = dateBasis === 'booking_date' ? 'createdAt' : 'bookingDate';
+      const range = {};
+      if (fromRaw) {
+        const d = new Date(fromRaw);
+        if (!Number.isNaN(d.getTime())) {
+          range.$gte = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
+        }
+      }
+      if (toRaw) {
+        const d = new Date(toRaw);
+        if (!Number.isNaN(d.getTime())) {
+          range.$lte = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
+        }
+      }
+      if (range.$gte || range.$lte) baseMatch[dateField] = range;
+    }
+
     // Apply Map Link filter if provided
     const onlyWithMapLink = String(req.query.onlyWithMapLink ?? '').trim().toLowerCase() === 'true';
     if (onlyWithMapLink) {
