@@ -334,12 +334,14 @@ const computeBaseAdvanceAmount = async ({
   fallbackAdvanceAmount,
 }) => {
   const normalizedFallback = Number(fallbackAdvanceAmount) || 0;
-  if (!packageId) return normalizedFallback;
+  // Option A: the entered advance is authoritative — it's what the client
+  // actually paid (e.g. ₹5000). The package's configured advance is only the
+  // DEFAULT, used when no advance was entered.
+  if (normalizedFallback > 0) return normalizedFallback;
+  if (!packageId) return 0;
 
   const packageDoc = await ServicePackage.findById(packageId).lean();
-  if (!packageDoc) return normalizedFallback;
-
-  return Number(packageDoc.advanceAmount) || normalizedFallback;
+  return Number(packageDoc?.advanceAmount) || 0;
 };
 
 const computeTotalPrice = async ({
@@ -399,12 +401,14 @@ const computeAdvanceAmount = async ({
   selectedDates,
 }) => {
   const normalizedFallback = Number(fallbackAdvanceAmount) || 0;
-  if (!packageId) return normalizedFallback;
+  // Option A: an entered advance is the authoritative TOTAL the client paid
+  // (NOT multiplied per date). Only when nothing was entered do we fall back to
+  // the package's default advance × number of dates.
+  if (normalizedFallback > 0) return normalizedFallback;
+  if (!packageId) return 0;
 
   const packageDoc = await ServicePackage.findById(packageId).lean();
-  if (!packageDoc) return normalizedFallback;
-
-  const baseAdvance = Number(packageDoc.advanceAmount) || normalizedFallback;
+  const baseAdvance = Number(packageDoc?.advanceAmount) || 0;
   const dateCount = Math.max(1, selectedDates?.length ?? 0);
   return baseAdvance * dateCount;
 };
