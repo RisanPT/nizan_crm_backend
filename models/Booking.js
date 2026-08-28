@@ -134,6 +134,38 @@ const bookingItemSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // Per-item travel — each package/date can have its own commute independently
+    // of the other items. Empty/0 = inherit the booking-level travel fields.
+    travelMode: {
+      type: String,
+      default: '',
+    },
+    travelTime: {
+      type: String,
+      default: '',
+    },
+    travelDistanceKm: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    // Per-item work details. Empty = inherit the booking-level field.
+    requiredRoomDetail: {
+      type: String,
+      default: '',
+    },
+    staffInstructions: {
+      type: String,
+      default: '',
+    },
+    internalRemarks: {
+      type: String,
+      default: '',
+    },
+    status: {
+      type: String,
+      default: '',
+    },
   },
   { _id: false }
 );

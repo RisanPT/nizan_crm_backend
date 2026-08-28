@@ -469,6 +469,13 @@ const normalizeBookingItems = async ({
       mapUrl: String(item?.mapUrl ?? '').trim(),
       startTime: String(item?.startTime ?? '').trim(),
       endTime: String(item?.endTime ?? '').trim(),
+      travelMode: String(item?.travelMode ?? '').trim(),
+      travelTime: String(item?.travelTime ?? '').trim(),
+      travelDistanceKm: Number(item?.travelDistanceKm) || 0,
+      requiredRoomDetail: String(item?.requiredRoomDetail ?? '').trim(),
+      staffInstructions: String(item?.staffInstructions ?? '').trim(),
+      internalRemarks: String(item?.internalRemarks ?? '').trim(),
+      status: String(item?.status ?? '').trim().toLowerCase(),
     });
   }
 
