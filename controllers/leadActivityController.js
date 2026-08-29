@@ -68,7 +68,7 @@ export const updateLeadActivity = async (req, res) => {
     const activity = await LeadActivity.findByIdAndUpdate(
       req.params.id,
       req.body,
-      { new: true }
+      { new: true, runValidators: true }
     );
     if (!activity) {
       return res.status(404).json({ message: 'Activity not found' });

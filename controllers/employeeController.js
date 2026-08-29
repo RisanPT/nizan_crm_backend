@@ -354,7 +354,10 @@ export const updateEmployee = async (req, res) => {
     employee.stateId = stateId != null ? normalizedStateId : employee.stateId;
     employee.districtId = districtId != null ? normalizedDistrictId : employee.districtId;
     employee.pincodeId = pincodeId != null ? normalizedPincodeId : employee.pincodeId;
-    employee.role = role ?? effectiveSpecialization ?? employee.role;
+    // Preserve the existing role when an update omits it — previously it fell
+    // through to `effectiveSpecialization` (always a string), so editing only a
+    // phone/status silently overwrote (or wiped) the employee's role.
+    employee.role = role ?? employee.role ?? effectiveSpecialization;
     employee.department = department ?? employee.department ?? 'Operations';
     employee.category = category ?? employee.category ?? 'operations';
     employee.profileImage = profileImage ?? employee.profileImage;

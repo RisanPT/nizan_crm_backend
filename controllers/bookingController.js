@@ -99,6 +99,7 @@ const normalizeAddons = (addons = []) => {
       service: item.service ?? '',
       amount: Number(item.amount) || 0,
       persons: Math.max(1, Number(item.persons) || 1),
+      description: String(item.description ?? '').trim(),
     }));
 };
 

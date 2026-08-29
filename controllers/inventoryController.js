@@ -66,6 +66,10 @@ const cleanProduct = (body) => ({
   productType: String(body.productType ?? body.type ?? '').trim(),
   expiry: toDate(body.expiry),
   notes: String(body.notes ?? '').trim(),
+  // Bulk import sends a reorder threshold; keep it (0 is valid). Absent → model default.
+  ...(body.lowStockThreshold != null
+    ? { lowStockThreshold: Math.max(0, Number(body.lowStockThreshold) || 0) }
+    : {}),
 });
 
 // Tube model: consume `percent` of a tube from a product, cascading to the
@@ -290,8 +294,9 @@ export const updateProduct = async (req, res) => {
     }
     if (req.body.expiry !== undefined) product.expiry = data.expiry;
     if (req.body.lowStockThreshold !== undefined) {
-      product.lowStockThreshold =
-        Number(req.body.lowStockThreshold) || product.lowStockThreshold;
+      // 0 is a valid threshold (alert only when fully out), so don't treat it as
+      // falsy and revert — clamp to a non-negative number instead.
+      product.lowStockThreshold = Math.max(0, Number(req.body.lowStockThreshold) || 0);
     }
     if (req.body.notes !== undefined) product.notes = data.notes;
     await product.save();

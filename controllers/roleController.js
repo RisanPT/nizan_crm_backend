@@ -58,6 +58,12 @@ const DEFAULT_ROLES = [
     homeRoute: '/marketing/dashboard',
     permissions: ['marketing'],
   },
+  {
+    key: 'it',
+    label: 'IT',
+    homeRoute: '/it/projects',
+    permissions: ['it'],
+  },
 ];
 
 // Accept a module key ('sales') or a namespaced sub-feature key ('sales.leads').

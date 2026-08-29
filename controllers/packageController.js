@@ -143,8 +143,10 @@ export const savePackage = async (req, res) => {
       servicePackage.advanceAmount =
         advanceAmount ?? servicePackage.advanceAmount;
       servicePackage.description = description ?? servicePackage.description;
-      servicePackage.regionPrices = normalizedRegionPrices;
-      servicePackage.districtPrices = normalizedDistrictPrices;
+      // Only replace the price arrays when the request actually carries them, so
+      // a partial update never wipes stored regional/district overrides.
+      if (req.body.regionPrices !== undefined) servicePackage.regionPrices = normalizedRegionPrices;
+      if (req.body.districtPrices !== undefined) servicePackage.districtPrices = normalizedDistrictPrices;
       await servicePackage.save();
     } else {
       servicePackage = await ServicePackage.create({

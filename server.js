@@ -51,6 +51,7 @@ import salesReportRoutes from './routes/salesReportRoutes.js';
 import slotRoutes from './routes/slotRoutes.js';
 import bankAccountRoutes from './routes/bankAccountRoutes.js';
 import companyReportRoutes from './routes/companyReportRoutes.js';
+import ticketRoutes from './routes/ticketRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -161,6 +162,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/it-tasks', itTaskRoutes);
+app.use('/api/tickets', ticketRoutes);
 app.use('/api/time-blocks', timeBlockRoutes);
 app.use('/api/budgets', budgetRoutes);
 app.use('/api/fleet', fleetRoutes);

@@ -131,6 +131,8 @@ export const createSubscription = async (req, res) => {
       websiteUrl,
       notes,
       receiptImage,
+      gstRcm,
+      gstRate,
     } = req.body;
 
     const sub = new Subscription({
@@ -149,6 +151,8 @@ export const createSubscription = async (req, res) => {
       websiteUrl: websiteUrl || '',
       notes: notes || '',
       receiptImage: receiptImage || '',
+      gstRcm: Boolean(gstRcm),
+      gstRate: Math.max(0, Number(gstRate) || 0),
       createdBy: req.user?._id || null,
     });
 
@@ -184,6 +188,8 @@ export const updateSubscription = async (req, res) => {
       websiteUrl,
       notes,
       receiptImage,
+      gstRcm,
+      gstRate,
     } = req.body;
 
     if (name !== undefined) sub.name = name;
@@ -201,6 +207,8 @@ export const updateSubscription = async (req, res) => {
     if (websiteUrl !== undefined) sub.websiteUrl = websiteUrl;
     if (notes !== undefined) sub.notes = notes;
     if (receiptImage !== undefined) sub.receiptImage = receiptImage;
+    if (gstRcm !== undefined) sub.gstRcm = Boolean(gstRcm);
+    if (gstRate !== undefined) sub.gstRate = Math.max(0, Number(gstRate) || 0);
 
     await sub.save();
 

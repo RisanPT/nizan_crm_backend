@@ -1,5 +1,6 @@
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
+import Role from '../models/Role.js';
 
 // Role groups used by the notification matrix. `role` on User holds a Role.key,
 // so these are the keys management/admin accounts use. Keep the manager set in
@@ -37,6 +38,18 @@ export const getUserIdsByRoles = async (roles) => {
     active: { $ne: false },
   }).select('_id');
   return users.map((u) => u._id);
+};
+
+/// Resolve active user ids whose ROLE grants a given feature permission.
+/// Permission-driven, so custom roles (e.g. a "Project Head" role with the
+/// `it` permission ticked) are reached — not just a single hardcoded role key.
+export const getUserIdsByPermission = async (permission) => {
+  if (!permission) return [];
+  const roles = await Role.find({ permissions: permission, active: { $ne: false } })
+    .select('key')
+    .lean();
+  const keys = roles.map((r) => r.key);
+  return getUserIdsByRoles(keys);
 };
 
 /// Resolve the login-user ids linked to the given Employee ids (staff/driver/
@@ -139,5 +152,13 @@ export const notify = async ({
 /// Convenience: notify everyone holding any of [roles].
 export const notifyRoles = async ({ roles, ...rest }) => {
   const ids = await getUserIdsByRoles(roles);
+  await notify({ ...rest, recipients: ids });
+};
+
+/// Notify every user whose role grants a feature permission (see
+/// getUserIdsByPermission). Used to reach the whole "IT team" regardless of
+/// which role keys the admin set up.
+export const notifyPermission = async ({ permission, ...rest }) => {
+  const ids = await getUserIdsByPermission(permission);
   await notify({ ...rest, recipients: ids });
 };

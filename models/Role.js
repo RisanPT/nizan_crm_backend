@@ -19,6 +19,7 @@ export const PERMISSION_KEYS = [
   'marketing',
   'fleet',
   'reports',
+  'it',
   'leave',
   'settings',
 ];

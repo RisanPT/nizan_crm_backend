@@ -175,6 +175,16 @@ const updateAccount = async (req, res) => {
     const account = await ChartOfAccount.findById(req.params.id);
     if (!account) return res.status(404).json({ message: 'Account not found' });
     Object.assign(account, cleanAccount({ ...account.toObject(), ...req.body }));
+    // `code` is editable on the COA form but cleanAccount doesn't carry it, so a
+    // code edit was silently reverted. Apply it here with a uniqueness guard.
+    if (req.body.code !== undefined) {
+      const code = String(req.body.code).trim();
+      if (code && code !== account.code) {
+        const exists = await ChartOfAccount.findOne({ code, _id: { $ne: account._id } });
+        if (exists) return res.status(400).json({ message: `Account code ${code} already exists` });
+        account.code = code;
+      }
+    }
     await account.save();
     res.json(account);
   } catch (error) {

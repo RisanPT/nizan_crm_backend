@@ -50,6 +50,12 @@ const itTaskSchema = mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // Set when the task is moved to 'completed' (updateITTask writes it; without
+    // this field Mongoose strict mode silently discarded the completion time).
+    completedAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

@@ -82,7 +82,9 @@ export const createVehicle = async (req, res) => {
       brand: brand ?? '',
       fuelType: fuelType ?? 'petrol',
       driverId: normalizeObjectId(driverId),
-      status: status ?? 'active',
+      // 'running' is the model's valid default; 'active' is not in the enum and
+      // made a status-less create fail validation (vehicle never saved).
+      status: status ?? 'running',
       notes: notes ?? '',
       ownershipType: ownershipType ?? 'in_house',
     });
