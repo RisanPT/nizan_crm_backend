@@ -22,19 +22,16 @@ const isITStaff = async (u) => {
   }
 };
 
-// Visibility: IT sees all; everyone else sees tickets from THEIR department
-// (whole-department visibility) plus any they raised themselves.
+// Visibility: IT sees ALL tickets (to triage); everyone else sees ONLY the
+// tickets they raised themselves — not their whole department's.
 const visibilityMatch = async (user) => {
   if (await isITStaff(user)) return {};
-  const or = [{ raisedBy: user._id }];
-  if (user.departmentId) or.push({ departmentId: user.departmentId });
-  return { $or: or };
+  return { raisedBy: user._id };
 };
 
 const canView = async (user, ticket) => {
   if (await isITStaff(user)) return true;
-  if (String(ticket.raisedBy) === String(user._id)) return true;
-  return user.departmentId && String(ticket.departmentId) === String(user.departmentId);
+  return String(ticket.raisedBy) === String(user._id);
 };
 
 const linkOf = (id) => `/helpdesk/tickets/${id}`;

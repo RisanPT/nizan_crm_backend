@@ -902,6 +902,20 @@ export const getPaginatedBookings = async (req, res) => {
       }
     }
 
+    // "Added By" filter — the user who actually ENTERED the booking
+    // (Booking.createdBy). Anyone with booking access (sales, CRM, managers,
+    // admin) can create bookings, so this lists every enterer — unlike
+    // salesPersonId, which is the credited salesperson.
+    const createdBy = String(req.query.createdBy ?? '').trim();
+    if (createdBy && mongoose.Types.ObjectId.isValid(createdBy)) {
+      baseMatch.createdBy = new mongoose.Types.ObjectId(createdBy);
+    }
+    // (Optional) salesperson-credit filter, kept for report use.
+    const salesPersonId = String(req.query.salesPersonId ?? '').trim();
+    if (salesPersonId && mongoose.Types.ObjectId.isValid(salesPersonId)) {
+      baseMatch.salesPersonId = new mongoose.Types.ObjectId(salesPersonId);
+    }
+
     // Territory scoping. A full-access user (admin/manager) may filter by any
     // geo via query params. A scoped user is LOCKED to their own territory —
     // their query params are ignored and their own region set is enforced.

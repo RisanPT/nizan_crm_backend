@@ -1,3 +1,4 @@
+import mongoose from 'mongoose';
 import Lead from '../models/Lead.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
 import {
@@ -57,8 +58,12 @@ export const getLeads = async (req, res) => {
   } else if (salesperson && salesperson !== 'All') {
     if (salesperson === 'Unassigned') {
       query.$or = [{ assignedTo: null }, { assignedTo: { $exists: false } }];
-    } else {
-      query.assignedTo = salesperson;
+    } else if (mongoose.Types.ObjectId.isValid(salesperson)) {
+      // MUST be an ObjectId, not a string: Lead.find/countDocuments auto-cast
+      // strings, but Lead.aggregate ($match for the dashboard stat counts) does
+      // NOT — a string assignedTo matches zero docs, so the counts stayed 0
+      // while the list filtered correctly.
+      query.assignedTo = new mongoose.Types.ObjectId(salesperson);
     }
   }
 

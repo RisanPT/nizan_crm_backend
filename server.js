@@ -52,6 +52,8 @@ import slotRoutes from './routes/slotRoutes.js';
 import bankAccountRoutes from './routes/bankAccountRoutes.js';
 import companyReportRoutes from './routes/companyReportRoutes.js';
 import ticketRoutes from './routes/ticketRoutes.js';
+import contentRoutes from './routes/contentRoutes.js';
+import backupRoutes from './routes/backupRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -86,6 +88,16 @@ const allowedOrigins = new Set([
     .filter(Boolean),
 ]);
 
+// Private LAN address (RFC1918) — lets a phone/device on the same Wi-Fi open the
+// web build served from the dev machine's LAN IP without a CORS rejection.
+function isPrivateLanHost(hostname) {
+  return (
+    /^10\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^192\.168\.\d{1,3}\.\d{1,3}$/.test(hostname) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}$/.test(hostname)
+  );
+}
+
 function isAllowedOrigin(origin) {
   if (!origin) {
     return true;
@@ -106,6 +118,7 @@ function isAllowedOrigin(origin) {
     if (
       hostname === 'localhost' ||
       hostname === '127.0.0.1' ||
+      isPrivateLanHost(hostname) ||
       hostname.endsWith('.netlify.app') ||
       hostname === 'teamnmakeovers.com' ||
       hostname.endsWith('.teamnmakeovers.com')
@@ -163,6 +176,8 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/it-tasks', itTaskRoutes);
 app.use('/api/tickets', ticketRoutes);
+app.use('/api/content', contentRoutes);          // Marketing content planning
+app.use('/api/backup', backupRoutes);            // Per-department + full data backup
 app.use('/api/time-blocks', timeBlockRoutes);
 app.use('/api/budgets', budgetRoutes);
 app.use('/api/fleet', fleetRoutes);
