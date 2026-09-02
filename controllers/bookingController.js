@@ -437,14 +437,19 @@ const normalizeBookingItems = async ({
 
   for (const item of bookingItems) {
     const normalizedPackageId = normalizeObjectId(item?.packageId);
+    // Per-item district/region drives THIS package's district-based price so a
+    // multi-district booking prices each package correctly. Fall back to the
+    // booking-level district when the item doesn't specify one.
+    const itemDistrictId = normalizeObjectId(item?.districtId) || districtId;
+    const itemRegionId = normalizeObjectId(item?.regionId) || regionId;
     const itemSchedule = resolveSchedule({
       selectedDates: item?.selectedDates ?? fallbackSelectedDates,
       bookingDate: fallbackBookingDate,
     });
     const computedTotalPrice = await computeBasePackagePrice({
       packageId: normalizedPackageId,
-      regionId,
-      districtId,
+      regionId: itemRegionId,
+      districtId: itemDistrictId,
       fallbackTotalPrice: item?.totalPrice,
     });
     const computedAdvanceAmount = await computeBaseAdvanceAmount({
@@ -481,6 +486,11 @@ const normalizeBookingItems = async ({
       staffInstructions: String(item?.staffInstructions ?? '').trim(),
       internalRemarks: String(item?.internalRemarks ?? '').trim(),
       status: String(item?.status ?? '').trim().toLowerCase(),
+      // Per-item district/region (empty = inherit the booking-level district).
+      districtId: itemDistrictId ? String(itemDistrictId) : '',
+      regionId: itemRegionId ? String(itemRegionId) : '',
+      // Per-package add-ons (multi-package bookings).
+      addons: normalizeAddons(item?.addons ?? []),
     });
   }
 
@@ -1188,7 +1198,10 @@ export const createBooking = async (req, res) => {
     const finalTotalPrice =
       normalizedBookingItems.length > 0
         ? normalizedBookingItems.reduce(
-            (sum, item) => sum + (Number(item.totalPrice) || 0),
+            (sum, item) =>
+              sum +
+              (Number(item.totalPrice) || 0) +
+              computeAddonsTotal(item.addons || []),
             0
           ) +
           addonsTotal

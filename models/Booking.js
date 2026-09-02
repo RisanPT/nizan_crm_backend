@@ -166,6 +166,23 @@ const bookingItemSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // Per-item district/region (multi-district bookings): each package/date can
+    // sit in its own district, which drives that package's district-based price.
+    // Empty = inherit the booking-level district.
+    districtId: {
+      type: String,
+      default: '',
+    },
+    regionId: {
+      type: String,
+      default: '',
+    },
+    // Per-package add-ons (multi-package bookings). Booking-level `addons`
+    // stays for single bookings.
+    addons: {
+      type: [addonSchema],
+      default: [],
+    },
   },
   { _id: false }
 );
