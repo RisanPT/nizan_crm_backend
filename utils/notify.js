@@ -20,6 +20,7 @@ export const NOTIFICATION_TYPES = {
   LOST_RESULT: 'lost_result',
   BOOKING_CREATED: 'booking_created',
   REPORT_UPLOADED: 'report_uploaded',
+  REVIEW_SUBMITTED: 'review_submitted',
   MONTH_END_SUMMARY: 'month_end_summary',
 };
 

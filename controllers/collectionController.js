@@ -186,3 +186,45 @@ export const deleteCollection = async (req, res) => {
     res.status(500).json({ message: error.message });
   }
 };
+
+/// Edits a collection. An artist/driver may only edit their OWN pending entry —
+/// once Accounts verifies or rejects it the record is locked so the audited
+/// figure cannot be changed underneath them. Admin/Accounts can edit any entry.
+export const updateCollection = async (req, res) => {
+  try {
+    const collection = await Collection.findById(req.params.id);
+    if (!collection) {
+      return res.status(404).json({ message: 'Collection not found' });
+    }
+
+    const role = req.user?.role;
+    const isOwnerRole = role === 'artist' || role === 'driver';
+
+    if (isOwnerRole) {
+      if (String(collection.employeeId) !== String(req.user.employeeId)) {
+        return res
+          .status(403)
+          .json({ message: 'Not authorized to edit this collection' });
+      }
+      if (collection.status !== 'pending') {
+        return res.status(400).json({
+          message: `This collection has already been ${collection.status} by Accounts and can no longer be edited.`,
+        });
+      }
+    }
+
+    const { amount, date, paymentMode, notes, attachmentUrl } = req.body;
+    if (amount !== undefined) collection.amount = Number(amount) || 0;
+    if (date !== undefined) collection.date = date;
+    if (paymentMode !== undefined) collection.paymentMode = paymentMode;
+    if (notes !== undefined) collection.notes = notes ?? '';
+    if (attachmentUrl !== undefined) collection.attachmentUrl = attachmentUrl ?? null;
+
+    await collection.save();
+
+    const populated = await Collection.findById(collection._id).populate(collectionPopulate);
+    res.json(populated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

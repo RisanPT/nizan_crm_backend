@@ -6,6 +6,7 @@ import ServicePackage from '../models/Package.js';
 import Lead from '../models/Lead.js';
 import { regionScopedMatch, isFullGeoAccess } from '../utils/geoScope.js';
 import { slotAvailability } from './slotController.js';
+import { ensureReviewForBooking, reviewFormUrl } from './reviewController.js';
 import {
   sendAdvanceInvoiceEmail,
   sendCompletionInvoiceEmail,
@@ -1733,10 +1734,24 @@ export const updateBooking = async (req, res) => {
     // Re-post the sales invoice to reflect the update (best-effort).
     await safePost(() => postDoc('Booking', updatedBooking.toObject(), req.user?._id || null));
 
+    // A completed booking gets a client review request; return its public form
+    // URL so the app can append it to the completion WhatsApp message. Idempotent
+    // (one review per booking), so re-saving a completed booking reuses it.
+    let reviewUrl = '';
+    if (String(updatedBooking.status ?? '').toLowerCase() === 'completed') {
+      try {
+        const review = await ensureReviewForBooking(updatedBooking, req.user);
+        reviewUrl = reviewFormUrl(req, review.token);
+      } catch (reviewErr) {
+        console.error('Failed to ensure review request:', reviewErr.message);
+      }
+    }
+
     res.json({
       ...updatedBooking.toObject(),
       invoiceEmailSent,
       completionInvoiceEmailSent,
+      reviewUrl,
     });
   } catch (error) {
     res.status(500).json({ message: error.message, details: error.stack });

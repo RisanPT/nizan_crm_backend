@@ -39,6 +39,7 @@ import roleRoutes from './routes/roleRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
 import adminExpenseRoutes from './routes/adminExpenseRoutes.js';
 import expenseCategoryRoutes from './routes/expenseCategoryRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import salaryRoutes from './routes/salaryRoutes.js';
 import salesReturnRoutes from './routes/salesReturnRoutes.js';
@@ -201,6 +202,7 @@ app.use('/api/sales-reports', salesReportRoutes); // Sales analytics reports
 app.use('/api/slots', slotRoutes);                // Day-wise booking slot capacity
 app.use('/api/bank-accounts', bankAccountRoutes); // Manual bank balances (Finance)
 app.use('/api/company-reports', companyReportRoutes); // Per-department report library
+app.use('/api/reviews', reviewRoutes);                // Post-service client review forms
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });
