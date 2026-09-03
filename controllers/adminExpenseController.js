@@ -1,8 +1,14 @@
 import AdminExpense from '../models/AdminExpense.js';
 import Salary from '../models/Salary.js';
-import { notifyRoles } from '../utils/notify.js';
+import { notifyRoles, notify } from '../utils/notify.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { isApprover, resolveUserDeptName } from '../utils/departmentScope.js';
 
+// Accounts + Admin are the approvers: they see every department's expenses,
+// approve/reject them, and anything they add directly is auto-approved (posts
+// to the books immediately). Everyone else is a department head who may only
+// SUBMIT expenses for their OWN department — those stay pending (and out of the
+// ledger) until an approver approves them. Mirrors the artist-expense flow.
 const expensePopulate = [
   { path: 'paidBy', select: 'name phone department artistRole status' },
   { path: 'approvedBy', select: 'name role' },
@@ -48,12 +54,27 @@ export const getAdminExpenses = async (req, res) => {
       ];
     }
 
+    // Department heads (non-approvers) only ever see their OWN department's
+    // expenses — the query's `department` param can't widen that.
+    const approver = isApprover(req.user);
+    if (!approver) {
+      const deptName = await resolveUserDeptName(req.user);
+      if (deptName) {
+        filter.department = deptName;
+      } else {
+        // No department on record → restrict to only what they submitted.
+        filter.createdBy = req.user?._id ?? null;
+      }
+    }
+
     const expenses = await AdminExpense.find(filter)
       .populate(expensePopulate)
       .lean();
 
+    // Payroll rows are sensitive — only approvers get the auto-integrated
+    // salary lines merged in.
     let salaries = [];
-    if (!category || category === 'All' || category === 'other') {
+    if (approver && (!category || category === 'All' || category === 'other')) {
       const salaryFilter = { status: 'paid' };
       
       if (department && department !== 'All') {
@@ -128,7 +149,19 @@ export const getAdminExpenseStats = async (req, res) => {
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
-    const allExpenses = await AdminExpense.find({});
+    // Scope stats to the department head's own department; approvers see all.
+    const approver = isApprover(req.user);
+    const statsFilter = {};
+    if (!approver) {
+      const deptName = await resolveUserDeptName(req.user);
+      if (deptName) {
+        statsFilter.department = deptName;
+      } else {
+        statsFilter.createdBy = req.user?._id ?? null;
+      }
+    }
+
+    const allExpenses = await AdminExpense.find(statsFilter);
 
     let totalAmount = 0;
     let thisMonthAmount = 0;
@@ -157,7 +190,7 @@ export const getAdminExpenseStats = async (req, res) => {
       departmentBreakdown[dept] = (departmentBreakdown[dept] || 0) + amt;
     }
 
-    const allSalaries = await Salary.find({ status: 'paid' });
+    const allSalaries = approver ? await Salary.find({ status: 'paid' }) : [];
     for (const salary of allSalaries) {
       const amt = Number(salary.netAmount) || 0;
       totalAmount += amt;
@@ -222,9 +255,28 @@ export const createAdminExpense = async (req, res) => {
 
     const amountNum = Number(amount) || 0;
 
+    // Approvers (Accounts/Admin) may file for any department and it is approved
+    // on the spot (and posted). A department head may only file for their OWN
+    // department, and it stays pending — out of the books — until Accounts
+    // approves it. Mirrors the artist-expense submit → verify flow.
+    const approver = isApprover(req.user);
+    let deptForExpense = department || 'General';
+    if (!approver) {
+      const deptName = await resolveUserDeptName(req.user);
+      if (!deptName) {
+        return res.status(400).json({
+          message:
+            'Your account is not linked to a department, so you cannot submit a departmental expense. Ask an admin to set your department.',
+        });
+      }
+      deptForExpense = deptName;
+    }
+
+    const status = approver ? 'approved' : 'pending';
+
     const expense = new AdminExpense({
       title,
-      department: department || 'General',
+      department: deptForExpense,
       category: category || 'other',
       expenseHead: expenseHead || '',
       vendor: vendor || '',
@@ -241,7 +293,9 @@ export const createAdminExpense = async (req, res) => {
       invoiceNumber: invoiceNumber || '',
       notes: notes || '',
       createdBy: req.user?._id || null,
-      status: 'pending',
+      status,
+      approvedBy: approver ? req.user?._id || null : null,
+      approvedAt: approver ? new Date() : null,
     });
 
     await expense.save();
@@ -249,15 +303,22 @@ export const createAdminExpense = async (req, res) => {
     await notifyRoles({
       roles: ['accounts', 'admin'],
       type: 'expense_recorded',
-      title: 'New Administrative Expense',
-      body: `₹${amountNum.toLocaleString('en-IN')} for "${title}" (${expense.department}) submitted.`,
-      link: '/accounts/administrative/expenses',
+      title: approver
+        ? 'New Administrative Expense'
+        : 'Department expense awaiting approval',
+      body: approver
+        ? `₹${amountNum.toLocaleString('en-IN')} for "${title}" (${deptForExpense}) recorded.`
+        : `${deptForExpense}: ₹${amountNum.toLocaleString('en-IN')} for "${title}" submitted for approval.`,
+      link: '/accounts/admin-expenses',
       createdBy: req.user?._id ?? null,
       excludeUserId: req.user?._id ?? null,
     });
 
-    // Post to the ledger (expense payment voucher). Best-effort.
-    await safePost(() => postDoc('AdminExpense', expense.toObject(), req.user?._id || null));
+    // Only APPROVED expenses hit the books. A pending departmental submission
+    // is NOT posted until Accounts approves it.
+    if (status === 'approved') {
+      await safePost(() => postDoc('AdminExpense', expense.toObject(), req.user?._id || null));
+    }
 
     const populated = await AdminExpense.findById(expense._id).populate(expensePopulate);
     res.status(201).json(populated);
@@ -271,6 +332,25 @@ export const updateAdminExpense = async (req, res) => {
     const expense = await AdminExpense.findById(req.params.id);
     if (!expense) {
       return res.status(404).json({ message: 'Administrative expense not found' });
+    }
+
+    // A department head may only edit their OWN department's expense while it is
+    // still pending — once Accounts has approved/rejected it, it is locked and
+    // they cannot move the audited figure. They also cannot re-file it under
+    // another department or change its approval status.
+    const approver = isApprover(req.user);
+    if (!approver) {
+      const deptName = await resolveUserDeptName(req.user);
+      if (deptName && expense.department !== deptName) {
+        return res
+          .status(403)
+          .json({ message: 'Not authorized to edit this expense' });
+      }
+      if (expense.status !== 'pending') {
+        return res.status(400).json({
+          message: `This expense has already been ${expense.status} by Accounts and can no longer be edited.`,
+        });
+      }
     }
 
     const {
@@ -295,7 +375,8 @@ export const updateAdminExpense = async (req, res) => {
     } = req.body;
 
     if (title !== undefined) expense.title = title;
-    if (department !== undefined) expense.department = department;
+    // Only approvers may re-assign the department or move the approval status.
+    if (approver && department !== undefined) expense.department = department;
     if (category !== undefined) expense.category = category;
     if (expenseHead !== undefined) expense.expenseHead = expenseHead;
     if (vendor !== undefined) expense.vendor = vendor;
@@ -311,12 +392,17 @@ export const updateAdminExpense = async (req, res) => {
     if (receiptImage !== undefined) expense.receiptImage = receiptImage;
     if (invoiceNumber !== undefined) expense.invoiceNumber = invoiceNumber;
     if (notes !== undefined) expense.notes = notes;
-    if (status !== undefined) expense.status = status;
+    if (approver && status !== undefined) expense.status = status;
 
     await expense.save();
 
-    // Re-post to the ledger to reflect the change. Best-effort.
-    await safePost(() => postDoc('AdminExpense', expense.toObject(), req.user?._id || null));
+    // Keep the ledger in step with the approval status: an approved expense is
+    // (re)posted; a pending/rejected one is kept out of the books.
+    if (expense.status === 'approved') {
+      await safePost(() => postDoc('AdminExpense', expense.toObject(), req.user?._id || null));
+    } else {
+      await safePost(() => unpostDoc('AdminExpense', expense._id));
+    }
 
     const populated = await AdminExpense.findById(expense._id).populate(expensePopulate);
     res.json(populated);
@@ -327,6 +413,13 @@ export const updateAdminExpense = async (req, res) => {
 
 export const verifyAdminExpense = async (req, res) => {
   try {
+    // Approving/rejecting a payment is an Accounts/Admin action only.
+    if (!isApprover(req.user)) {
+      return res
+        .status(403)
+        .json({ message: 'Only Accounts can approve or reject expenses' });
+    }
+
     const expense = await AdminExpense.findById(req.params.id);
     if (!expense) {
       return res.status(404).json({ message: 'Administrative expense not found' });
@@ -343,8 +436,25 @@ export const verifyAdminExpense = async (req, res) => {
 
     await expense.save();
 
-    // Re-post to the ledger to reflect the change. Best-effort.
-    await safePost(() => postDoc('AdminExpense', expense.toObject(), req.user?._id || null));
+    // Post to the books on approval; pull it back out on reject / send-back.
+    if (status === 'approved') {
+      await safePost(() => postDoc('AdminExpense', expense.toObject(), req.user?._id || null));
+    } else {
+      await safePost(() => unpostDoc('AdminExpense', expense._id));
+    }
+
+    // Let the department head who submitted it know the outcome.
+    if (expense.createdBy && status !== 'pending') {
+      await notify({
+        recipients: [expense.createdBy],
+        type: 'expense_recorded',
+        title: status === 'approved' ? 'Expense approved' : 'Expense rejected',
+        body: `Your ${expense.department} expense "${expense.title}" (₹${(Number(expense.amount) || 0).toLocaleString('en-IN')}) was ${status} by Accounts.`,
+        link: '/accounts/admin-expenses',
+        createdBy: req.user?._id ?? null,
+        excludeUserId: req.user?._id ?? null,
+      });
+    }
 
     const populated = await AdminExpense.findById(expense._id).populate(expensePopulate);
     res.json(populated);

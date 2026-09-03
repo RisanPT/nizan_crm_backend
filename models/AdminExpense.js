@@ -1,5 +1,9 @@
 import mongoose from 'mongoose';
 
+// Suggested department names for the UI dropdown. The stored `department`
+// field is a free string (not enum-locked) so department heads of ANY
+// department — including custom ones an admin creates at runtime — can file
+// an expense under their own department name.
 export const ADMIN_DEPARTMENTS = [
   'CRM',
   'Finance',
@@ -8,6 +12,8 @@ export const ADMIN_DEPARTMENTS = [
   'Sales',
   'Marketing',
   'HR',
+  'Artist',
+  'Fleet',
   'Operations',
   'General',
 ];
@@ -77,14 +83,16 @@ const adminExpenseSchema = mongoose.Schema(
     },
     department: {
       type: String,
-      enum: ADMIN_DEPARTMENTS,
       default: 'General',
       required: true,
+      trim: true,
     },
+    // Free string, not enum-locked — categories are now managed per department
+    // (ExpenseCategory). ADMIN_EXPENSE_CATEGORIES stays as the default seed set.
     category: {
       type: String,
-      enum: ADMIN_EXPENSE_CATEGORIES,
       default: 'other',
+      trim: true,
     },
     // Controlled expense head (ledger) code from EXPENSE_HEADS — the doc's
     // "no free-text heads" requirement. Optional for legacy rows.

@@ -10,6 +10,13 @@ const companyReportSchema = mongoose.Schema(
     description: { type: String, default: '' },
     // The department this report is filed under (name, e.g. "Sales", "HR").
     department: { type: String, required: true, trim: true },
+    // Optional folder (within the department) this report is categorised under.
+    // null = "Unfiled" (department root).
+    folder: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'ReportFolder',
+      default: null,
+    },
     // Optional reporting period label, e.g. "Aug 2026" or "Q1 FY26".
     period: { type: String, default: '' },
 

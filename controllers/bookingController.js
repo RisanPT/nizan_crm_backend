@@ -1201,7 +1201,13 @@ export const createBooking = async (req, res) => {
             (sum, item) =>
               sum +
               (Number(item.totalPrice) || 0) +
-              computeAddonsTotal(item.addons || []),
+              // Only a genuine MULTI-package booking carries add-ons per item; a
+              // single-package booking keeps them at the booking level
+              // (addonsTotal, below), so counting per-item add-ons here too
+              // would double-count them.
+              (normalizedBookingItems.length > 1
+                ? computeAddonsTotal(item.addons || [])
+                : 0),
             0
           ) +
           addonsTotal

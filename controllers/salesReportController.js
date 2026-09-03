@@ -75,7 +75,7 @@ export const salesByCustomer = async (req, res) => {
     for (const b of bookings) {
       const key = `${b.customerName || 'Unknown'}|${b.phone || ''}`;
       if (!map.has(key)) {
-        map.set(key, { label: b.customerName || 'Unknown', sublabel: b.phone || '', count: 0, amount: 0, received: 0, outstanding: 0 });
+        map.set(key, { label: b.customerName || 'Unknown', sublabel: b.phone || '', id: b.phone || '', count: 0, amount: 0, received: 0, outstanding: 0 });
       }
       const r = map.get(key);
       r.count += 1;
@@ -99,7 +99,7 @@ export const salesByPackage = async (req, res) => {
     const map = new Map();
     for (const b of bookings) {
       const key = (b.service && b.service.trim()) || 'Unspecified';
-      if (!map.has(key)) map.set(key, { label: key, sublabel: '', count: 0, amount: 0, received: 0 });
+      if (!map.has(key)) map.set(key, { label: key, sublabel: '', id: key, count: 0, amount: 0, received: 0 });
       const r = map.get(key);
       r.count += 1;
       r.amount += b.totalPrice || 0;
@@ -135,7 +135,7 @@ export const salesBySalesperson = async (req, res) => {
     for (const b of bookings) {
       const uid = uidFor(b);
       const name = uid ? userName.get(uid) || 'Unknown' : 'Direct / Unassigned';
-      if (!map.has(name)) map.set(name, { label: name, sublabel: '', count: 0, amount: 0, received: 0 });
+      if (!map.has(name)) map.set(name, { label: name, sublabel: '', id: uid || '', count: 0, amount: 0, received: 0 });
       const r = map.get(name);
       r.count += 1;
       r.amount += b.totalPrice || 0;

@@ -38,6 +38,7 @@ import trialPackageRoutes from './routes/trialPackageRoutes.js';
 import roleRoutes from './routes/roleRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
 import adminExpenseRoutes from './routes/adminExpenseRoutes.js';
+import expenseCategoryRoutes from './routes/expenseCategoryRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import salaryRoutes from './routes/salaryRoutes.js';
 import salesReturnRoutes from './routes/salesReturnRoutes.js';
@@ -186,6 +187,7 @@ app.use('/api/marketing', marketingRoutes);
 app.use('/api/trials', trialRoutes);
 app.use('/api/trial-packages', trialPackageRoutes);
 app.use('/api/admin-expenses', adminExpenseRoutes);
+app.use('/api/expense-categories', expenseCategoryRoutes); // Per-department expense categories (CRUD)
 app.use('/api/subscriptions', subscriptionRoutes);
 app.use('/api/salaries', salaryRoutes);
 app.use('/api/sales-returns', salesReturnRoutes);

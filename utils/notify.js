@@ -19,6 +19,7 @@ export const NOTIFICATION_TYPES = {
   LOST_REQUESTED: 'lost_requested',
   LOST_RESULT: 'lost_result',
   BOOKING_CREATED: 'booking_created',
+  REPORT_UPLOADED: 'report_uploaded',
   MONTH_END_SUMMARY: 'month_end_summary',
 };
 

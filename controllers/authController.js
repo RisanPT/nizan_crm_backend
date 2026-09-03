@@ -2,10 +2,34 @@ import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { permissionsForRole, ensureDefaultRoles, homeRouteForRole } from './roleController.js';
 import Role from '../models/Role.js';
+import Department from '../models/Department.js';
+import Employee from '../models/Employee.js';
 import { syncUserToEmployee } from '../utils/syncUserEmployee.js';
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+// Resolve the display name of a user's department (empty when unset) so the app
+// can show/lock "your department" without a second round-trip. Falls back to the
+// user's linked Employee record so a department head is recognised even when
+// only the Employee (not the User) carries the department.
+const deptNameFor = async (user) => {
+  if (user?.departmentId) {
+    const dept = await Department.findById(user.departmentId).select('name').lean();
+    if (dept?.name?.trim()) return dept.name.trim();
+  }
+  if (user?.employeeId) {
+    const emp = await Employee.findById(user.employeeId)
+      .select('department departmentId')
+      .lean();
+    if (emp?.departmentId) {
+      const d = await Department.findById(emp.departmentId).select('name').lean();
+      if (d?.name?.trim()) return d.name.trim();
+    }
+    if (emp?.department?.trim()) return emp.department.trim();
+  }
+  return '';
+};
 
 // Async because the role's feature permissions are resolved from the Role
 // collection, so access changes take effect on the next login without a deploy.
@@ -24,6 +48,7 @@ const toAuthResponse = async (user) => ({
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
     departmentId: user.departmentId?.toString() ?? null,
+    departmentName: await deptNameFor(user),
     zoneId: user.zoneId?.toString() ?? null,
     stateId: user.stateId?.toString() ?? null,
     regionId: user.regionId?.toString() ?? null,
@@ -71,6 +96,7 @@ export const getMe = async (req, res) => {
       managedBy: req.user.managedBy?.toString() ?? null,
       employeeId: req.user.employeeId?.toString() ?? null,
       departmentId: req.user.departmentId?.toString() ?? null,
+      departmentName: await deptNameFor(req.user),
       zoneId: req.user.zoneId?.toString() ?? null,
       stateId: req.user.stateId?.toString() ?? null,
       regionId: req.user.regionId?.toString() ?? null,
