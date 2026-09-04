@@ -45,6 +45,7 @@ const toAuthResponse = async (user) => ({
     inventoryAccess: user.inventoryAccess ?? false,
     inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
+    artistHead: user.artistHead ?? false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
     departmentId: user.departmentId?.toString() ?? null,
@@ -93,6 +94,7 @@ export const getMe = async (req, res) => {
       inventoryAccess: req.user.inventoryAccess ?? false,
       inventoryManage: req.user.inventoryManage ?? false,
       isDepartmentHead: req.user.isDepartmentHead ?? false,
+      artistHead: req.user.artistHead ?? false,
       managedBy: req.user.managedBy?.toString() ?? null,
       employeeId: req.user.employeeId?.toString() ?? null,
       departmentId: req.user.departmentId?.toString() ?? null,
@@ -246,6 +248,7 @@ export const createUser = async (req, res) => {
     inventoryAccess: Boolean(req.body.inventoryAccess),
     inventoryManage: Boolean(req.body.inventoryManage),
     isDepartmentHead: Boolean(req.body.isDepartmentHead),
+    artistHead: Boolean(req.body.artistHead),
     departmentId: req.body.departmentId || null,
     managedBy: isDepartmentHeadReq && !isFullAccess ? req.user._id : null,
     employeeId: employeeId || null,
@@ -269,6 +272,7 @@ export const createUser = async (req, res) => {
     inventoryAccess: user.inventoryAccess ?? false,
     inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
+    artistHead: user.artistHead ?? false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
     departmentId: user.departmentId?.toString() ?? null,
@@ -383,6 +387,9 @@ export const updateUser = async (req, res) => {
   if (req.body.isDepartmentHead !== undefined) {
     user.isDepartmentHead = Boolean(req.body.isDepartmentHead);
   }
+  if (req.body.artistHead !== undefined) {
+    user.artistHead = Boolean(req.body.artistHead);
+  }
   if (req.body.employeeId !== undefined) {
     user.employeeId = req.body.employeeId || null;
   }
@@ -426,6 +433,7 @@ export const updateUser = async (req, res) => {
     inventoryAccess: user.inventoryAccess ?? false,
     inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
+    artistHead: user.artistHead ?? false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
     departmentId: user.departmentId?.toString() ?? null,

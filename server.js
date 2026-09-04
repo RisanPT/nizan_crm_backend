@@ -2,6 +2,7 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/db.js';
+import { ensureDefaultRoles } from './controllers/roleController.js';
 import authRoutes from './routes/authRoutes.js';
 import employeeRoutes from './routes/employeeRoutes.js';
 import customerRoutes from './routes/customerRoutes.js';
@@ -220,6 +221,7 @@ const startServer = async () => {
     process.env.MONGO_URI !== 'your_mongodb_connection_string_here'
   ) {
     await connectDB();
+    await ensureDefaultRoles(); // seed any new system roles (e.g. artist_head)
     await seedAdminUser();
     await migrateAndSyncAll();
   } else {

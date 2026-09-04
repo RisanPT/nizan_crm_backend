@@ -46,9 +46,28 @@ const reviewSchema = mongoose.Schema(
           _id: false,
           name: { type: String, default: '' },
           role: { type: String, default: '' },
+          employeeId: {
+            type: mongoose.Schema.Types.ObjectId,
+            ref: 'Employee',
+            default: null,
+          },
         },
       ],
       default: [],
+    },
+    // The lead artist this review's "team member" ratings apply to, and all
+    // assigned artist employee ids — so client feedback rolls up to artist
+    // performance.
+    primaryArtistId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+      default: null,
+      index: true,
+    },
+    artistIds: {
+      type: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Employee' }],
+      default: [],
+      index: true,
     },
     customerPhone: { type: String, default: '' },
 

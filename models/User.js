@@ -54,6 +54,13 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // For artist users who ALSO lead the artist team: grants the org-wide
+    // Artist Head dashboard on top of their artist role (they keep their own
+    // works/finance). Mirrors inventoryManage's dual-workspace idea.
+    artistHead: {
+      type: Boolean,
+      default: false,
+    },
     // If created by a department head, links this user to that manager
     managedBy: {
       type: mongoose.Schema.Types.ObjectId,

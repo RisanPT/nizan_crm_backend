@@ -34,6 +34,21 @@ const DEFAULT_ROLES = [
     permissions: ['dashboard', 'calendar', 'finance', 'leave'],
   },
   {
+    key: 'artist_head',
+    label: 'Artist Head',
+    homeRoute: '/artist-head',
+    permissions: [
+      'dashboard',
+      'clients',
+      'calendar',
+      'bookings',
+      'trials',
+      'staff',
+      'sales',
+      'reports',
+    ],
+  },
+  {
     key: 'accounts',
     label: 'Accounts',
     homeRoute: '/accounts/dashboard',

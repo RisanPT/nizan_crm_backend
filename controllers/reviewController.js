@@ -2,6 +2,7 @@ import crypto from 'crypto';
 import Review from '../models/Review.js';
 import Booking from '../models/Booking.js';
 import { notify, NOTIFICATION_TYPES, getUserIdsByRoles } from '../utils/notify.js';
+import { TEAM_N_LOGO } from '../assets/teamNLogo.js';
 
 // ── Snapshot helpers ─────────────────────────────────────────────────────────
 
@@ -33,18 +34,46 @@ const readableRole = (s) => {
 };
 
 // All assigned team members (artist + assistants, excluding drivers) with a
-// readable role, deduped by name.
+// readable role + employee id, deduped by name.
 const collectTeamMembers = (booking) => {
   const seen = new Map();
   const add = (arr) =>
     (arr || []).forEach((s) => {
       if (s && s.roleType !== 'driver' && s.artistName && !seen.has(s.artistName)) {
-        seen.set(s.artistName, { name: s.artistName, role: readableRole(s) });
+        seen.set(s.artistName, {
+          name: s.artistName,
+          role: readableRole(s),
+          employeeId: s.employeeId || null,
+        });
       }
     });
   add(booking.assignedStaff);
   (booking.bookingItems || []).forEach((it) => add(it.assignedStaff));
   return [...seen.values()];
+};
+
+// The lead artist's employee id (the "team member review" section rates them).
+const primaryArtistId = (booking) => {
+  const lead = (booking.assignedStaff || []).find(
+    (s) => s.roleType === 'lead' && s.employeeId,
+  );
+  if (lead) return lead.employeeId;
+  const first = (booking.assignedStaff || []).find(
+    (s) => s.roleType !== 'driver' && s.employeeId,
+  );
+  return first?.employeeId || null;
+};
+
+// Every assigned artist's employee id (excludes drivers).
+const artistIdsOf = (booking) => {
+  const ids = new Set();
+  const add = (arr) =>
+    (arr || []).forEach((s) => {
+      if (s && s.roleType !== 'driver' && s.employeeId) ids.add(String(s.employeeId));
+    });
+  add(booking.assignedStaff);
+  (booking.bookingItems || []).forEach((it) => add(it.assignedStaff));
+  return [...ids];
 };
 
 const publicBase = (req) => {
@@ -73,6 +102,8 @@ export const ensureReviewForBooking = async (booking, user) => {
     artistName: primaryArtistName(booking),
     artistNames: collectArtistNames(booking),
     teamMembers: collectTeamMembers(booking),
+    primaryArtistId: primaryArtistId(booking),
+    artistIds: artistIdsOf(booking),
     customerPhone: booking.phone || '',
   };
 
@@ -348,6 +379,55 @@ export const getReviewAnalytics = async (req, res) => {
   }
 };
 
+// @route GET /api/reviews/artist/:employeeId  (auth)
+// Aggregate a single artist's client-review performance (from the per-artist
+// "team member" ratings of submitted reviews they led).
+export const getArtistReviewPerformance = async (req, res) => {
+  try {
+    const reviews = await Review.find({
+      status: 'submitted',
+      primaryArtistId: req.params.employeeId,
+    }).lean();
+
+    const avg = (pick) => {
+      const vals = reviews.map(pick).filter((v) => v > 0);
+      return vals.length
+        ? Math.round((vals.reduce((s, v) => s + v, 0) / vals.length) * 10) / 10
+        : 0;
+    };
+    const tm = (k) => avg((r) => r.teamMember?.[k] || 0);
+
+    const testimonials = reviews
+      .filter((r) => (r.testimonial || '').trim())
+      .sort((a, b) => new Date(b.submittedAt) - new Date(a.submittedAt))
+      .slice(0, 5)
+      .map((r) => ({
+        text: r.testimonial,
+        bride: r.brideName,
+        date: r.submittedAt,
+        rating: r.teamMember?.overall || 0,
+        consent: !!r.marketingConsent,
+      }));
+
+    res.json({
+      reviewCount: reviews.length,
+      avgClientRating: tm('overall'),
+      avgBrideScore: avg((r) => r.brideScore || 0),
+      breakdown: {
+        skill: tm('skill'),
+        attentionToDetail: tm('attention'),
+        timeManagement: tm('timeManagement'),
+        professionalism: tm('professionalism'),
+        communication: tm('communication'),
+        overall: tm('overall'),
+      },
+      testimonials,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @route GET /api/reviews/:id  (auth)
 export const getReviewById = async (req, res) => {
   try {
@@ -403,9 +483,10 @@ function pageShell(title, inner) {
 *{box-sizing:border-box}
 body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f4f1f2;color:#241a1c;line-height:1.5}
 .wrap{max-width:680px;margin:0 auto;padding:0 16px 48px}
-.head{background:linear-gradient(135deg,var(--brand),var(--brand-dk));color:#fff;padding:28px 20px;text-align:center;border-radius:0 0 20px 20px}
-.head h1{margin:0;font-size:20px;letter-spacing:.5px}
-.head p{margin:6px 0 0;opacity:.9;font-size:13px}
+.head{background:linear-gradient(135deg,var(--brand),var(--brand-dk));color:#fff;padding:26px 20px 22px;text-align:center;border-radius:0 0 22px 22px}
+.head .logo{width:104px;height:104px;margin:0 auto 12px;background:#fff;border-radius:50%;padding:7px;box-shadow:0 6px 18px rgba(0,0,0,.22)}
+.head .logo img{width:100%;height:100%;object-fit:contain;border-radius:50%;display:block}
+.head p{margin:8px 0 0;opacity:.92;font-size:13px;letter-spacing:.2px}
 .card{background:#fff;border-radius:14px;padding:18px;margin-top:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
 .meta{display:grid;grid-template-columns:1fr;gap:6px;font-size:14px}
 .meta b{color:var(--brand)}
@@ -501,7 +582,7 @@ export function renderForm(review) {
 
   const inner = `
 <div class="head">
-  <h1>TEAM N MAKEOVERS</h1>
+  <div class="logo"><img src="${TEAM_N_LOGO}" alt="Team N Makeovers"></div>
   <p>Bridal Service Review — your feedback helps us grow 💄</p>
 </div>
 <div class="wrap">

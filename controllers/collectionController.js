@@ -29,6 +29,80 @@ const syncBookingCollectedAmount = async (bookingId) => {
   await Booking.findByIdAndUpdate(bookingId, { collectedAmount: totalCollected });
 };
 
+// @route GET /api/collections/payments-received?from=&to=&status=verified,pending
+// Unified "payments received" over a date range — booking ADVANCES (dated by
+// the booked date `createdAt`, matching the Cash Flow report) PLUS logged
+// COLLECTIONS (dated by their payment `date`). This is the CRM analog of an
+// external Payments-Received report (e.g. Zoho).
+export const getPaymentsReceived = async (req, res) => {
+  try {
+    const { from, to, status } = req.query;
+    const range = {};
+    if (from) range.$gte = new Date(from);
+    if (to) {
+      const end = new Date(to);
+      end.setHours(23, 59, 59, 999);
+      range.$lte = end;
+    }
+    const hasRange = Boolean(from || to);
+    const statuses = (status ? String(status).split(',') : ['verified', 'pending'])
+      .map((s) => s.trim())
+      .filter(Boolean);
+
+    // Collections (by payment date)
+    const colFilter = { status: { $in: statuses } };
+    if (hasRange) colFilter.date = range;
+    const collections = await Collection.find(colFilter)
+      .populate('bookingId', 'bookingNumber customerName')
+      .populate('trialId', 'trialNumber clientName')
+      .lean();
+
+    // Advances (by booked date = createdAt)
+    const bkFilter = { advanceAmount: { $gt: 0 } };
+    if (hasRange) bkFilter.createdAt = range;
+    const bookings = await Booking.find(bkFilter)
+      .select('bookingNumber customerName advanceAmount createdAt')
+      .lean();
+
+    const rows = [];
+    for (const c of collections) {
+      rows.push({
+        date: c.date,
+        customer: c.bookingId?.customerName || c.trialId?.clientName || '',
+        ref: c.bookingId?.bookingNumber || c.trialId?.trialNumber || '',
+        amount: Number(c.amount) || 0,
+        mode: c.paymentMode || '',
+        type: 'collection',
+        status: c.status || '',
+      });
+    }
+    for (const b of bookings) {
+      rows.push({
+        date: b.createdAt,
+        customer: b.customerName || '',
+        ref: b.bookingNumber || '',
+        amount: Number(b.advanceAmount) || 0,
+        mode: '',
+        type: 'advance',
+        status: 'advance',
+      });
+    }
+    rows.sort((a, b) => new Date(a.date) - new Date(b.date));
+
+    const collectionsTotal = collections.reduce((s, c) => s + (Number(c.amount) || 0), 0);
+    const advancesTotal = bookings.reduce((s, b) => s + (Number(b.advanceAmount) || 0), 0);
+    res.json({
+      rows,
+      count: rows.length,
+      total: collectionsTotal + advancesTotal,
+      collectionsTotal,
+      advancesTotal,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const getCollections = async (req, res) => {
   try {
     const { status, bookingId, trialId, employeeId, paymentMode, startDate, endDate } = req.query;

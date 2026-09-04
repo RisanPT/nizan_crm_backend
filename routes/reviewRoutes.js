@@ -4,6 +4,7 @@ import {
   submitReview,
   getReviews,
   getReviewAnalytics,
+  getArtistReviewPerformance,
   getReviewById,
   updateReview,
   createReviewForBooking,
@@ -21,6 +22,7 @@ router.use(protect);
 router.get('/', getReviews);
 // '/analytics' must precede '/:id' so it isn't captured as an id.
 router.get('/analytics', getReviewAnalytics);
+router.get('/artist/:employeeId', getArtistReviewPerformance);
 router.post('/for-booking/:bookingId', createReviewForBooking);
 router.get('/:id', getReviewById);
 router.put('/:id', updateReview);
