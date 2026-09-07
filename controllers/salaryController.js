@@ -110,7 +110,14 @@ export const generateMonthlySalaries = async (req, res) => {
     const targetMonth = Number(month) || new Date().getMonth() + 1;
     const targetYear = Number(year) || new Date().getFullYear();
 
-    const activeEmployees = await Employee.find({ status: 'active' });
+    // Outsource (freelance) artists are paid per booking via the Artist Payout
+    // module — NEVER on monthly payroll — so exclude them from generation.
+    // (Filter by `type` only: all operations staff, incl. in-house artists,
+    // default to salaryType 'per_booking', so salaryType is not a safe filter.)
+    const activeEmployees = await Employee.find({
+      status: 'active',
+      type: { $ne: 'outsource' },
+    });
     let createdCount = 0;
     let skippedCount = 0;
 

@@ -9,6 +9,7 @@ import Salary from '../models/Salary.js';
 import HraRecord from '../models/HraRecord.js';
 import SalesReturn from '../models/SalesReturn.js';
 import Booking from '../models/Booking.js';
+import ArtistPayout from '../models/ArtistPayout.js';
 import Purchase from '../models/Purchase.js';
 import GstSetting from '../models/GstSetting.js';
 import AccountingSetting from '../models/AccountingSetting.js';
@@ -22,7 +23,7 @@ import {
   isLocked,
 } from '../services/posting.js';
 
-const SOURCE_MODELS = { Collection, AdminExpense, FuelExpense, Salary, HraRecord, SalesReturn, Booking };
+const SOURCE_MODELS = { Collection, AdminExpense, FuelExpense, Salary, HraRecord, SalesReturn, Booking, ArtistPayout };
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
 const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
@@ -84,6 +85,9 @@ const CORE_ACCOUNTS = [
   { code: '4020', name: 'Add-on Revenue', nature: 'income', group: 'Direct Income', gstApplicable: true },
   { code: '4090', name: 'Other Income', nature: 'income', group: 'Indirect Income' },
   // Expenses (core, beyond the AdminExpense heads)
+  // Freelance / outsource artist fees — a direct job cost (COGS). Named so the
+  // month-end P&L classifier ("artist payout") groups it under Cost of Sales.
+  { code: 'APO-01', name: 'Artist Payouts', nature: 'expense', group: 'Direct / Job Expense' },
   { code: '5010', name: 'House Rent Allowance', nature: 'expense', group: 'Payroll' },
   { code: '5020', name: 'Salary Incentives', nature: 'expense', group: 'Payroll' },
   { code: '5030', name: 'Room Rent Allowance', nature: 'expense', group: 'Payroll' },

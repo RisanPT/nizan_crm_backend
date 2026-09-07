@@ -1087,6 +1087,7 @@ export const createBooking = async (req, res) => {
     service,
     region,
     district,
+    culture,
     driverName,
     status,
     mapUrl,
@@ -1327,6 +1328,7 @@ export const createBooking = async (req, res) => {
       service: summaryService,
       region,
       district,
+      culture: culture ?? '',
       driverName,
       status: normalizedStatus,
       mapUrl,
@@ -1452,6 +1454,7 @@ export const updateBooking = async (req, res) => {
       service,
       region,
       district,
+      culture,
       driverName,
       status,
       mapUrl,
@@ -1627,6 +1630,7 @@ export const updateBooking = async (req, res) => {
     booking.service = finalService;
     booking.region = region ?? booking.region;
     booking.district = district ?? booking.district;
+    booking.culture = culture ?? booking.culture;
     booking.driverName = driverName ?? booking.driverName;
     booking.status = status ?? booking.status;
     booking.mapUrl = mapUrl ?? booking.mapUrl;

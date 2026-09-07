@@ -271,6 +271,13 @@ const bookingSchema = mongoose.Schema(
     district: {
       type: String,
     },
+    // Optional community/culture of the client's event (Hindu / Muslim /
+    // Christian / …). Captured on the Manage Booking screen; powers the
+    // Marketing "Culture" segmentation. Free of any hierarchy — a simple tag.
+    culture: {
+      type: String,
+      default: '',
+    },
     driverName: {
       type: String,
       default: '',

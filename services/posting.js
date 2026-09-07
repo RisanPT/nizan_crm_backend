@@ -179,6 +179,22 @@ const builders = {
     };
   },
 
+  // Paid freelance-artist fee → Payment to the Artist Payouts head (COGS).
+  ArtistPayout: (d) => {
+    if (d.status !== 'paid') return null;
+    const amt = round2(d.amount);
+    if (amt <= 0) return null;
+    return {
+      voucherType: 'payment',
+      date: d.paidAt || d.date || d.updatedAt || d.createdAt,
+      narration: `Artist payout · ${d.employeeName || ''}`.trim(),
+      rawLines: [
+        { code: 'APO-01', debit: amt, credit: 0 },
+        { code: cashOrBank(d.paymentMode), debit: 0, credit: amt },
+      ],
+    };
+  },
+
   // Paid HRA → Payment to House Rent Allowance.
   HraRecord: (d) => {
     if (d.status !== 'paid') return null;
