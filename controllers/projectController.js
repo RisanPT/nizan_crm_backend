@@ -1,7 +1,12 @@
 import Project from '../models/Project.js';
+import ITTask from '../models/ITTask.js';
+import { isITStaff } from '../utils/itAccess.js';
 
 export const getProjects = async (req, res) => {
   try {
+    if (!(await isITStaff(req.user)))
+      return res.status(403).json({ message: 'IT access required' });
+
     const { status, priority, search } = req.query;
     const query = {};
 
@@ -51,6 +56,9 @@ export const getProjects = async (req, res) => {
 
 export const getProjectById = async (req, res) => {
   try {
+    if (!(await isITStaff(req.user)))
+      return res.status(403).json({ message: 'IT access required' });
+
     const project = await Project.findById(req.params.id).populate('managerId', 'name');
     if (!project) return res.status(404).json({ message: 'Project not found' });
     res.json(project);
@@ -61,6 +69,9 @@ export const getProjectById = async (req, res) => {
 
 export const createProject = async (req, res) => {
   try {
+    if (!(await isITStaff(req.user)))
+      return res.status(403).json({ message: 'IT access required' });
+
     const project = await Project.create(req.body);
     res.status(201).json(project);
   } catch (error) {
@@ -70,6 +81,9 @@ export const createProject = async (req, res) => {
 
 export const updateProject = async (req, res) => {
   try {
+    if (!(await isITStaff(req.user)))
+      return res.status(403).json({ message: 'IT access required' });
+
     const project = await Project.findByIdAndUpdate(req.params.id, req.body, {
       new: true,
       runValidators: true,
@@ -83,8 +97,13 @@ export const updateProject = async (req, res) => {
 
 export const deleteProject = async (req, res) => {
   try {
+    if (!(await isITStaff(req.user)))
+      return res.status(403).json({ message: 'IT access required' });
+
     const project = await Project.findByIdAndDelete(req.params.id);
     if (!project) return res.status(404).json({ message: 'Project not found' });
+    // Cascade: remove the project's tasks so they aren't orphaned.
+    await ITTask.deleteMany({ projectId: req.params.id });
     res.json({ message: 'Project deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });

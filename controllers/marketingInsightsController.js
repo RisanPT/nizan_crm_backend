@@ -161,7 +161,7 @@ export const getMarketingInsights = async (req, res) => {
       status: { $nin: NON_REVENUE },
     })
       .select(
-        'region district culture bookingDate totalPrice service eventSlot ' +
+        'region district pincode culture bookingDate totalPrice service eventSlot ' +
           'addons bookingItems.service bookingItems.eventSlot bookingItems.addons'
       )
       .lean();
@@ -174,11 +174,12 @@ export const getMarketingInsights = async (req, res) => {
       cur.revenue += Number(revenue) || 0;
       map.set(label, cur);
     };
-    const byRegionM = new Map(), byDistrictM = new Map(),
+    const byRegionM = new Map(), byDistrictM = new Map(), byPincodeM = new Map(),
       byMonthM = new Map(), byCultureM = new Map();
     for (const b of segBookings) {
       bump(byRegionM, b.region, b.totalPrice);
       bump(byDistrictM, b.district, b.totalPrice);
+      bump(byPincodeM, b.pincode, b.totalPrice);
       bump(byMonthM, monthKey(b.bookingDate), b.totalPrice);
       // Explicit field wins; otherwise infer from what was booked; else blank.
       const culture =
@@ -187,13 +188,26 @@ export const getMarketingInsights = async (req, res) => {
     }
     const topList = (m, n = 12) =>
       [...m.values()].sort((a, b) => b.bookings - a.bookings).slice(0, n);
+    // District/pincode are sparse for legacy imports — drop the "Unknown" bucket
+    // so the UI only surfaces real values (with a "not captured" note).
+    const knownOnly = (m, n = 12) =>
+      [...m.values()]
+        .filter((r) => r.name !== 'Unknown')
+        .sort((a, b) => b.bookings - a.bookings)
+        .slice(0, n);
     const segments = {
       byRegion: topList(byRegionM),
-      byDistrict: topList(byDistrictM),
+      byDistrict: knownOnly(byDistrictM),
+      byPincode: knownOnly(byPincodeM),
       byMonth: [...byMonthM.values()].sort((a, b) => a.name.localeCompare(b.name)),
       byCulture: [...byCultureM.values()].sort((a, b) => b.bookings - a.bookings),
       totalBookings: segBookings.length,
     };
+
+    // ── 5. Coverage: data-quality of the three analytics dimensions across the
+    // WHOLE booking dataset (not range-scoped) — surfaces existing bookings that
+    // lack a proper event date / culture / location so they can be corrected.
+    const coverage = await computeCoverage();
 
     res.json({
       range: { from, to, fyLabel },
@@ -202,10 +216,59 @@ export const getMarketingInsights = async (req, res) => {
       artistUtilization,
       slotUtilization,
       segments,
+      coverage,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// Data-quality of the three analytics dimensions (event date / culture /
+// location) across ALL revenue-bearing bookings. Read-only, non-destructive —
+// the manual Booking.culture always wins and event dates are already correct
+// where present; this just finds the gaps in existing data so they can be fixed.
+const computeCoverage = async () => {
+  const rows = await Booking.find({ status: { $nin: NON_REVENUE } })
+    .select(
+      'customerName bookingDate culture region district pincode service ' +
+        'eventSlot addons bookingItems.service bookingItems.eventSlot bookingItems.addons'
+    )
+    .sort({ bookingDate: -1 })
+    .lean();
+
+  const eventDate = { total: rows.length, withDate: 0, missing: 0 };
+  const culture = { explicit: 0, inferred: 0, unknown: 0 };
+  const location = { withRegion: 0, withDistrict: 0, withPincode: 0, none: 0 };
+  const worklist = [];
+  const has = (v) => !!(v && String(v).trim());
+
+  for (const b of rows) {
+    const missing = [];
+
+    if (b.bookingDate) eventDate.withDate++;
+    else { eventDate.missing++; missing.push('eventDate'); }
+
+    if (has(b.culture)) culture.explicit++;
+    else if (inferCulture(b)) culture.inferred++;
+    else { culture.unknown++; missing.push('culture'); }
+
+    const region = has(b.region), district = has(b.district), pincode = has(b.pincode);
+    if (region) location.withRegion++;
+    if (district) location.withDistrict++;
+    if (pincode) location.withPincode++;
+    if (!region && !district && !pincode) { location.none++; missing.push('location'); }
+
+    if (missing.length && worklist.length < 50) {
+      worklist.push({
+        _id: b._id,
+        customerName: b.customerName || '',
+        bookingDate: b.bookingDate || null,
+        missing,
+      });
+    }
+  }
+
+  return { eventDate, culture, location, worklist };
 };
 
 // Sum capacity (override/default, 0 on blocked days) and booked slots across
@@ -255,6 +318,85 @@ const slotUtilizationForRange = async (from, to, fyLabel) => {
       .sort((a, b) => a[0].localeCompare(b[0]))
       .map(([month, v]) => ({ month, ...v, pct: pctOf(v.booked, v.capacity) })),
   };
+};
+
+// @route GET /api/marketing/calendar?year=YYYY
+// Year-over-year booking comparison calendar for the marketing team. Returns
+// per-DAY booking counts + revenue for the selected calendar year AND the
+// previous year, so every calendar cell can be compared against the exact same
+// date one year earlier (e.g. hover 15 Mar 2026 → shows 15 Mar 2025 too). Built
+// on bookingDate (the real EVENT date, not the entry date). Both years are
+// fetched in a single query and bucketed by UTC day, matching the rest of the
+// app's day-grouping (utils/slots dayKey).
+export const getBookingCalendar = async (req, res) => {
+  try {
+    if (!canRead(req.user)) {
+      return res.status(403).json({ message: 'No marketing access' });
+    }
+    const now = new Date();
+    let year = Number(req.query.year);
+    if (!Number.isFinite(year) || year < 2000 || year > 2100) {
+      year = now.getUTCFullYear();
+    }
+    const prevYear = year - 1;
+
+    // One query spanning both calendar years: [prevYear-01-01, year+1-01-01).
+    const from = new Date(Date.UTC(prevYear, 0, 1));
+    const to = new Date(Date.UTC(year + 1, 0, 1));
+    const bookings = await Booking.find({
+      bookingDate: { $gte: from, $lt: to },
+      status: { $nin: NON_REVENUE },
+    })
+      .select('bookingDate totalPrice')
+      .lean();
+
+    const dayStr = (d) =>
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-` +
+      `${String(d.getUTCDate()).padStart(2, '0')}`;
+
+    const current = {}; // 'YYYY-MM-DD' -> { bookings, revenue }
+    const previous = {};
+    const monthAgg = Array.from({ length: 12 }, () => ({
+      curBookings: 0, curRevenue: 0, prevBookings: 0, prevRevenue: 0,
+    }));
+    let curBookings = 0, curRevenue = 0, prevBookings = 0, prevRevenue = 0;
+
+    for (const b of bookings) {
+      const d = new Date(b.bookingDate);
+      if (Number.isNaN(d.getTime())) continue;
+      const y = d.getUTCFullYear();
+      const m = d.getUTCMonth(); // 0-11
+      const rev = Number(b.totalPrice) || 0;
+      const target = y === year ? current : y === prevYear ? previous : null;
+      if (!target) continue;
+      const key = dayStr(d);
+      const cur = target[key] || { bookings: 0, revenue: 0 };
+      cur.bookings += 1;
+      cur.revenue += rev;
+      target[key] = cur;
+      if (y === year) {
+        curBookings++; curRevenue += rev;
+        monthAgg[m].curBookings++; monthAgg[m].curRevenue += rev;
+      } else {
+        prevBookings++; prevRevenue += rev;
+        monthAgg[m].prevBookings++; monthAgg[m].prevRevenue += rev;
+      }
+    }
+
+    res.json({
+      year,
+      prevYear,
+      current,
+      previous,
+      summary: {
+        current: { bookings: curBookings, revenue: curRevenue },
+        previous: { bookings: prevBookings, revenue: prevRevenue },
+        byMonth: monthAgg.map((v, i) => ({ month: i + 1, ...v })),
+      },
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
 };
 
 // @route GET /api/marketing/re-engagement?months=6

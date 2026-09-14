@@ -178,6 +178,13 @@ export const promoteToTask = asyncHandler(async (req, res) => {
   const project = await Project.findById(projectId);
   if (!project) { res.status(404); throw new Error('Project not found'); }
 
+  const severityMap = {
+    critical: 'p0',
+    high: 'p1',
+    medium: 'p2',
+    low: 'p3',
+  };
+
   const task = await ITTask.create({
     projectId,
     title: ticket.title,
@@ -185,7 +192,21 @@ export const promoteToTask = asyncHandler(async (req, res) => {
     assignedTo: assignee,
     status: 'todo',
     priority: ticket.priority,
+    severity: severityMap[ticket.priority] || 'p2',
+    ticketType: ticket.type === 'bug' ? 'bug' : ticket.type === 'feature' ? 'feature' : 'tech-debt',
     category: typeToCategory(ticket.type),
+    subTeam: 'general',
+    percentComplete: 0,
+    startDate: new Date(),
+    deadline: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+    activityLogs: [
+      {
+        message: `Task created from ticket ${ticket.ticketNumber}`,
+        author: req.user.name || 'IT Staff',
+        type: 'status_change',
+        timestamp: new Date(),
+      },
+    ],
   });
 
   ticket.linkedTaskId = task._id;

@@ -15,6 +15,7 @@ import MonthlyTarget from '../models/MonthlyTarget.js';
 import Region from '../models/Region.js';
 import CeoDecision from '../models/CeoDecision.js';
 import { accountMovements, round2 } from './accountingController.js';
+import { filingsForPeriod } from './taxFilingController.js';
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
 const canView = (u) => FINANCE_ROLES.includes(u?.role);
@@ -262,6 +263,70 @@ export const getMonthEndReview = async (req, res) => {
       cashRunwayMonths,
     };
 
+    // ── Financial ratios: DSO, DPO, Inventory Turnover, Debt-to-Equity, Free
+    //    Cash Flow, CapEx (all from the same posted ledger + period figures). ──
+    const daysInPeriod = to.getDate(); // `to` is the last day of the month
+    const periodMv = await accountMovements({ from, to });
+    let capex = 0;
+    let totalLiabilities = 0;
+    let totalEquity = 0;
+    let cumIncome = 0;
+    let cumExpense = 0;
+    for (const a of accounts) {
+      const openDr = a.openingType === 'dr' ? a.openingBalance || 0 : 0;
+      const openCr = a.openingType === 'cr' ? a.openingBalance || 0 : 0;
+      const cm = mvToDate.get(String(a._id)) || { debit: 0, credit: 0 };
+      if (a.nature === 'liability') {
+        totalLiabilities += openCr + cm.credit - openDr - cm.debit;
+      } else if (a.nature === 'equity') {
+        totalEquity += openCr + cm.credit - openDr - cm.debit;
+      } else if (a.nature === 'income') {
+        cumIncome += openCr + cm.credit - openDr - cm.debit;
+      } else if (a.nature === 'expense') {
+        cumExpense += openDr + cm.debit - openCr - cm.credit;
+      }
+      // CapEx = capitalized additions (debits) to fixed-asset accounts this period.
+      if (a.nature === 'asset') {
+        const tag = `${a.name || ''} ${a.group || ''}`;
+        if (a.code === '1500' || a.code === '1510' ||
+            /fixed asset|equipment|capex|capital work/i.test(tag)) {
+          const pm = periodMv.get(String(a._id)) || { debit: 0, credit: 0 };
+          capex += Math.max(0, pm.debit - pm.credit);
+        }
+      }
+    }
+    // Accumulated profit rolls into equity (matches the balance sheet).
+    totalEquity = round2(totalEquity + (cumIncome - cumExpense));
+    totalLiabilities = round2(totalLiabilities);
+    capex = round2(capex);
+
+    const operatingCashFlow = round2(cashReceived - cashPaid);
+    const freeCashFlow = round2(operatingCashFlow - capex);
+    // When no cost-of-service accounts are tagged, fall back to total opex so the
+    // ratios still return a sensible figure (noted in the payload).
+    const cogsBase = cur.cogs > 0 ? cur.cogs : cur.expense;
+    const dso = cur.income > 0 ? round2((ar.total / cur.income) * daysInPeriod) : null;
+    const dpo = cogsBase > 0 ? round2((ap.total / cogsBase) * daysInPeriod) : null;
+    const inventoryTurnover =
+        inventoryValue > 0 ? round2((cogsBase * 12) / inventoryValue) : null; // annualized
+    const daysInventory =
+        inventoryTurnover && inventoryTurnover > 0 ? round2(365 / inventoryTurnover) : null;
+    const debtToEquity = totalEquity > 0 ? round2(totalLiabilities / totalEquity) : null;
+
+    const ratios = {
+      dso,
+      dpo,
+      inventoryTurnover,
+      daysInventory,
+      debtToEquity,
+      totalLiabilities,
+      totalEquity,
+      operatingCashFlow,
+      freeCashFlow,
+      capex,
+      cogsTagged: cur.cogs > 0,
+    };
+
     // ── 9. Risk review ─────────────────────────────────────────────────────
     // Unusual transactions: the largest hand-keyed (non-auto) or voided vouchers
     // this period — worth a CEO glance.
@@ -331,6 +396,15 @@ export const getMonthEndReview = async (req, res) => {
 
     const openDecisions = await CeoDecision.countDocuments({ status: { $in: ['pending', 'deferred'] } });
 
+    // Statutory filing status for the period (GSTR-1/3B, TDS).
+    const filingList = await filingsForPeriod(month, year);
+    const filings = {
+      list: filingList,
+      overdue: filingList.filter((f) => f.status === 'overdue').length,
+      pending: filingList.filter((f) => f.status === 'pending').length,
+      filed: filingList.filter((f) => f.status === 'filed').length,
+    };
+
     // ── Targets (vs actual) ────────────────────────────────────────────────
     const targets = target
       ? {
@@ -376,6 +450,9 @@ export const getMonthEndReview = async (req, res) => {
         received: cashReceived,
         paid: cashPaid,
         net: round2(cashReceived - cashPaid),
+        operatingCashFlow,
+        capex,
+        freeCashFlow,
         bankBalance,
         cashBalance,
         totalLiquid: round2(bankBalance + cashBalance),
@@ -387,12 +464,14 @@ export const getMonthEndReview = async (req, res) => {
         notYetDue: ar.notYetDue,
         buckets: ar.buckets,
         collectionEfficiencyPct: collectionEfficiency,
+        dso,
         highRisk,
       },
       payables: {
         outstanding: ap.total,
         overdue: ap.overdue,
         buckets: ap.buckets,
+        dpo,
         upcoming: upcoming.slice(0, 10),
       },
       budgetVsActual: {
@@ -409,13 +488,20 @@ export const getMonthEndReview = async (req, res) => {
         currentLiabilities,
         workingCapital,
         currentRatio,
+        inventoryTurnover,
+        daysInventory,
+        debtToEquity,
+        totalLiabilities,
+        totalEquity,
       },
       kpis,
+      ratios,
       risk: {
         gstNetPayable,
         gstOutput: round2(codeMv('2100', 'cr') + codeMv('2110', 'cr') + codeMv('2120', 'cr')),
         gstInputCredit: round2(codeMv('1300', 'dr')),
         unusualTransactions: unusual,
+        filings,
       },
       openDecisions,
     });

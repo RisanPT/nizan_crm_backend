@@ -21,6 +21,13 @@ const leadSchema = mongoose.Schema(
       type: String,
       default: 'Walk-in',
     },
+    // Marketing campaign this lead is attributed to — drives campaign ROI
+    // (revenue from this lead's bookings rolls up to the campaign).
+    campaignId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Campaign',
+      default: null,
+    },
     location: {
       type: String,
       default: '',

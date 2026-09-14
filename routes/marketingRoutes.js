@@ -15,7 +15,14 @@ import {
 import {
   getMarketingInsights,
   getReEngagement,
+  getBookingCalendar,
 } from '../controllers/marketingInsightsController.js';
+import {
+  getCampaigns,
+  createCampaign,
+  updateCampaign,
+  deleteCampaign,
+} from '../controllers/campaignController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
@@ -26,6 +33,11 @@ router.use(protect);
 // segment breakdowns, and the re-engagement worklist.
 router.get('/insights', getMarketingInsights);
 router.get('/re-engagement', getReEngagement);
+router.get('/calendar', getBookingCalendar);
+
+// Campaigns — ad spend + production cost + ROI.
+router.route('/campaigns').get(getCampaigns).post(createCampaign);
+router.route('/campaigns/:id').put(updateCampaign).delete(deleteCampaign);
 
 router.route('/competitors').get(getCompetitors).post(createCompetitor);
 router.post('/competitors/import', importCompetitors);

@@ -79,6 +79,15 @@ const DEFAULT_ROLES = [
     homeRoute: '/it/projects',
     permissions: ['it'],
   },
+  {
+    // Full IT access (projects/WBS/Gantt, task board, tickets & help desk),
+    // landing on the projects list. IT features are gated by the single 'it'
+    // permission, so this role behaves like 'it'.
+    key: 'project_manager',
+    label: 'Project Manager',
+    homeRoute: '/it/projects',
+    permissions: ['it'],
+  },
 ];
 
 // Accept a module key ('sales') or a namespaced sub-feature key ('sales.leads').
@@ -112,6 +121,17 @@ export const ensureDefaultRoles = async () => {
   await Role.updateOne(
     { key: 'sales', homeRoute: '/sales/leads' },
     { $set: { homeRoute: '/sales/home' } }
+  );
+  // Ensure a Project Manager role (possibly created earlier in the Roles UI
+  // without the IT feature ticked) actually has IT access. $addToSet only adds
+  // 'it', never removes an admin's other picks.
+  await Role.updateOne(
+    { key: 'project_manager' },
+    { $addToSet: { permissions: 'it' } }
+  );
+  await Role.updateOne(
+    { key: 'project_manager', homeRoute: '/' },
+    { $set: { homeRoute: '/it/projects' } }
   );
 };
 

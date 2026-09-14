@@ -52,6 +52,7 @@ import hraRoutes from './routes/hraRoutes.js';
 import accountReportRoutes from './routes/accountReportRoutes.js';
 import assetRoutes from './routes/assetRoutes.js';
 import accountingRoutes from './routes/accountingRoutes.js';
+import taxFilingRoutes from './routes/taxFilingRoutes.js';
 import salesReportRoutes from './routes/salesReportRoutes.js';
 import slotRoutes from './routes/slotRoutes.js';
 import bankAccountRoutes from './routes/bankAccountRoutes.js';
@@ -59,6 +60,7 @@ import companyReportRoutes from './routes/companyReportRoutes.js';
 import ticketRoutes from './routes/ticketRoutes.js';
 import contentRoutes from './routes/contentRoutes.js';
 import backupRoutes from './routes/backupRoutes.js';
+import okrRoutes from './routes/okrRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -181,6 +183,7 @@ app.use('/api/reports', reportRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/it-tasks', itTaskRoutes);
+app.use('/api/okrs', okrRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/content', contentRoutes);          // Marketing content planning
 app.use('/api/backup', backupRoutes);            // Per-department + full data backup
@@ -203,6 +206,7 @@ app.use('/api/hra', hraRoutes);                   // House Rent Allowance (separ
 app.use('/api/account-reports', accountReportRoutes);
 app.use('/api/assets', assetRoutes);              // Company asset register (Finance)
 app.use('/api/accounting', accountingRoutes);     // Double-entry ledger (Finance)
+app.use('/api/tax-filings', taxFilingRoutes);     // GST/TDS filing-status tracker
 app.use('/api/sales-reports', salesReportRoutes); // Sales analytics reports
 app.use('/api/slots', slotRoutes);                // Day-wise booking slot capacity
 app.use('/api/bank-accounts', bankAccountRoutes); // Manual bank balances (Finance)

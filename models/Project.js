@@ -73,6 +73,14 @@ const projectSchema = mongoose.Schema(
       enum: ['discovery', 'design', 'development', 'testing', 'deployment', 'maintenance'],
       default: 'discovery',
     },
+    category: {
+      type: String,
+      enum: ['Software', 'Infrastructure', 'Security', 'Support', 'General'],
+      default: 'Software',
+    },
+    targetReleaseDate: {
+      type: Date,
+    },
   },
   {
     timestamps: true,
