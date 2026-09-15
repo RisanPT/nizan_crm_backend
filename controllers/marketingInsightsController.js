@@ -340,14 +340,20 @@ export const getBookingCalendar = async (req, res) => {
     }
     const prevYear = year - 1;
 
+    // `basis` chooses which date drives the calendar:
+    //   event (default) → bookingDate (the event day)
+    //   sales           → createdAt  (the day the booking was made / sold)
+    const basis = String(req.query.basis || 'event').toLowerCase() === 'sales' ? 'sales' : 'event';
+    const dateField = basis === 'sales' ? 'createdAt' : 'bookingDate';
+
     // One query spanning both calendar years: [prevYear-01-01, year+1-01-01).
     const from = new Date(Date.UTC(prevYear, 0, 1));
     const to = new Date(Date.UTC(year + 1, 0, 1));
     const bookings = await Booking.find({
-      bookingDate: { $gte: from, $lt: to },
+      [dateField]: { $gte: from, $lt: to },
       status: { $nin: NON_REVENUE },
     })
-      .select('bookingDate totalPrice')
+      .select('bookingDate createdAt totalPrice')
       .lean();
 
     const dayStr = (d) =>
@@ -362,7 +368,7 @@ export const getBookingCalendar = async (req, res) => {
     let curBookings = 0, curRevenue = 0, prevBookings = 0, prevRevenue = 0;
 
     for (const b of bookings) {
-      const d = new Date(b.bookingDate);
+      const d = new Date(b[dateField]);
       if (Number.isNaN(d.getTime())) continue;
       const y = d.getUTCFullYear();
       const m = d.getUTCMonth(); // 0-11
@@ -386,6 +392,7 @@ export const getBookingCalendar = async (req, res) => {
     res.json({
       year,
       prevYear,
+      basis,
       current,
       previous,
       summary: {

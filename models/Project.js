@@ -15,10 +15,17 @@ const projectSchema = mongoose.Schema(
       enum: ['internal', 'client'],
       default: 'internal',
     },
+    // Owning department (a Department name, e.g. 'IT', 'Sales'). Drives the
+    // company-wide, department-scoped Projects/Planning visibility. Open string
+    // so any admin-created department works.
     targetDepartment: {
       type: String,
-      enum: ['sales', 'creative', 'marketing', 'fleet', 'accounts', 'admin', 'it', 'general'],
-      default: 'general',
+      default: '',
+      trim: true,
+    },
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
     },
     client: {
       type: String,
@@ -33,6 +40,12 @@ const projectSchema = mongoose.Schema(
       ref: 'Employee',
       required: true,
     },
+    members: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Employee',
+      },
+    ],
     status: {
       type: String,
       enum: ['planning', 'active', 'on-hold', 'completed', 'cancelled'],

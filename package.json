@@ -8,6 +8,7 @@
     "start": "node server.js",
     "dev": "nodemon server.js",
     "migrate:approve-legacy-admin-expenses": "node scripts/approveLegacyAdminExpenses.js",
+    "migrate:normalize-project-departments": "node scripts/normalizeProjectDepartments.js",
     "clear:core-data": "node scripts/clearCoreData.js",
     "clear:fma-legacy-data": "node scripts/clearFmaLegacyData.js",
     "reset:legacy-import-data": "node scripts/resetLegacyImportData.js",

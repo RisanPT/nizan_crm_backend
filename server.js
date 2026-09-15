@@ -61,6 +61,7 @@ import ticketRoutes from './routes/ticketRoutes.js';
 import contentRoutes from './routes/contentRoutes.js';
 import backupRoutes from './routes/backupRoutes.js';
 import okrRoutes from './routes/okrRoutes.js';
+import projectDocRoutes from './routes/projectDocRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -184,6 +185,7 @@ app.use('/api/upload', uploadRoutes);
 app.use('/api/projects', projectRoutes);
 app.use('/api/it-tasks', itTaskRoutes);
 app.use('/api/okrs', okrRoutes);
+app.use('/api/project-docs', projectDocRoutes); // Versioned project documents (SRS, design, API specs)
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/content', contentRoutes);          // Marketing content planning
 app.use('/api/backup', backupRoutes);            // Per-department + full data backup

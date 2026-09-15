@@ -1,15 +1,20 @@
 import asyncHandler from 'express-async-handler';
 import OKR from '../models/OKR.js';
 import Employee from '../models/Employee.js';
+import { canViewOKR, canManageOKR, filterViewableOKRs } from '../utils/okrAccess.js';
 
 // @desc    Get all OKRs with optional filters
 // @route   GET /api/okrs
 // @access  Private
 export const getOKRs = asyncHandler(async (req, res) => {
-  const { projectId, department, status, completed, search } = req.query;
+  const { projectId, department, status, completed, search, scope } = req.query;
   const filter = {};
 
-  if (projectId && projectId !== 'all') {
+  // scope=company → only planning OKRs (company + department level), i.e. those
+  // NOT tied to a specific project. Powers the Company Planning Dashboard.
+  if (scope === 'company') {
+    filter.projectId = null;
+  } else if (projectId && projectId !== 'all') {
     filter.projectId = projectId;
   }
   if (department) {
@@ -32,7 +37,9 @@ export const getOKRs = asyncHandler(async (req, res) => {
     .sort({ order: 1, createdAt: 1 })
     .lean();
 
-  res.json(okrs);
+  // Scope results to what the caller may view: project OKRs follow project
+  // access; company-wide are visible to all; department OKRs to that department.
+  res.json(await filterViewableOKRs(req.user, okrs));
 });
 
 // @desc    Get single OKR by ID
@@ -46,6 +53,11 @@ export const getOKRById = asyncHandler(async (req, res) => {
   if (!okr) {
     res.status(404);
     throw new Error('OKR not found');
+  }
+
+  if (!(await canViewOKR(req.user, okr))) {
+    res.status(403);
+    throw new Error('You do not have access to this objective');
   }
 
   res.json(okr);
@@ -76,6 +88,17 @@ export const createOKR = asyncHandler(async (req, res) => {
   if (!objective || !objective.trim()) {
     res.status(400);
     throw new Error('Objective title is required');
+  }
+
+  // Authorize against the TARGET scope: a project OKR needs project access; a
+  // company-wide OKR needs leadership; a department OKR needs that dept's head.
+  const canCreate = await canManageOKR(req.user, {
+    projectId: projectId || null,
+    department: department || 'research-and-development',
+  });
+  if (!canCreate) {
+    res.status(403);
+    throw new Error('You are not authorized to create an objective in this scope');
   }
 
   let headName = projectHeadName || '';
@@ -114,6 +137,11 @@ export const updateOKR = asyncHandler(async (req, res) => {
   if (!okr) {
     res.status(404);
     throw new Error('OKR not found');
+  }
+
+  if (!(await canManageOKR(req.user, okr))) {
+    res.status(403);
+    throw new Error('You are not authorized to edit this objective');
   }
 
   const updates = req.body;
@@ -155,6 +183,11 @@ export const deleteOKR = asyncHandler(async (req, res) => {
   if (!okr) {
     res.status(404);
     throw new Error('OKR not found');
+  }
+
+  if (!(await canManageOKR(req.user, okr))) {
+    res.status(403);
+    throw new Error('You are not authorized to delete this objective');
   }
 
   // Also clean up any sub-objectives that referenced this one
