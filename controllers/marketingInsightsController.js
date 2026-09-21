@@ -9,6 +9,13 @@ import { slotHalf, consumesSlot, dayKey } from '../utils/slots.js';
 const READ_ROLES = ['admin', 'manager', 'marketing_admin', 'crm'];
 const canRead = (u) => READ_ROLES.includes(u?.role);
 
+// The Sales Calendar is shared with the Sales team too (it's a booking-volume
+// view they legitimately need), so its read gate is wider than the rest of the
+// marketing-intelligence endpoints.
+const CALENDAR_READ_ROLES = [...READ_ROLES, 'sales', 'sales_manager', 'regional_manager'];
+const canReadCalendar = (u) =>
+  CALENDAR_READ_ROLES.includes(u?.role) || u?.isDepartmentHead === true;
+
 const NON_REVENUE = ['cancelled', 'canceled', 'rejected', 'lost', 'draft'];
 
 // Keyword inference for the Culture segment, used ONLY when Booking.culture is
@@ -330,8 +337,8 @@ const slotUtilizationForRange = async (from, to, fyLabel) => {
 // app's day-grouping (utils/slots dayKey).
 export const getBookingCalendar = async (req, res) => {
   try {
-    if (!canRead(req.user)) {
-      return res.status(403).json({ message: 'No marketing access' });
+    if (!canReadCalendar(req.user)) {
+      return res.status(403).json({ message: 'No access to the sales calendar' });
     }
     const now = new Date();
     let year = Number(req.query.year);

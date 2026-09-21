@@ -88,6 +88,15 @@ const DEFAULT_ROLES = [
     homeRoute: '/it/projects',
     permissions: ['it'],
   },
+  {
+    // Oversees ALL company projects across departments — the Company Projects
+    // portfolio + leadership Planning Dashboard, and full create/manage on every
+    // project (via the `planning.manage` permission → projectAccess.seesAllProjects).
+    key: 'executive_coordinator',
+    label: 'Executive Coordinator',
+    homeRoute: '/projects',
+    permissions: ['planning.manage'],
+  },
 ];
 
 // Accept a module key ('sales') or a namespaced sub-feature key ('sales.leads').
@@ -132,6 +141,12 @@ export const ensureDefaultRoles = async () => {
   await Role.updateOne(
     { key: 'project_manager', homeRoute: '/' },
     { $set: { homeRoute: '/it/projects' } }
+  );
+  // Ensure an Executive Coordinator role always carries planning.manage (so it
+  // sees & manages every company project). $addToSet never removes admin picks.
+  await Role.updateOne(
+    { key: 'executive_coordinator' },
+    { $addToSet: { permissions: 'planning.manage' } }
   );
 };
 

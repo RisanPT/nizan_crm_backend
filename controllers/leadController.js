@@ -31,6 +31,9 @@ const SERVER_OWNED = [
   'lostDecision',
   'lostReviewNote',
   'auditLog',
+  // Creator is stamped from the authenticated user, never the client.
+  'createdBy',
+  'createdByName',
 ];
 
 const stripServerOwned = (data) => {
@@ -208,6 +211,204 @@ export const getLeads = async (req, res) => {
   }
 };
 
+// GET /api/leads/clusters?threshold=25
+// Surfaces "demand pileups": groups of leads that share the SAME event date
+// (`enquiryDate` — the form's "Date Enquired For", shown as "Event Date") AND
+// the SAME place (`location`), where the group has reached the threshold.
+// Scoped exactly like getLeads: a `sales` user sees only their own leads; a
+// manager is narrowed to their region; admins see everything.
+export const getLeadClusters = async (req, res) => {
+  try {
+    const threshold = Math.max(2, parseInt(req.query.threshold, 10) || 25);
+
+    // Same scope query getLeads builds. regionScopedMatch is aggregate-safe
+    // (already used in getLeads' statsAgg); the sales assignedTo is an ObjectId.
+    const match = {};
+    if (req.user && req.user.role === 'sales') {
+      match.assignedTo = req.user._id;
+    }
+    Object.assign(match, await regionScopedMatch(req.user));
+
+    const clusters = await Lead.aggregate([
+      { $match: match },
+      {
+        $addFields: {
+          // Group by the client's requested event date (fallback to createdAt),
+          // as a UTC day string — mirrors the month bucketing in getLeads.
+          _day: {
+            $dateToString: {
+              format: '%Y-%m-%d',
+              date: { $ifNull: ['$enquiryDate', '$createdAt'] },
+            },
+          },
+          _place: { $toLower: { $trim: { input: { $ifNull: ['$location', ''] } } } },
+        },
+      },
+      { $match: { _place: { $ne: '' } } }, // a lead with no place can't cluster
+      {
+        $group: {
+          _id: { day: '$_day', place: '$_place' },
+          count: { $sum: 1 },
+          placeLabel: { $first: '$location' }, // original casing for display
+          leads: {
+            $push: {
+              _id: '$_id',
+              name: '$name',
+              phone: '$phone',
+              status: '$status',
+              priority: '$priority',
+              enquiryDate: '$enquiryDate',
+              location: '$location',
+              assignedTo: '$assignedTo',
+            },
+          },
+        },
+      },
+      { $match: { count: { $gte: threshold } } },
+      { $sort: { count: -1, '_id.day': 1 } },
+    ]);
+
+    res.json({
+      threshold,
+      clusters: clusters.map((c) => ({
+        date: c._id.day,
+        place: c.placeLabel,
+        count: c.count,
+        leads: c.leads,
+      })),
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// GET /api/leads/report?period=day|week|month&date=YYYY-MM-DD
+// Lead performance for a single day, the week (Mon–Sun) or the calendar month
+// around `date`, with a like-for-like previous-period comparison — the marketing
+// team's end-of-day / weekly / monthly report. Day buckets use IST (the team's
+// day), so "today" matches their clock. Scoped like getLeads.
+export const getLeadsReport = async (req, res) => {
+  try {
+    const period = ['day', 'week', 'month'].includes(String(req.query.period))
+      ? req.query.period
+      : 'day';
+    let anchor = req.query.date ? new Date(req.query.date) : new Date();
+    if (Number.isNaN(anchor.getTime())) anchor = new Date();
+
+    const DAY = 24 * 3600 * 1000;
+    const IST = 5.5 * 3600 * 1000; // bucket days by IST, not UTC
+    const istMidnightUTC = (d) => {
+      const s = new Date(d.getTime() + IST);
+      return new Date(Date.UTC(s.getUTCFullYear(), s.getUTCMonth(), s.getUTCDate()) - IST);
+    };
+    const istDowMon0 = (d) => ((new Date(d.getTime() + IST).getUTCDay() + 6) % 7);
+
+    let start, end, prevStart, prevEnd;
+    if (period === 'day') {
+      start = istMidnightUTC(anchor);
+      end = new Date(start.getTime() + DAY);
+      prevStart = new Date(start.getTime() - DAY);
+      prevEnd = start;
+    } else if (period === 'week') {
+      start = new Date(istMidnightUTC(anchor).getTime() - istDowMon0(anchor) * DAY);
+      end = new Date(start.getTime() + 7 * DAY);
+      prevStart = new Date(start.getTime() - 7 * DAY);
+      prevEnd = start;
+    } else {
+      const s = new Date(anchor.getTime() + IST);
+      const y = s.getUTCFullYear();
+      const m = s.getUTCMonth();
+      start = new Date(Date.UTC(y, m, 1) - IST);
+      end = new Date(Date.UTC(y, m + 1, 1) - IST);
+      prevStart = new Date(Date.UTC(y, m - 1, 1) - IST);
+      prevEnd = start;
+    }
+
+    // Same visibility rules as getLeads.
+    const scope = {};
+    if (req.user && req.user.role === 'sales') scope.assignedTo = req.user._id;
+    Object.assign(scope, await regionScopedMatch(req.user));
+
+    // "Received" date = leadDate, falling back to createdAt (matches getLeads'
+    // month filter), compared in one range via $expr $ifNull.
+    const inRange = (from, to) => ({
+      ...scope,
+      $expr: {
+        $and: [
+          { $gte: [{ $ifNull: ['$leadDate', '$createdAt'] }, from] },
+          { $lt: [{ $ifNull: ['$leadDate', '$createdAt'] }, to] },
+        ],
+      },
+    });
+
+    const now = new Date();
+    const [leads, prevLeads, followUpsOverdue] = await Promise.all([
+      Lead.find(inRange(start, end))
+        .select('leadDate createdAt source status priority followUpDate bookingId createdByName assignedTo')
+        .populate('assignedTo', 'name')
+        .lean(),
+      Lead.find(inRange(prevStart, prevEnd)).select('status bookingId').lean(),
+      Lead.countDocuments({ ...scope, status: 'Follow-up', followUpDate: { $lt: now } }),
+    ]);
+
+    const isConverted = (l) => l.status === 'Converted' || !!l.bookingId;
+    const effMs = (l) => new Date(l.leadDate || l.createdAt).getTime();
+
+    const tally = (arr, keyFn) => {
+      const m = new Map();
+      for (const x of arr) {
+        const k = keyFn(x) || 'Unknown';
+        m.set(k, (m.get(k) || 0) + 1);
+      }
+      return [...m.entries()]
+        .map(([key, count]) => ({ key, count }))
+        .sort((a, b) => b.count - a.count);
+    };
+    const SOURCE_BUCKETS = ['Instagram', 'YouTube', 'Reference', 'Walk-in'];
+    const sourceKey = (l) => {
+      const s = (l.source || '').trim();
+      if (!s) return 'Other';
+      return SOURCE_BUCKETS.includes(s) ? s : 'Other';
+    };
+
+    // Daily series (IST days) across the period.
+    const series = [];
+    for (let t = start.getTime(); t < end.getTime(); t += DAY) {
+      const count = leads.filter((l) => effMs(l) >= t && effMs(l) < t + DAY).length;
+      series.push({ date: new Date(t + IST).toISOString().slice(0, 10), count });
+    }
+
+    const converted = leads.filter(isConverted).length;
+
+    res.json({
+      period,
+      from: start,
+      to: end,
+      prevFrom: prevStart,
+      prevTo: prevEnd,
+      total: leads.length,
+      prevTotal: prevLeads.length,
+      converted,
+      prevConverted: prevLeads.filter(isConverted).length,
+      conversionRate: leads.length ? Math.round((converted / leads.length) * 100) : 0,
+      lost: leads.filter((l) => l.status === 'Lost').length,
+      bySource: tally(leads, sourceKey),
+      byStatus: tally(leads, (l) => l.status || 'New'),
+      byPriority: tally(leads, (l) => l.priority || 'Warm'),
+      byAddedBy: tally(leads, (l) => (l.createdByName || '').trim() || 'Earlier / unknown'),
+      byAssignee: tally(leads, (l) => l.assignedTo?.name || 'Unassigned'),
+      followUpsDue: leads.filter(
+        (l) => l.status === 'Follow-up' && l.followUpDate &&
+          new Date(l.followUpDate) >= start && new Date(l.followUpDate) < end,
+      ).length,
+      followUpsOverdue,
+      series,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 export const createLead = async (req, res) => {
   try {
     // Store current UTC time — Flutter's .toLocal() converts to IST on the device.
@@ -221,6 +422,9 @@ export const createLead = async (req, res) => {
     if (req.user && req.user.role === 'sales') {
       leadData.assignedTo = req.user._id;
     }
+    // Stamp who entered the lead (server-owned; distinct from assignedTo).
+    leadData.createdBy = req.user?._id ?? null;
+    leadData.createdByName = req.user?.name ?? '';
 
     // Duplicate validation must consider BOTH the primary and the alternate
     // number, on either side (a new lead's primary might already exist as

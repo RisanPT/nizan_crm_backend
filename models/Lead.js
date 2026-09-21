@@ -107,6 +107,17 @@ const leadSchema = mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    // Who ENTERED this lead (distinct from assignedTo, which can be reassigned).
+    // createdByName is denormalised so reports need no join and survive renames.
+    createdBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      default: null,
+    },
+    createdByName: {
+      type: String,
+      default: '',
+    },
     status: {
       type: String,
       enum: [

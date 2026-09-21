@@ -5,7 +5,13 @@ import ITTask from '../models/ITTask.js';
 // Roles / permissions that see & manage EVERY project across all departments.
 // Keeps existing IT project managers (project_manager / it.manage) from
 // regressing when projects go company-wide.
-const ALL_PROJECT_ROLE_KEYS = new Set(['admin', 'manager', 'project_manager']);
+const ALL_PROJECT_ROLE_KEYS = new Set([
+  'admin',
+  'manager',
+  'project_manager',
+  // Coordinates every company project across departments.
+  'executive_coordinator',
+]);
 
 export const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const eqCI = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
