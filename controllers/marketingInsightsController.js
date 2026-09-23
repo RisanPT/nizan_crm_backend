@@ -18,6 +18,20 @@ const canReadCalendar = (u) =>
 
 const NON_REVENUE = ['cancelled', 'canceled', 'rejected', 'lost', 'draft'];
 
+// Booking.status is free-text (no enum), and the data holds mixed casing —
+// 'Cancelled' and 'Rejected' as well as the lower-case forms, which is why
+// bookingController/customerController/reportController all list both spellings
+// explicitly. A plain `$nin` is case-sensitive, so a capitalised 'Cancelled'
+// slipped through and was counted as a live booking (the sales calendar showed
+// works on days the CRM calendar showed none). Match case-insensitively instead
+// so any casing is excluded. Documents with no status still pass, as before.
+// Surrounding whitespace is tolerated too: newer writes go through
+// `.trim().toLowerCase()` in bookingController, but legacy CSV-imported rows
+// can carry padding, and a padded 'Cancelled ' must not count as a live work.
+const NON_REVENUE_FILTER = {
+  $not: { $regex: `^\\s*(${NON_REVENUE.join('|')})\\s*$`, $options: 'i' },
+};
+
 // Keyword inference for the Culture segment, used ONLY when Booking.culture is
 // blank (read-time, non-destructive — the manual field always wins). Reads what
 // was actually booked: package/service name, event slot, and add-on names.
@@ -50,17 +64,30 @@ const isLiveBooking = (b) => {
     s !== 'rejected' && s !== 'lost';
 };
 
+// Dates are stored in UTC but the studio runs on IST, and an event date is
+// saved as midnight IST — i.e. 18:30Z on the PREVIOUS day. Reading raw UTC
+// parts therefore lands a record a day (and sometimes a month, or a financial
+// year) early. Shift into IST before reading any calendar part. Same approach
+// as _istDateOnly in customerController; a fixed offset rather than local date
+// methods keeps it correct even when the server itself runs in UTC.
+const IST_MS = 5.5 * 60 * 60 * 1000;
+const toIst = (d) => new Date(new Date(d).getTime() + IST_MS);
+// The UTC instant corresponding to midnight IST on a given IST calendar date —
+// use for query boundaries so a window starts/ends on the IST day, not the UTC one.
+const istMidnightUtc = (y, m, d) => new Date(Date.UTC(y, m, d) - IST_MS);
+
 // Financial-year boundaries (Apr 1 → next Apr 1, exclusive). Mirrors
 // services/posting.js fyLabelFor: months Apr(3)–Dec belong to that year's FY.
 const currentFyStartYear = (d = new Date()) => {
-  const y = d.getUTCFullYear();
-  return d.getUTCMonth() >= 3 ? y : y - 1;
+  const x = toIst(d);
+  const y = x.getUTCFullYear();
+  return x.getUTCMonth() >= 3 ? y : y - 1;
 };
 const fyLabelFor = (startYear) =>
   `${startYear}-${String((startYear + 1) % 100).padStart(2, '0')}`;
 
 const monthKey = (d) => {
-  const x = new Date(d);
+  const x = toIst(d);
   return `${x.getUTCFullYear()}-${String(x.getUTCMonth() + 1).padStart(2, '0')}`;
 };
 const round = (n) => Math.round((Number(n) || 0) * 10) / 10;
@@ -75,8 +102,10 @@ const resolveRange = (q) => {
   }
   const startYear = q.fy ? Number(q.fy) : currentFyStartYear();
   return {
-    from: new Date(Date.UTC(startYear, 3, 1)),
-    to: new Date(Date.UTC(startYear + 1, 3, 1)),
+    // Apr 1 00:00 IST → next Apr 1 00:00 IST. Using Date.UTC directly would
+    // start the year at 05:30 IST and drop Apr 1 early-morning records.
+    from: istMidnightUtc(startYear, 3, 1),
+    to: istMidnightUtc(startYear + 1, 3, 1),
     fyLabel: fyLabelFor(startYear),
   };
 };
@@ -165,7 +194,7 @@ export const getMarketingInsights = async (req, res) => {
     // ── 4. Segments: region, district, timeline (month), culture ──
     const segBookings = await Booking.find({
       bookingDate: { $gte: from, $lt: to },
-      status: { $nin: NON_REVENUE },
+      status: NON_REVENUE_FILTER,
     })
       .select(
         'region district pincode culture bookingDate totalPrice service eventSlot ' +
@@ -235,7 +264,7 @@ export const getMarketingInsights = async (req, res) => {
 // the manual Booking.culture always wins and event dates are already correct
 // where present; this just finds the gaps in existing data so they can be fixed.
 const computeCoverage = async () => {
-  const rows = await Booking.find({ status: { $nin: NON_REVENUE } })
+  const rows = await Booking.find({ status: NON_REVENUE_FILTER })
     .select(
       'customerName bookingDate culture region district pincode service ' +
         'eventSlot addons bookingItems.service bookingItems.eventSlot bookingItems.addons'
@@ -343,7 +372,7 @@ export const getBookingCalendar = async (req, res) => {
     const now = new Date();
     let year = Number(req.query.year);
     if (!Number.isFinite(year) || year < 2000 || year > 2100) {
-      year = now.getUTCFullYear();
+      year = toIst(now).getUTCFullYear();
     }
     const prevYear = year - 1;
 
@@ -353,16 +382,34 @@ export const getBookingCalendar = async (req, res) => {
     const basis = String(req.query.basis || 'event').toLowerCase() === 'sales' ? 'sales' : 'event';
     const dateField = basis === 'sales' ? 'createdAt' : 'bookingDate';
 
-    // One query spanning both calendar years: [prevYear-01-01, year+1-01-01).
-    const from = new Date(Date.UTC(prevYear, 0, 1));
-    const to = new Date(Date.UTC(year + 1, 0, 1));
+    // One query spanning both calendar years, on IST day boundaries (a 12 Dec
+    // event is stored as 2026-12-11T18:30:00.000Z, so a UTC-aligned window
+    // would clip it into the wrong year).
+    const from = istMidnightUtc(prevYear, 0, 1);
+    const to = istMidnightUtc(year + 1, 0, 1);
+
+    // On the event basis a multi-date job also has to be matched by its
+    // selectedDates, otherwise a booking whose FIRST date sits outside the
+    // window loses its later dates.
+    const dateMatch =
+      basis === 'sales'
+        ? { createdAt: { $gte: from, $lt: to } }
+        : {
+            $or: [
+              { bookingDate: { $gte: from, $lt: to } },
+              { selectedDates: { $elemMatch: { $gte: from, $lt: to } } },
+            ],
+          };
+
     const bookings = await Booking.find({
-      [dateField]: { $gte: from, $lt: to },
-      status: { $nin: NON_REVENUE },
+      ...dateMatch,
+      status: NON_REVENUE_FILTER,
     })
-      .select('bookingDate createdAt totalPrice')
+      .select('bookingDate createdAt totalPrice selectedDates')
       .lean();
 
+    // Receives an already IST-shifted date, so the getUTC* parts read as the
+    // IST calendar day.
     const dayStr = (d) =>
       `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-` +
       `${String(d.getUTCDate()).padStart(2, '0')}`;
@@ -374,25 +421,57 @@ export const getBookingCalendar = async (req, res) => {
     }));
     let curBookings = 0, curRevenue = 0, prevBookings = 0, prevRevenue = 0;
 
+    // A multi-date job (e.g. a two-day wedding) is WORK ON EVERY SELECTED DATE,
+    // which is what the CRM scheduler shows and what "By EVENT date" implies —
+    // counting it only on bookingDate made the calendar under-report the second
+    // and later days. Revenue is attributed to the FIRST date only, so monthly
+    // and yearly revenue totals are unchanged by this expansion.
+    // The sales basis is unaffected: a booking is sold once, on one day.
+    const occurrencesOf = (b) => {
+      if (basis === 'sales') {
+        return [{ at: new Date(b.createdAt), revenue: Number(b.totalPrice) || 0 }];
+      }
+      const picked = (b.selectedDates || [])
+        .filter(Boolean)
+        .map((x) => new Date(x))
+        .filter((x) => !Number.isNaN(x.getTime()))
+        .sort((a, z) => a - z);
+      const dates = picked.length ? picked : [new Date(b.bookingDate)];
+
+      const seen = new Set();
+      const out = [];
+      for (const dt of dates) {
+        if (Number.isNaN(dt.getTime())) continue;
+        const k = dayStr(toIst(dt));
+        if (seen.has(k)) continue; // same IST day listed twice
+        seen.add(k);
+        out.push({ at: dt, revenue: out.length === 0 ? Number(b.totalPrice) || 0 : 0 });
+      }
+      return out;
+    };
+
     for (const b of bookings) {
-      const d = new Date(b[dateField]);
-      if (Number.isNaN(d.getTime())) continue;
-      const y = d.getUTCFullYear();
-      const m = d.getUTCMonth(); // 0-11
-      const rev = Number(b.totalPrice) || 0;
-      const target = y === year ? current : y === prevYear ? previous : null;
-      if (!target) continue;
-      const key = dayStr(d);
-      const cur = target[key] || { bookings: 0, revenue: 0 };
-      cur.bookings += 1;
-      cur.revenue += rev;
-      target[key] = cur;
-      if (y === year) {
-        curBookings++; curRevenue += rev;
-        monthAgg[m].curBookings++; monthAgg[m].curRevenue += rev;
-      } else {
-        prevBookings++; prevRevenue += rev;
-        monthAgg[m].prevBookings++; monthAgg[m].prevRevenue += rev;
+      for (const occ of occurrencesOf(b)) {
+        const raw = new Date(occ.at);
+        if (Number.isNaN(raw.getTime())) continue;
+        const d = toIst(raw);
+        const y = d.getUTCFullYear();
+        const m = d.getUTCMonth(); // 0-11
+        const rev = occ.revenue;
+        const target = y === year ? current : y === prevYear ? previous : null;
+        if (!target) continue;
+        const key = dayStr(d);
+        const cur = target[key] || { bookings: 0, revenue: 0 };
+        cur.bookings += 1;
+        cur.revenue += rev;
+        target[key] = cur;
+        if (y === year) {
+          curBookings++; curRevenue += rev;
+          monthAgg[m].curBookings++; monthAgg[m].curRevenue += rev;
+        } else {
+          prevBookings++; prevRevenue += rev;
+          monthAgg[m].prevBookings++; monthAgg[m].prevRevenue += rev;
+        }
       }
     }
 
@@ -427,7 +506,7 @@ export const getReEngagement = async (req, res) => {
     cutoff.setMonth(cutoff.getMonth() - months);
 
     const bookings = await Booking.find({
-      status: { $nin: NON_REVENUE },
+      status: NON_REVENUE_FILTER,
     })
       .select('customerName phone service serviceStart bookingDate status totalPrice')
       .lean();

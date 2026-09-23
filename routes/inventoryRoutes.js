@@ -25,11 +25,14 @@ import {
   updateVendor,
   deleteVendor,
 } from '../controllers/inventoryController.js';
-import { protect } from '../middleware/authMiddleware.js';
+import { protect, attachRolePermissions } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
 router.use(protect);
+// Loads the role's granted features onto req.user.permissions so the guards
+// below honour Settings -> Roles & Permissions, not just the built-in roles.
+router.use(attachRolePermissions);
 
 router.route('/products').get(getProducts).post(createProduct);
 router.post('/products/bulk', bulkCreateProducts);

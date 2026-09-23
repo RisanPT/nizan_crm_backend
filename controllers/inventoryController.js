@@ -7,19 +7,53 @@ import { notifyRoles } from '../utils/notify.js';
 
 const STUDIO_ROLES = ['inventory_manager', 'admin', 'manager'];
 
-// A studio manager is anyone in a manager role OR an artist who has been given
-// the inventoryManage capability (the "workspace switcher" dual-role case) —
-// they get the full studio toolset regardless of which workspace their client
-// is currently showing.
-const canManageStudio = (user) =>
-  STUDIO_ROLES.includes(user.role) || !!user?.inventoryManage;
+// Feature keys granted to this user's role in Settings -> Roles & Permissions,
+// populated by the attachRolePermissions middleware on this router.
+const permissionsOf = (user) =>
+  Array.isArray(user?.permissions) ? user.permissions.map((p) => String(p)) : [];
 
+// The whole Inventory module was granted (the parent 'inventory' key) rather
+// than individual sections. Parent = full toolset, including writes.
+const hasInventoryModule = (user) => permissionsOf(user).includes('inventory');
+
+// One or more specific sections were granted, e.g. 'inventory.stock'. The
+// parent key counts as every section, mirroring Access.canSeeSub() on the
+// Flutter side so the menu and the API agree on who may open what.
+const hasInventorySection = (user, ...sections) => {
+  const granted = permissionsOf(user);
+  if (granted.includes('inventory')) return true;
+  return sections.some((name) => granted.includes(`inventory.${name}`));
+};
+
+// A studio manager is anyone in a manager role, an artist who has been given
+// the inventoryManage capability (the "workspace switcher" dual-role case), or
+// any role an admin has granted the Inventory feature — they get the full
+// studio toolset regardless of which workspace their client is currently
+// showing.
+const canManageStudio = (user) =>
+  STUDIO_ROLES.includes(user.role) ||
+  !!user?.inventoryManage ||
+  hasInventoryModule(user);
+
+// The product list backs the dashboard, stock list, restock alerts, expiry
+// tracker and reports, so any one of those sections grants the read.
 const hasInventoryAccess = (user) =>
-  canManageStudio(user) || (user.role === 'artist' && !!user.inventoryAccess);
+  canManageStudio(user) ||
+  (user.role === 'artist' && !!user.inventoryAccess) ||
+  hasInventorySection(user, 'dashboard', 'stock', 'alerts', 'expiry', 'reports');
 
 // Accounts may READ purchases for the finance dashboard (not create / edit).
 const canViewPurchases = (user) =>
-  canManageStudio(user) || user.role === 'accounts';
+  canManageStudio(user) ||
+  user.role === 'accounts' ||
+  hasInventorySection(user, 'purchases');
+
+// Vendor list. Granting Purchases implies this too, because a purchase row
+// shows its vendor.
+const canViewVendors = (user) =>
+  canManageStudio(user) ||
+  user.role === 'accounts' ||
+  hasInventorySection(user, 'vendors', 'purchases');
 
 // Accounts team can settle vendor bills (mark paid, record payments, edit
 // billing / GST) alongside the studio managers — but not create/delete stock.
@@ -34,9 +68,12 @@ const grandTotalOf = (purchase) =>
 // managers WRITE it (guards below). Artists never own products.
 const ownerScope = () => ({ owner: null });
 
-// Kits: managers manage all kits; access-artists manage only their own.
+// Kits: managers manage all kits; access-artists manage only their own; a role
+// granted the Staff Kits section reads them through the same kitScope rules.
 const canAccessKits = (user) =>
-  canManageStudio(user) || (user.role === 'artist' && !!user.inventoryAccess);
+  canManageStudio(user) ||
+  (user.role === 'artist' && !!user.inventoryAccess) ||
+  hasInventorySection(user, 'kits');
 
 const kitScope = (user) =>
   canManageStudio(user) ? {} : { employeeId: user.employeeId ?? null };
@@ -492,7 +529,7 @@ const cleanVendor = (body) => ({
 });
 
 export const getVendors = async (req, res) => {
-  if (!canViewPurchases(req.user)) {
+  if (!canViewVendors(req.user)) {
     return res.status(403).json({ message: 'No access' });
   }
   try {
