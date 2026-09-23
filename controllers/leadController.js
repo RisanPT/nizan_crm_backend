@@ -71,12 +71,30 @@ export const getLeads = async (req, res) => {
   }
 
   if (search) {
-    query.$or = [
-      { name: { $regex: search, $options: 'i' } },
-      { phone: { $regex: search, $options: 'i' } },
-      { alternateNumber: { $regex: search, $options: 'i' } },
-      { location: { $regex: search, $options: 'i' } },
+    const raw = String(search).trim();
+    // Escape regex metacharacters so a query like "+91..." or "(0480)" is treated
+    // as literal text, not a (broken) regex — an unescaped leading "+" is an
+    // invalid quantifier that made the whole query error out and return nothing.
+    const esc = raw.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const or = [
+      { name: { $regex: esc, $options: 'i' } },
+      { location: { $regex: esc, $options: 'i' } },
     ];
+    // Phone matching is digit-tolerant: strip everything but digits from the
+    // query, keep at most the last 10 (drops a typed country code), and allow any
+    // non-digit separators between digits so "+91 98765 43210", "98765-43210",
+    // "9876543210" and "919876543210" all match each other.
+    const d = digits(raw);
+    if (d.length >= 3) {
+      const tail = d.length > 10 ? d.slice(-10) : d;
+      const phoneRx = tail.split('').join('[^0-9]*');
+      or.push({ phone: { $regex: phoneRx } });
+      or.push({ alternateNumber: { $regex: phoneRx } });
+    } else {
+      or.push({ phone: { $regex: esc, $options: 'i' } });
+      or.push({ alternateNumber: { $regex: esc, $options: 'i' } });
+    }
+    query.$or = or;
   }
   if (priority && priority !== 'All') {
     query.priority = priority;
