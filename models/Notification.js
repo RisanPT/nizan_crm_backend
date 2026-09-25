@@ -56,6 +56,17 @@ const notificationSchema = mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Cleared (dismissed) by the recipient. Soft-hidden rather than deleted so
+    // the follow-up sweep's `dedupe` still finds the doc and doesn't re-create
+    // the same due/missed notification right after the user clears it.
+    cleared: {
+      type: Boolean,
+      default: false,
+    },
+    clearedAt: {
+      type: Date,
+      default: null,
+    },
     // Who triggered the event (null for system/time-based sweeps).
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,

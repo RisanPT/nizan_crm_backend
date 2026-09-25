@@ -535,12 +535,13 @@ const linkLeadsToBooking = async (booking) => {
       }
       lead.status = 'Converted';
       lead.bookingId = booking._id;
-      // The lead's "booked date" should mirror the booking's actual event
-      // (service) date, not when the booking was placed — otherwise the lead
-      // card shows a different date than the booking itself. Always resync so a
-      // rescheduled booking stays in step.
-      lead.bookedDate =
-        booking.serviceStart ?? booking.bookingDate ?? new Date();
+      // Two distinct dates (resynced on every booking save so a reschedule or
+      // a corrected booked date stays in step):
+      //  • bookedDate — when the booking was MADE (the form's "Booking Date
+      //    (when booked)" → booking.createdAt).
+      //  • eventDate  — when the event actually happens.
+      lead.bookedDate = booking.createdAt ?? new Date();
+      lead.eventDate = booking.serviceStart ?? booking.bookingDate ?? null;
       // Carry the confirmed address/geography onto the lead so lead reports
       // can be grouped by district, region and pincode.
       lead.address = booking.address || lead.address;
@@ -553,6 +554,26 @@ const linkLeadsToBooking = async (booking) => {
     }
   } catch (error) {
     console.error('Failed to link leads to booking:', error);
+  }
+};
+
+/// On a booking EDIT, keep the dates of leads already linked to it in step
+/// (reschedule → eventDate, corrected booked date → bookedDate). Unlike
+/// linkLeadsToBooking it never converts/links new leads. Never throws.
+const syncLinkedLeadDates = async (booking) => {
+  try {
+    if (!booking?._id) return;
+    await Lead.updateMany(
+      { bookingId: booking._id },
+      {
+        $set: {
+          bookedDate: booking.createdAt ?? new Date(),
+          eventDate: booking.serviceStart ?? booking.bookingDate ?? null,
+        },
+      }
+    );
+  } catch (error) {
+    console.error('Failed to sync lead dates for booking:', error);
   }
 };
 
@@ -1692,6 +1713,7 @@ export const updateBooking = async (req, res) => {
       );
       updatedBooking.createdAt = bookedAtOverride;
     }
+    await syncLinkedLeadDates(updatedBooking);
     const shouldSendAdvanceInvoice =
       previousStatus != 'confirmed' &&
       String(updatedBooking.status ?? '').toLowerCase() == 'confirmed';
@@ -1758,7 +1780,9 @@ export const updateBooking = async (req, res) => {
       reviewUrl,
     });
   } catch (error) {
-    res.status(500).json({ message: error.message, details: error.stack });
+    // Never ship the stack trace to the client; the sanitizer humanises message.
+    console.error('updateBooking failed:', error);
+    res.status(500).json({ message: error.message });
   }
 };
 

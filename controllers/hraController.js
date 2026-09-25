@@ -3,6 +3,10 @@ import Employee from '../models/Employee.js';
 import AdminExpense from '../models/AdminExpense.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 
+// Treat user search text literally — an unescaped "(" or "*" would otherwise
+// throw "Invalid regular expression" and fail the whole request with a 500.
+const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 const populateEmp = { path: 'employeeId', select: 'name department email profileImage' };
 
 // HRA payment mode → administrative-expense payment method.
@@ -60,7 +64,7 @@ export const getHraRecords = async (req, res) => {
     if (year && year !== 'all') filter.year = Number(year);
     if (employeeId && employeeId !== 'all') filter.employeeId = employeeId;
     if (status && status !== 'all' && status !== 'All') filter.status = status;
-    if (search) filter.employeeName = new RegExp(search, 'i');
+    if (search) filter.employeeName = new RegExp(escapeRegex(search), 'i');
 
     const records = await HraRecord.find(filter)
       .populate(populateEmp)
@@ -111,11 +115,15 @@ export const getHraStats = async (req, res) => {
 export const createHraRecord = async (req, res) => {
   try {
     const { employeeId, amount, date, paymentMethod, status, notes } = req.body;
+    if (!employeeId) return res.status(400).json({ message: 'Select an employee.' });
 
     const employee = await Employee.findById(employeeId);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
     const d = date ? new Date(date) : new Date();
+    if (Number.isNaN(d.getTime())) {
+      return res.status(400).json({ message: 'Enter a valid date.' });
+    }
     const record = new HraRecord({
       employeeId: employee._id,
       employeeName: employee.name,
@@ -151,6 +159,9 @@ export const updateHraRecord = async (req, res) => {
     if (amount !== undefined) record.amount = Number(amount) || 0;
     if (date !== undefined) {
       const d = new Date(date);
+      if (Number.isNaN(d.getTime())) {
+        return res.status(400).json({ message: 'Enter a valid date.' });
+      }
       record.date = d;
       record.month = d.getMonth() + 1;
       record.year = d.getFullYear();

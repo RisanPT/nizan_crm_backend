@@ -4,6 +4,10 @@ import { notifyRoles, notify } from '../utils/notify.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 import { isApprover, resolveUserDeptName } from '../utils/departmentScope.js';
 
+// Treat user search text literally — an unescaped "(" or "*" would otherwise
+// throw "Invalid regular expression" and fail the whole request with a 500.
+const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // Accounts + Admin are the approvers: they see every department's expenses,
 // approve/reject them, and anything they add directly is auto-approved (posts
 // to the books immediately). Everyone else is a department head who may only
@@ -45,7 +49,7 @@ export const getAdminExpenses = async (req, res) => {
     }
 
     if (search) {
-      const searchRegex = new RegExp(search, 'i');
+      const searchRegex = new RegExp(escapeRegex(search), 'i');
       filter.$or = [
         { title: searchRegex },
         { paidByName: searchRegex },
@@ -94,7 +98,7 @@ export const getAdminExpenses = async (req, res) => {
       }
 
       if (search) {
-        const searchRegex = new RegExp(search, 'i');
+        const searchRegex = new RegExp(escapeRegex(search), 'i');
         salaryFilter.$or = [
           { employeeName: searchRegex },
           { notes: searchRegex }

@@ -1,6 +1,6 @@
 import ITTask from '../models/ITTask.js';
 import Project from '../models/Project.js';
-import { buildProjectScope, canViewProject } from '../utils/projectAccess.js';
+import { buildProjectScope, canViewProject, escapeRegex } from '../utils/projectAccess.js';
 
 // Load a project and confirm the caller may view it. Returns the project on
 // success, or sends the 404/403 response and returns null (caller must stop).
@@ -43,7 +43,7 @@ export const getITTasks = async (req, res) => {
     if (severity) query.severity = severity;
     if (subTeam) query.subTeam = subTeam;
     if (search) {
-      query.title = { $regex: search, $options: 'i' };
+      query.title = { $regex: escapeRegex(search), $options: 'i' };
     }
 
     // `mine=true` scopes to the caller's own tasks (User → linked Employee id).
@@ -72,6 +72,9 @@ export const bulkUpdateTasks = async (req, res) => {
     const { taskIds, updates } = req.body;
     if (!Array.isArray(taskIds) || taskIds.length === 0) {
       return res.status(400).json({ message: 'taskIds array is required' });
+    }
+    if (!updates || typeof updates !== 'object' || Array.isArray(updates) || Object.keys(updates).length === 0) {
+      return res.status(400).json({ message: 'Nothing to update' });
     }
 
     // Every affected task must belong to a project the caller can access.

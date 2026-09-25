@@ -345,7 +345,9 @@ export const grantDriverLogin = async (req, res) => {
       message: created ? 'Driver login created' : 'Driver login updated',
     });
   } catch (error) {
-    return res.status(500).json({ message: 'Server error', error: error.message });
+    // Pass the real message through: the error sanitizer turns duplicate /
+    // validation errors into a readable 400/409 instead of a bare "Server error".
+    return res.status(500).json({ message: error.message });
   }
 };
 

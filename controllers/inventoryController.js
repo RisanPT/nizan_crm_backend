@@ -224,14 +224,22 @@ const fetchExternalProduct = async (code) => {
         )}.json`
       ),
   ];
+  let answered = 0;
+  let lastError = null;
   for (const run of sources) {
     try {
       const hit = await run();
+      answered += 1;
       if (hit && (hit.name || hit.brand)) return hit;
-    } catch (_) {
+    } catch (err) {
       // network/timeout on one source → fall through to the next
+      lastError = err;
     }
   }
+  // Every source failed to respond (offline / all timed out): that is a real
+  // failure, not "no public data" — let the caller report a 502 so the app can
+  // tell the two apart.
+  if (answered === 0 && lastError) throw lastError;
   return null;
 };
 
@@ -252,7 +260,11 @@ export const lookupExternalBarcode = async (req, res) => {
   } catch (error) {
     res
       .status(502)
-      .json({ message: 'External lookup failed', detail: error.message });
+      .json({
+        message:
+          "Couldn't reach the public product databases right now. Please try again.",
+      });
+    console.error('[inventory] external barcode lookup failed:', error.message);
   }
 };
 

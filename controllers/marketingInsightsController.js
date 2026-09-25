@@ -100,7 +100,8 @@ const resolveRange = (q) => {
     const to = q.to ? new Date(q.to) : new Date();
     return { from, to, fyLabel: null };
   }
-  const startYear = q.fy ? Number(q.fy) : currentFyStartYear();
+  const fy = Number(q.fy);
+  const startYear = q.fy && Number.isInteger(fy) && fy >= 2000 && fy <= 2100 ? fy : currentFyStartYear();
   return {
     // Apr 1 00:00 IST → next Apr 1 00:00 IST. Using Date.UTC directly would
     // start the year at 05:30 IST and drop Apr 1 early-morning records.

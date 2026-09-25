@@ -802,6 +802,9 @@ const updateAccountingSettings = async (req, res) => {
   if (!canManageFinance(req.user)) return res.status(403).json({ message: 'No finance access' });
   try {
     const lockDate = req.body.lockDate ? new Date(req.body.lockDate) : null;
+    if (lockDate && Number.isNaN(lockDate.getTime())) {
+      return res.status(400).json({ message: 'Pick a valid date to close the books through.' });
+    }
     const patch = {
       lockDate,
       lockedBy: lockDate ? (req.user?._id || null) : null,

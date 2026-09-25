@@ -43,6 +43,25 @@ async function phpFetch(params) {
   return response.json();
 }
 
+/** Log the technical reason server-side; give the app a human message. */
+function sendBridgeError(res, err) {
+  console.error('[hrBridge]', err?.message || err);
+  const msg = String(err?.message || '');
+  if (/not configured/i.test(msg)) {
+    return res.status(503).json({
+      message: 'The attendance system connection is not set up yet. Please contact your administrator.',
+    });
+  }
+  if (err?.name === 'TimeoutError' || err?.name === 'AbortError') {
+    return res.status(504).json({
+      message: 'The attendance system is taking too long to respond. Please try again.',
+    });
+  }
+  return res.status(502).json({
+    message: 'Could not reach the attendance system right now. Please try again later.',
+  });
+}
+
 // ── GET /api/hr/staff ─────────────────────────────────────────────────────────
 // Returns admin / management / HR staff from the PHP system.
 export const getHrStaff = async (req, res) => {
@@ -50,7 +69,7 @@ export const getHrStaff = async (req, res) => {
     const data = await phpFetch({ action: 'staff' });
     res.json(data);
   } catch (err) {
-    res.status(502).json({ message: `PHP bridge error: ${err.message}` });
+    sendBridgeError(res, err);
   }
 };
 
@@ -72,7 +91,7 @@ export const getHrAttendance = async (req, res) => {
     });
     res.json(data);
   } catch (err) {
-    res.status(502).json({ message: `PHP bridge error: ${err.message}` });
+    sendBridgeError(res, err);
   }
 };
 
@@ -94,7 +113,7 @@ export const getHrLeaves = async (req, res) => {
     });
     res.json(data);
   } catch (err) {
-    res.status(502).json({ message: `PHP bridge error: ${err.message}` });
+    sendBridgeError(res, err);
   }
 };
 
@@ -111,6 +130,6 @@ export const getHrHolidays = async (req, res) => {
     });
     res.json(data);
   } catch (err) {
-    res.status(502).json({ message: `PHP bridge error: ${err.message}` });
+    sendBridgeError(res, err);
   }
 };
