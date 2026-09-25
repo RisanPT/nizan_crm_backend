@@ -317,6 +317,7 @@ export const importCompetitors = async (req, res) => {
         errors.push({ row: i + 1, message: 'Missing name' });
         continue;
       }
+      try {
       // Resolve the CSV's region name against our geographics.
       if (data.region) {
         const match = regionByName.get(data.region.toLowerCase());
@@ -372,6 +373,12 @@ export const importCompetitors = async (req, res) => {
           { upsert: true, setDefaultsOnInsert: true }
         );
         snapshots += 1;
+      }
+      } catch (rowErr) {
+        errors.push({
+          row: i + 1,
+          message: rowErr?.name === 'ValidationError' ? rowErr.message : 'Could not save this row',
+        });
       }
     }
 

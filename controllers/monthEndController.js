@@ -532,6 +532,9 @@ export const saveMonthlyTarget = async (req, res) => {
   try {
     const { month, year } = req.body;
     if (!month || !year) return res.status(400).json({ message: 'month and year are required' });
+    if (!(Number(month) >= 1 && Number(month) <= 12) || !(Number(year) > 1900)) {
+      return res.status(400).json({ message: 'A valid month and year are required' });
+    }
     const update = {
       revenueTarget: Number(req.body.revenueTarget) || 0,
       profitTarget: Number(req.body.profitTarget) || 0,

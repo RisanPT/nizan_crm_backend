@@ -9,6 +9,11 @@ import { Parser } from 'json2csv';
 export const getFinanceReport = async (req, res) => {
   try {
     const { month, year, employeeId, format } = req.query;
+    const m = Number(month);
+    const y = Number(year);
+    if (!Number.isInteger(m) || m < 1 || m > 12 || !Number.isInteger(y) || y < 2000 || y > 2100) {
+      return res.status(400).json({ message: 'A valid month (1-12) and year are required' });
+    }
 
     const startDate = new Date(year, month - 1, 1);
     const endDate = new Date(year, month, 0, 23, 59, 59, 999);

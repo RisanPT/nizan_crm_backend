@@ -36,7 +36,7 @@ const run = async () => {
 
   const bookings = await Booking.find(
     {},
-    'phone bookingDate address pincode regionId districtId region district createdAt'
+    'phone bookingDate serviceStart address pincode regionId districtId region district createdAt'
   ).lean();
   const leads = await Lead.find({});
 
@@ -84,9 +84,9 @@ const run = async () => {
     if (APPLY) {
       lead.status = 'Converted';
       lead.bookingId = booking._id;
-      // Mirror the booking's event (service) date, matching linkLeadsToBooking.
-      lead.bookedDate =
-        booking.serviceStart ?? booking.bookingDate ?? new Date();
+      // Same two dates as linkLeadsToBooking: when booked vs the event.
+      lead.bookedDate = booking.createdAt ?? new Date();
+      lead.eventDate = booking.serviceStart ?? booking.bookingDate ?? null;
       lead.address = booking.address || lead.address;
       lead.pincode = booking.pincode || lead.pincode;
       lead.regionId = booking.regionId || lead.regionId;

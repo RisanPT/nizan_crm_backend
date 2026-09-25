@@ -20,6 +20,9 @@ const adminTypeScope = (req) =>
     ? { type: { $in: [...ADMIN_ALLOWED_TYPES] } }
     : {};
 
+// Cleared notifications are hidden from every inbox query and badge count.
+const NOT_CLEARED = { cleared: { $ne: true } };
+
 // Format a stored (UTC) date as IST text for notification bodies, matching how
 // the rest of the app renders times to the user.
 const fmt = (d) => {
@@ -171,7 +174,7 @@ export const getNotifications = async (req, res) => {
     const skip = (page - 1) * limit;
 
     const scope = adminTypeScope(req);
-    const filter = { recipient: req.user._id, ...scope };
+    const filter = { recipient: req.user._id, ...NOT_CLEARED, ...scope };
     if (req.query.unread === 'true') filter.read = false;
 
     const [items, totalItems, unreadCount] = await Promise.all([
@@ -182,7 +185,12 @@ export const getNotifications = async (req, res) => {
         .populate('leadId', 'name')
         .populate('createdBy', 'name'),
       Notification.countDocuments(filter),
-      Notification.countDocuments({ recipient: req.user._id, read: false, ...scope }),
+      Notification.countDocuments({
+        recipient: req.user._id,
+        read: false,
+        ...NOT_CLEARED,
+        ...scope,
+      }),
     ]);
 
     res.json({
@@ -203,6 +211,7 @@ export const getUnreadCount = async (req, res) => {
     const count = await Notification.countDocuments({
       recipient: req.user._id,
       read: false,
+      ...NOT_CLEARED,
       ...adminTypeScope(req),
     });
     res.json({ count });
@@ -234,6 +243,46 @@ export const markAllRead = async (req, res) => {
     res.json({
       message: 'All notifications marked as read',
       modifiedCount: result.modifiedCount,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Clear (dismiss) one notification from the caller's inbox. Also marks it read
+// so it can never count towards a badge again.
+export const clearOne = async (req, res) => {
+  try {
+    const now = new Date();
+    const n = await Notification.findOneAndUpdate(
+      { _id: req.params.id, recipient: req.user._id },
+      { cleared: true, clearedAt: now, read: true, readAt: now },
+      { new: true }
+    );
+    if (!n) return res.status(404).json({ message: 'Notification not found' });
+    res.json({ message: 'Notification cleared' });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// Clear every notification in the caller's inbox. Soft-clears (see the
+// `cleared` field on the model) so time-based sweeps don't re-create them.
+export const clearAll = async (req, res) => {
+  try {
+    const now = new Date();
+    // Stamp readAt only on the ones that were still unread.
+    await Notification.updateMany(
+      { recipient: req.user._id, read: false },
+      { read: true, readAt: now }
+    );
+    const result = await Notification.updateMany(
+      { recipient: req.user._id, ...NOT_CLEARED },
+      { cleared: true, clearedAt: now }
+    );
+    res.json({
+      message: 'All notifications cleared',
+      clearedCount: result.modifiedCount,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

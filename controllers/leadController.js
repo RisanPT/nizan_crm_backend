@@ -538,6 +538,10 @@ export const updateLead = async (req, res) => {
       new: true,
       runValidators: true,
     });
+    // Deleted between the existence check above and this update.
+    if (!lead) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
 
     // ── Follow-up notifications (matrix: assigned / rescheduled / completed) ──
     if (followUpScheduled && lead.assignedTo) {

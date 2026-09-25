@@ -59,7 +59,16 @@ const leadSchema = mongoose.Schema(
       type: Date,
       default: Date.now,
     },
+    // When the booking was MADE (the booking form's "Booking Date (when
+    // booked)", i.e. the booking's createdAt). Set on conversion.
     bookedDate: {
+      type: Date,
+      default: null,
+    },
+    // The converted booking's EVENT (service) date — kept separate from
+    // bookedDate so lead cards can show both. Resynced when the booking is
+    // rescheduled.
+    eventDate: {
       type: Date,
       default: null,
     },

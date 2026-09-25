@@ -1,4 +1,11 @@
 import express from 'express';
+// Must load before any route runs: forwards async handler errors to next().
+import './utils/asyncErrors.js';
+import {
+  sanitizeErrorResponses,
+  notFound,
+  errorHandler,
+} from './middleware/errorMiddleware.js';
 import dotenv from 'dotenv';
 import cors from 'cors';
 import connectDB from './config/db.js';
@@ -141,6 +148,9 @@ function isAllowedOrigin(origin) {
 }
 
 // Middleware
+// First, so every error response (including CORS / JSON-parse failures) is
+// humanised before it reaches the client.
+app.use(sanitizeErrorResponses);
 app.use(
   cors({
     origin: (origin, callback) => {
@@ -221,6 +231,16 @@ app.get('/api', (req, res) => {
 
 app.get('/', (req, res) => {
   res.send('API is running...');
+});
+
+// Unknown API routes → JSON 404; then the global error handler (last).
+app.use('/api', notFound);
+app.use(errorHandler);
+
+// A failed promise nobody awaited must not crash the server (Node >= 15
+// exits on unhandled rejections). Log it so it can be fixed.
+process.on('unhandledRejection', (reason) => {
+  console.error('Unhandled promise rejection:', reason);
 });
 
 const PORT = process.env.PORT || 5000;

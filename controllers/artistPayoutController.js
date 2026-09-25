@@ -99,6 +99,9 @@ export const createPayout = async (req, res) => {
 
     // Denormalize name + booking number for display and the ledger narration.
     const emp = await Employee.findById(employeeId).select('name').lean();
+    if (!emp) {
+      return res.status(404).json({ message: 'Artist not found.' });
+    }
     let bookingNumber = '';
     if (bookingId) {
       const bk = await Booking.findById(bookingId).select('bookingNumber').lean();

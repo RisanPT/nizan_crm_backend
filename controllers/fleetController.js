@@ -26,7 +26,7 @@ export const getDriverJobs = async (req, res) => {
 
     res.json(jobs);
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -45,7 +45,7 @@ export const startTripWithInspection = async (req, res) => {
     }
 
     const driverIdStr = req.user.employeeId ? req.user.employeeId.toString() : req.user._id.toString();
-    if (job.driverId.toString() !== driverIdStr) {
+    if (String(job.driverId ?? "") !== driverIdStr) {
       return res.status(403).json({ message: "Not authorized for this job" });
     }
 
@@ -61,7 +61,7 @@ export const startTripWithInspection = async (req, res) => {
 
     res.json({ message: "Trip started successfully", job });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -79,7 +79,7 @@ export const completeJob = async (req, res) => {
     }
 
     const driverIdStr = req.user.employeeId ? req.user.employeeId.toString() : req.user._id.toString();
-    if (job.driverId.toString() !== driverIdStr) {
+    if (String(job.driverId ?? "") !== driverIdStr) {
       return res.status(403).json({ message: "Not authorized for this job" });
     }
 
@@ -97,6 +97,8 @@ export const completeJob = async (req, res) => {
     }
 
     // Notify fleet managers + admins that the trip is done.
+    // Best-effort: the job is already saved, so a notification failure must
+    // not turn this into an error (the driver would retry and get a 400).
     await notifyRoles({
       roles: FLEET_MANAGER_ROLES,
       type: "trip_completed",
@@ -106,7 +108,7 @@ export const completeJob = async (req, res) => {
       bookingId: job._id,
       createdBy: req.user?._id ?? null,
       excludeUserId: req.user?._id ?? null,
-    });
+    }).catch((e) => console.error("trip_completed notify failed:", e.message));
 
     // Check if there are remaining jobs for today
     const startOfDay = new Date();
@@ -129,7 +131,7 @@ export const completeJob = async (req, res) => {
       isLastJob 
     });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -166,6 +168,7 @@ export const reportAccident = async (req, res) => {
     }
 
     // Accidents are urgent — alert fleet managers + admins immediately.
+    // Best-effort: the report is already saved; don't fail the request.
     await notifyRoles({
       roles: FLEET_MANAGER_ROLES,
       type: "accident_reported",
@@ -174,11 +177,11 @@ export const reportAccident = async (req, res) => {
       link: "/fleet/accidents",
       createdBy: req.user?._id ?? null,
       excludeUserId: req.user?._id ?? null,
-    });
+    }).catch((e) => console.error("accident_reported notify failed:", e.message));
 
     res.status(201).json({ message: "Accident reported successfully", accident });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -203,7 +206,7 @@ export const submitDriverReview = async (req, res) => {
 
     res.status(201).json({ message: "Review submitted successfully", review });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -220,7 +223,7 @@ export const getDriverReviews = async (req, res) => {
       
     res.json(reviews);
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -237,7 +240,7 @@ export const getAccidentReports = async (req, res) => {
 
     res.json(accidents);
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 // @desc    Get all completed works for fleet manager
@@ -252,7 +255,7 @@ export const getCompletedWorks = async (req, res) => {
     
     res.json(completedJobs);
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -267,7 +270,7 @@ export const getServiceReminders = async (req, res) => {
       
     res.json(reminders);
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -300,7 +303,7 @@ export const addServiceReminder = async (req, res) => {
 
     res.status(201).json({ message: "Service reminder created", reminder });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -321,6 +324,6 @@ export const completeServiceReminder = async (req, res) => {
 
     res.json({ message: "Service reminder marked as completed", reminder });
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message });
+    res.status(500).json({ message: error.message });
   }
 };

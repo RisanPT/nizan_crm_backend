@@ -2,6 +2,10 @@ import Salary from '../models/Salary.js';
 import Employee from '../models/Employee.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 
+// Treat user search text literally — an unescaped "(" or "*" would otherwise
+// throw "Invalid regular expression" and fail the whole request with a 500.
+const escapeRegex = (s) => String(s ?? '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 // @desc    Get salaries with optional filters (month, year, category, status, department)
 // @route   GET /api/salaries
 // @access  Private
@@ -25,7 +29,7 @@ export const getSalaries = async (req, res) => {
     }
 
     if (search) {
-      const searchRegex = new RegExp(search, 'i');
+      const searchRegex = new RegExp(escapeRegex(search), 'i');
       query.$or = [
         { employeeName: searchRegex },
         { department: searchRegex },
@@ -204,6 +208,13 @@ export const createSalary = async (req, res) => {
       status,
       notes,
     } = req.body;
+
+    if (!employeeId) {
+      return res.status(400).json({ message: 'Select an employee.' });
+    }
+    if (!month || !year) {
+      return res.status(400).json({ message: 'Month and year are required' });
+    }
 
     const employee = await Employee.findById(employeeId);
     if (!employee) {

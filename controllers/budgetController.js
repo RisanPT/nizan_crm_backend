@@ -25,6 +25,15 @@ export const setBudget = async (req, res) => {
   try {
     const { month, year, category, amount } = req.body;
 
+    const m = Number(month);
+    const y = Number(year);
+    if (!Number.isInteger(m) || m < 1 || m > 12 || !Number.isInteger(y) || y < 1900) {
+      return res.status(400).json({ message: 'A valid month and year are required.' });
+    }
+    if (amount === undefined || amount === null || amount === '' || !Number.isFinite(Number(amount))) {
+      return res.status(400).json({ message: 'A valid budget amount is required.' });
+    }
+
     const existingBudget = await Budget.findOne({
       month: Number(month),
       year: Number(year),

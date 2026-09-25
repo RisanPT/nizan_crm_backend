@@ -23,7 +23,7 @@ export const getProjects = async (req, res) => {
     const query = { ...(await buildProjectScope(req.user)) };
     if (status && status !== 'all') query.status = status;
     if (priority && priority !== 'all') query.priority = priority;
-    if (search) query.name = { $regex: search, $options: 'i' };
+    if (search) query.name = { $regex: escapeRegex(search), $options: 'i' };
     if (department && department !== 'all') {
       query.targetDepartment = new RegExp(`^${escapeRegex(department)}$`, 'i');
     }

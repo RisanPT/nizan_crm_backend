@@ -26,6 +26,11 @@ export const createLeadActivity = async (req, res) => {
       }
     }
 
+    // Don't create orphan log entries for a lead that doesn't exist.
+    if (!(await Lead.exists({ _id: req.params.leadId }))) {
+      return res.status(404).json({ message: 'Lead not found' });
+    }
+
     const activity = await LeadActivity.create({
       ...req.body,
       leadId: req.params.leadId,

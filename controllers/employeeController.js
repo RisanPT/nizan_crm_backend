@@ -422,6 +422,11 @@ export const getEmployeeIncrements = async (req, res) => {
 export const addEmployeeIncrement = async (req, res) => {
   const { newSalary, reason, effectiveDate } = req.body;
   try {
+    // Validate before writing anything so a bad value can't leave an
+    // increment record without the matching salary change.
+    if (newSalary == null || newSalary === '' || !Number.isFinite(Number(newSalary)) || Number(newSalary) < 0) {
+      return res.status(400).json({ message: 'Please enter a valid new salary.' });
+    }
     const employee = await Employee.findById(req.params.id);
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });

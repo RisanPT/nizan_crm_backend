@@ -109,6 +109,41 @@ function matchCrm(index, { id, email, name }) {
   return { crm: null, matchedBy: 'none' };
 }
 
+/**
+ * Send a Timebox failure to the app as a human message, keeping the technical
+ * reason (API key names, raw fetch errors) in the server log only. Database
+ * errors are passed through as a 500 so the global sanitizer maps them
+ * (instead of being mislabelled as a Timebox outage).
+ */
+function sendTimeboxError(res, err, context) {
+  const msg = String(err?.message || '');
+  console.error(`[timebox] ${context}:`, msg);
+  const name = String(err?.name || '');
+  if (/^Mongo|CastError|ValidationError|DocumentNotFoundError/.test(name) || err?.code === 11000) {
+    return res.status(500).json({ ok: false, message: msg });
+  }
+  if (name === 'TimeoutError' || name === 'AbortError') {
+    return res.status(504).json({
+      ok: false,
+      message: 'The Timebox attendance system is taking too long to respond. Please try again.',
+    });
+  }
+  if (/rejected the API key|TIMEBOX_/i.test(msg)) {
+    return res.status(502).json({
+      ok: false,
+      message: 'The Timebox connection is not set up correctly. Please contact your administrator.',
+    });
+  }
+  if (/fetch failed|ECONNREFUSED|ENOTFOUND|ECONNRESET|EAI_AGAIN|returned HTTP/i.test(msg)) {
+    return res.status(502).json({
+      ok: false,
+      message: 'Could not reach the Timebox attendance system right now. Please try again later.',
+    });
+  }
+  // A readable reason reported by Timebox itself (body.ok === false).
+  return res.status(502).json({ ok: false, message: msg ? `Timebox: ${msg}` : 'Timebox request failed. Please try again.' });
+}
+
 // ── GET /api/timebox/employees ────────────────────────────────────────────────
 export const getTimeboxEmployees = async (req, res) => {
   try {
@@ -122,7 +157,7 @@ export const getTimeboxEmployees = async (req, res) => {
       data: result.data,
     });
   } catch (err) {
-    res.status(502).json({ ok: false, message: `Timebox error: ${err.message}` });
+    sendTimeboxError(res, err, 'Timebox error');
   }
 };
 
@@ -140,7 +175,7 @@ export const getTimeboxAttendance = async (req, res) => {
       data: result.data,
     });
   } catch (err) {
-    res.status(502).json({ ok: false, message: `Timebox error: ${err.message}` });
+    sendTimeboxError(res, err, 'Timebox error');
   }
 };
 
@@ -161,7 +196,7 @@ export const getAttendanceSummary = async (req, res) => {
       data: result.data,
     });
   } catch (err) {
-    res.status(502).json({ ok: false, message: `Timebox error: ${err.message}` });
+    sendTimeboxError(res, err, 'Timebox error');
   }
 };
 
@@ -180,7 +215,7 @@ export const getTimeboxDays = async (req, res) => {
       data: result.data,
     });
   } catch (err) {
-    res.status(502).json({ ok: false, message: `Timebox error: ${err.message}` });
+    sendTimeboxError(res, err, 'Timebox error');
   }
 };
 
@@ -343,7 +378,7 @@ export const syncEmployees = async (req, res) => {
       message: `Imported ${created} new staff, linked ${synced}, ${alreadySynced} already up to date${conflicts.length ? `, ${conflicts.length} conflicts` : ''}.`,
     });
   } catch (err) {
-    res.status(500).json({ ok: false, message: `Timebox sync error: ${err.message}` });
+    sendTimeboxError(res, err, 'Timebox sync error');
   }
 };
 
@@ -464,7 +499,7 @@ export const getPayrollPreview = async (req, res) => {
       data: rows,
     });
   } catch (err) {
-    res.status(502).json({ ok: false, message: `Timebox payroll error: ${err.message}` });
+    sendTimeboxError(res, err, 'Timebox payroll error');
   }
 };
 
@@ -581,6 +616,6 @@ export const generatePayrollFromAttendance = async (req, res) => {
         : `Generated ${created} and updated ${updated} administrative salary slips for ${targetMonth}/${targetYear}. ${skippedPaid} paid slips left untouched, ${unmatched} unmatched.`,
     });
   } catch (err) {
-    res.status(500).json({ ok: false, message: `Timebox payroll generation error: ${err.message}` });
+    sendTimeboxError(res, err, 'Timebox payroll generation error');
   }
 };

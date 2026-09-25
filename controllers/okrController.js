@@ -2,6 +2,7 @@ import asyncHandler from 'express-async-handler';
 import OKR from '../models/OKR.js';
 import Employee from '../models/Employee.js';
 import { canViewOKR, canManageOKR, filterViewableOKRs } from '../utils/okrAccess.js';
+import { escapeRegex } from '../utils/projectAccess.js';
 
 // @desc    Get all OKRs with optional filters
 // @route   GET /api/okrs
@@ -29,7 +30,7 @@ export const getOKRs = asyncHandler(async (req, res) => {
     filter.status = { $ne: 'completed' };
   }
   if (search) {
-    filter.objective = { $regex: search, $options: 'i' };
+    filter.objective = { $regex: escapeRegex(search), $options: 'i' };
   }
 
   const okrs = await OKR.find(filter)
@@ -85,7 +86,7 @@ export const createOKR = asyncHandler(async (req, res) => {
     order,
   } = req.body;
 
-  if (!objective || !objective.trim()) {
+  if (!objective || !String(objective).trim()) {
     res.status(400);
     throw new Error('Objective title is required');
   }
@@ -110,7 +111,7 @@ export const createOKR = asyncHandler(async (req, res) => {
   const okr = await OKR.create({
     projectId: projectId || null,
     department: department || 'research-and-development',
-    objective: objective.trim(),
+    objective: String(objective).trim(),
     description: description || '',
     projectHeadId: projectHeadId || null,
     projectHeadName: headName,
@@ -158,7 +159,14 @@ export const updateOKR = asyncHandler(async (req, res) => {
     }
   }
 
-  if (updates.objective !== undefined) okr.objective = updates.objective.trim();
+  if (updates.objective !== undefined) {
+    const objective = String(updates.objective ?? '').trim();
+    if (!objective) {
+      res.status(400);
+      throw new Error('Objective title is required');
+    }
+    okr.objective = objective;
+  }
   if (updates.description !== undefined) okr.description = updates.description;
   if (updates.startDate !== undefined) okr.startDate = updates.startDate ? new Date(updates.startDate) : null;
   if (updates.deadline !== undefined) okr.deadline = updates.deadline ? new Date(updates.deadline) : null;
