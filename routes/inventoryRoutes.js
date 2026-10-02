@@ -24,6 +24,10 @@ import {
   createVendor,
   updateVendor,
   deleteVendor,
+  getCategories,
+  createCategory,
+  updateCategory,
+  deleteCategory,
 } from '../controllers/inventoryController.js';
 import { protect, attachRolePermissions } from '../middleware/authMiddleware.js';
 
@@ -53,5 +57,10 @@ router.route('/purchases/:id').put(updatePurchase).delete(deletePurchase);
 
 router.route('/vendors').get(getVendors).post(createVendor);
 router.route('/vendors/:id').put(updateVendor).delete(deleteVendor);
+
+// Categories: built-in + in-use ones are read-only; only unused custom ones
+// can be renamed / deleted. Never modifies products.
+router.route('/categories').get(getCategories).post(createCategory);
+router.route('/categories/:id').put(updateCategory).delete(deleteCategory);
 
 export default router;

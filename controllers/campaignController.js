@@ -1,6 +1,7 @@
 import Campaign from '../models/Campaign.js';
 import Lead from '../models/Lead.js';
 import Booking from '../models/Booking.js';
+import { makeCountsTowardSales } from '../utils/salesRules.js';
 
 const MARKETING_ROLES = ['admin', 'manager', 'marketing_admin'];
 const DEAD_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
@@ -61,12 +62,14 @@ export const getCampaigns = async (req, res) => {
       const bookings = await Booking.find({
         leadId: { $in: taggedLeads.map((l) => l._id) },
         status: { $nin: DEAD_BOOKING },
-      }).select('leadId totalPrice').lean();
+      }).select('leadId totalPrice createdBy').lean();
+      // Bookings entered by users excluded from sales totals add no revenue.
+      const countsTowardSales = await makeCountsTowardSales();
       for (const b of bookings) {
         const cid = leadToCampaign.get(String(b.leadId));
         if (!cid) continue;
         const a = bump(cid);
-        a.revenue += Number(b.totalPrice) || 0;
+        if (countsTowardSales(b)) a.revenue += Number(b.totalPrice) || 0;
         a.conversions += 1;
       }
     }

@@ -16,6 +16,7 @@ import Region from '../models/Region.js';
 import CeoDecision from '../models/CeoDecision.js';
 import { accountMovements, round2 } from './accountingController.js';
 import { filingsForPeriod } from './taxFilingController.js';
+import { makeCountsTowardSales } from '../utils/salesRules.js';
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
 const canView = (u) => FINANCE_ROLES.includes(u?.role);
@@ -109,7 +110,7 @@ export const getMonthEndReview = async (req, res) => {
       mvToDate,
     ] = await Promise.all([
       ChartOfAccount.find({}).lean(),
-      Booking.find({}).select('customerName phone totalPrice collectedAmount bookingDate serviceStart createdAt status regionId').limit(50000).lean(),
+      Booking.find({}).select('customerName phone totalPrice collectedAmount bookingDate serviceStart createdAt status regionId createdBy').limit(50000).lean(),
       Collection.find({ status: 'verified' }).select('amount date').lean(),
       AdminExpense.find({ source: { $ne: 'hra' } }).select('amount category department date').lean(),
       Salary.find({ status: 'paid', month, year }).select('netAmount department').lean(),
@@ -136,12 +137,16 @@ export const getMonthEndReview = async (req, res) => {
     const liveBookings = bookings.filter((b) => isLiveBooking(b.status));
     const periodBookings = liveBookings.filter((b) => inPeriod(b.bookingDate || b.createdAt));
     const orders = periodBookings.length;
-    const bookedValue = round2(periodBookings.reduce((s, b) => s + (b.totalPrice || 0), 0));
+    // Bookings entered by users excluded from sales totals add no booked value.
+    const countsTowardSales = await makeCountsTowardSales();
+    const saleValue = (b) => (countsTowardSales(b) ? b.totalPrice || 0 : 0);
+    const bookedValue = round2(periodBookings.reduce((s, b) => s + saleValue(b), 0));
+    const salesOrders = periodBookings.filter(countsTowardSales).length;
 
     const byUnitMap = new Map();
     for (const b of periodBookings) {
       const key = b.regionId ? regionName.get(String(b.regionId)) || 'Other' : 'Unassigned';
-      byUnitMap.set(key, round2((byUnitMap.get(key) || 0) + (b.totalPrice || 0)));
+      byUnitMap.set(key, round2((byUnitMap.get(key) || 0) + saleValue(b)));
     }
     const byUnit = [...byUnitMap.entries()]
       .map(([label, amount]) => ({ label, amount }))
@@ -427,7 +432,7 @@ export const getMonthEndReview = async (req, res) => {
         target: targets?.revenue ?? null,
         targetAchievedPct: targets?.revenue ? pct(cur.income, targets.revenue) : null,
         orders,
-        avgOrderValue: orders ? round2(bookedValue / orders) : 0,
+        avgOrderValue: salesOrders ? round2(bookedValue / salesOrders) : 0,
         byUnit,
       },
       profitability: {

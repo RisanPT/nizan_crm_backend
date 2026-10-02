@@ -4,6 +4,7 @@ import Employee from '../models/Employee.js';
 import SlotCapacity from '../models/SlotCapacity.js';
 import BlockedDate from '../models/BlockedDate.js';
 import { slotHalf, consumesSlot, dayKey } from '../utils/slots.js';
+import { makeCountsTowardSales } from '../utils/salesRules.js';
 
 // Marketing intelligence is read by the marketing team + full-access managers.
 const READ_ROLES = ['admin', 'manager', 'marketing_admin', 'crm'];
@@ -198,7 +199,7 @@ export const getMarketingInsights = async (req, res) => {
       status: NON_REVENUE_FILTER,
     })
       .select(
-        'region district pincode culture bookingDate totalPrice service eventSlot ' +
+        'region district pincode culture bookingDate totalPrice service eventSlot createdBy ' +
           'addons bookingItems.service bookingItems.eventSlot bookingItems.addons'
       )
       .lean();
@@ -213,15 +214,19 @@ export const getMarketingInsights = async (req, res) => {
     };
     const byRegionM = new Map(), byDistrictM = new Map(), byPincodeM = new Map(),
       byMonthM = new Map(), byCultureM = new Map();
+    // Bookings entered by users excluded from sales totals add no revenue
+    // (they still count as bookings).
+    const countsTowardSales = await makeCountsTowardSales();
     for (const b of segBookings) {
-      bump(byRegionM, b.region, b.totalPrice);
-      bump(byDistrictM, b.district, b.totalPrice);
-      bump(byPincodeM, b.pincode, b.totalPrice);
-      bump(byMonthM, monthKey(b.bookingDate), b.totalPrice);
+      const saleValue = countsTowardSales(b) ? b.totalPrice : 0;
+      bump(byRegionM, b.region, saleValue);
+      bump(byDistrictM, b.district, saleValue);
+      bump(byPincodeM, b.pincode, saleValue);
+      bump(byMonthM, monthKey(b.bookingDate), saleValue);
       // Explicit field wins; otherwise infer from what was booked; else blank.
       const culture =
         (b.culture || '').trim() || inferCulture(b) || 'Not specified';
-      bump(byCultureM, culture, b.totalPrice);
+      bump(byCultureM, culture, saleValue);
     }
     const topList = (m, n = 12) =>
       [...m.values()].sort((a, b) => b.bookings - a.bookings).slice(0, n);
@@ -406,7 +411,7 @@ export const getBookingCalendar = async (req, res) => {
       ...dateMatch,
       status: NON_REVENUE_FILTER,
     })
-      .select('bookingDate createdAt totalPrice selectedDates')
+      .select('bookingDate createdAt totalPrice selectedDates createdBy')
       .lean();
 
     // Receives an already IST-shifted date, so the getUTC* parts read as the
@@ -428,9 +433,12 @@ export const getBookingCalendar = async (req, res) => {
     // and later days. Revenue is attributed to the FIRST date only, so monthly
     // and yearly revenue totals are unchanged by this expansion.
     // The sales basis is unaffected: a booking is sold once, on one day.
+    // Bookings entered by users excluded from sales totals add no revenue.
+    const countsTowardSales = await makeCountsTowardSales();
+    const saleValueOf = (b) => (countsTowardSales(b) ? Number(b.totalPrice) || 0 : 0);
     const occurrencesOf = (b) => {
       if (basis === 'sales') {
-        return [{ at: new Date(b.createdAt), revenue: Number(b.totalPrice) || 0 }];
+        return [{ at: new Date(b.createdAt), revenue: saleValueOf(b) }];
       }
       const picked = (b.selectedDates || [])
         .filter(Boolean)
@@ -446,7 +454,7 @@ export const getBookingCalendar = async (req, res) => {
         const k = dayStr(toIst(dt));
         if (seen.has(k)) continue; // same IST day listed twice
         seen.add(k);
-        out.push({ at: dt, revenue: out.length === 0 ? Number(b.totalPrice) || 0 : 0 });
+        out.push({ at: dt, revenue: out.length === 0 ? saleValueOf(b) : 0 });
       }
       return out;
     };

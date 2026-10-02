@@ -61,6 +61,13 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // When false, bookings this user ENTERS are left out of every sales total
+    // (dashboards, sales reports, Sales & Invoices). The bookings themselves,
+    // accounts, invoices and GST are unaffected. Toggled in Settings → Users.
+    countInSalesTotals: {
+      type: Boolean,
+      default: true,
+    },
     // If created by a department head, links this user to that manager
     managedBy: {
       type: mongoose.Schema.Types.ObjectId,

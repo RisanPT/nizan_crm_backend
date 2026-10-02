@@ -1,5 +1,6 @@
 import LeadActivity from '../models/LeadActivity.js';
 import Lead from '../models/Lead.js';
+import { applyLostRequest } from './leadController.js';
 
 // Get all activities for a lead
 export const getLeadActivities = async (req, res) => {
@@ -27,8 +28,19 @@ export const createLeadActivity = async (req, res) => {
     }
 
     // Don't create orphan log entries for a lead that doesn't exist.
-    if (!(await Lead.exists({ _id: req.params.leadId }))) {
+    const lead = await Lead.findById(req.params.leadId);
+    if (!lead) {
       return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    // "Lost" (and the system state "Pending Lost Approval") must never be set
+    // directly from an activity — that skipped the manager's accept/decline.
+    // Route it through the same approval workflow as the Leads outcome dialog.
+    const wantsLost =
+      req.body.leadStatus === 'Lost' ||
+      req.body.leadStatus === 'Pending Lost Approval';
+    if (wantsLost && lead.status === 'Lost') {
+      return res.status(400).json({ message: 'Lead is already Lost.' });
     }
 
     const activity = await LeadActivity.create({
@@ -37,18 +49,23 @@ export const createLeadActivity = async (req, res) => {
       createdBy: req.user._id,
     });
 
+    if (wantsLost) {
+      const text = String(req.body.reason ?? req.body.remark ?? '').trim();
+      await applyLostRequest(lead, req, {
+        reason: text,
+        remarks: String(req.body.remark ?? '').trim() || text,
+      });
+    }
+
     const updateFields = {};
     const incFields = {};
-    if (req.body.leadStatus) {
+    if (req.body.leadStatus && !wantsLost) {
       updateFields.status = req.body.leadStatus;
-    }
-    if (req.body.leadStatus === 'Lost') {
-      updateFields.reason = String(req.body.reason ?? req.body.remark ?? '').trim();
     }
 
     if (req.body.type === 'followup') {
       updateFields.followUpDate = req.body.scheduledDate;
-      if (!updateFields.status) {
+      if (!updateFields.status && !wantsLost) {
         updateFields.status = 'Follow-up';
       }
       // Logging a follow-up counts as one.

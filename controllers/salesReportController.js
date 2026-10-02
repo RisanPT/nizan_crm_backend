@@ -3,6 +3,7 @@ import Collection from '../models/Collection.js';
 import Lead from '../models/Lead.js';
 import User from '../models/User.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
+import { salesCountMatch } from '../utils/salesRules.js';
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
 const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
@@ -28,8 +29,11 @@ const dateFilter = (field, from, to) => {
 const saleBookings = async (from, to, user) => {
   // Territory scoping: full-access sees all; a scoped user only their regions.
   const geo = await regionScopedMatch(user);
-  const bookings = await Booking.find({ ...dateFilter('bookingDate', from, to), ...geo })
-    .select('customerName phone service totalPrice collectedAmount bookingDate status leadId salesPersonId')
+  // Bookings entered by users excluded from sales totals are left out.
+  const bookings = await Booking.find({
+    $and: [{ ...dateFilter('bookingDate', from, to), ...geo }, await salesCountMatch()],
+  })
+    .select('customerName phone service totalPrice collectedAmount bookingDate status leadId salesPersonId createdBy')
     .limit(50000)
     .lean();
   return bookings.filter(isSale);

@@ -3,6 +3,7 @@ import InventoryProduct from '../models/InventoryProduct.js';
 import StaffKit from '../models/StaffKit.js';
 import Purchase from '../models/Purchase.js';
 import Vendor from '../models/Vendor.js';
+import InventoryCategory from '../models/InventoryCategory.js';
 import { notifyRoles } from '../utils/notify.js';
 
 const STUDIO_ROLES = ['inventory_manager', 'admin', 'manager'];
@@ -608,6 +609,174 @@ export const deleteVendor = async (req, res) => {
       return res.status(404).json({ message: 'Vendor not found' });
     }
     res.json({ message: 'Vendor removed', id: req.params.id });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ── Categories ───────────────────────────────────────────────────────────────
+//
+// The list merges three sources (case-insensitively):
+//   • built-in  — the original fixed list (mirrors InventoryProduct.categories
+//                 in the app); always locked.
+//   • in use    — any category an existing product / purchase line carries;
+//                 locked while in use, so no product's category is ever
+//                 renamed or orphaned.
+//   • custom    — added from the Stock List; renamable / deletable only while
+//                 no product uses it.
+// Writes only ever touch the InventoryCategory collection — never products.
+
+const BUILTIN_CATEGORIES = [
+  'Prep', 'Eye', 'Base', 'Highlighting', 'Setting', 'Fixing',
+  'Lip', 'Cheek', 'Contour', 'Hair', 'Application', 'Cleaner', 'Other',
+];
+const BUILTIN_KEYS = new Set(BUILTIN_CATEGORIES.map((c) => c.toLowerCase()));
+
+const catKey = (name) => String(name ?? '').trim().toLowerCase();
+const escapeRx = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// How many products / purchase lines use a category (any owner, any casing).
+const categoryUsage = async (name) => {
+  const rx = new RegExp(`^\\s*${escapeRx(String(name).trim())}\\s*$`, 'i');
+  const [products, purchases] = await Promise.all([
+    InventoryProduct.countDocuments({ category: rx }),
+    Purchase.countDocuments({ category: rx }),
+  ]);
+  return { products, purchases, total: products + purchases };
+};
+
+const cleanCategoryName = (raw) =>
+  String(raw ?? '').replace(/\s+/g, ' ').trim();
+
+export const getCategories = async (req, res) => {
+  if (!hasInventoryAccess(req.user) && !canViewPurchases(req.user)) {
+    return res.status(403).json({ message: 'No inventory access' });
+  }
+  try {
+    const [custom, productUse, purchaseUse] = await Promise.all([
+      InventoryCategory.find({}).sort({ name: 1 }).lean(),
+      InventoryProduct.aggregate([
+        { $group: { _id: { $toLower: { $trim: { input: { $ifNull: ['$category', ''] } } } }, n: { $sum: 1 }, name: { $first: '$category' } } },
+      ]),
+      Purchase.aggregate([
+        { $group: { _id: { $toLower: { $trim: { input: { $ifNull: ['$category', ''] } } } }, n: { $sum: 1 }, name: { $first: '$category' } } },
+      ]),
+    ]);
+
+    const byKey = new Map();
+    const entry = (key, name) => {
+      if (!byKey.has(key)) {
+        byKey.set(key, { id: null, name, builtin: false, custom: false, productCount: 0, purchaseCount: 0 });
+      }
+      return byKey.get(key);
+    };
+    BUILTIN_CATEGORIES.forEach((name) => { entry(name.toLowerCase(), name).builtin = true; });
+    custom.forEach((c) => {
+      const e = entry(c.key, c.name);
+      if (!e.builtin) { e.custom = true; e.id = String(c._id); e.name = c.name; }
+    });
+    productUse.forEach((u) => { if (u._id) entry(u._id, String(u.name).trim()).productCount = u.n; });
+    purchaseUse.forEach((u) => { if (u._id) entry(u._id, String(u.name).trim()).purchaseCount = u.n; });
+
+    const order = new Map(BUILTIN_CATEGORIES.map((c, i) => [c.toLowerCase(), i]));
+    const list = [...byKey.entries()].map(([key, e]) => {
+      const inUse = e.productCount + e.purchaseCount > 0;
+      return {
+        id: e.id,
+        name: e.name,
+        source: e.builtin ? 'builtin' : e.custom ? 'custom' : 'in_use',
+        productCount: e.productCount,
+        purchaseCount: e.purchaseCount,
+        // Only an unused custom category can be renamed / deleted.
+        locked: !e.custom || inUse,
+        _key: key,
+      };
+    });
+    list.sort((a, b) => {
+      const ao = order.has(a._key) ? order.get(a._key) : 999;
+      const bo = order.has(b._key) ? order.get(b._key) : 999;
+      return ao !== bo ? ao - bo : a.name.localeCompare(b.name);
+    });
+    res.json(list.map(({ _key, ...rest }) => rest));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const createCategory = async (req, res) => {
+  if (!canManageStudio(req.user)) {
+    return res.status(403).json({ message: 'Only managers can add categories' });
+  }
+  try {
+    const name = cleanCategoryName(req.body?.name);
+    if (!name) return res.status(400).json({ message: 'Category name is required' });
+    if (name.length > 40) return res.status(400).json({ message: 'Keep the name under 40 characters' });
+    const key = catKey(name);
+    if (BUILTIN_KEYS.has(key) || (await InventoryCategory.exists({ key }))) {
+      return res.status(409).json({ message: `"${name}" already exists` });
+    }
+    if ((await categoryUsage(name)).total > 0) {
+      return res.status(409).json({ message: `"${name}" is already used by products` });
+    }
+    const created = await InventoryCategory.create({ name, key, createdBy: req.user?._id || null });
+    res.status(201).json({ id: String(created._id), name: created.name, source: 'custom', productCount: 0, purchaseCount: 0, locked: false });
+  } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ message: 'Category already exists' });
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const updateCategory = async (req, res) => {
+  if (!canManageStudio(req.user)) {
+    return res.status(403).json({ message: 'Only managers can edit categories' });
+  }
+  try {
+    const cat = await InventoryCategory.findById(req.params.id);
+    if (!cat) return res.status(404).json({ message: 'Category not found' });
+    const name = cleanCategoryName(req.body?.name);
+    if (!name) return res.status(400).json({ message: 'Category name is required' });
+    if (name.length > 40) return res.status(400).json({ message: 'Keep the name under 40 characters' });
+
+    const usage = await categoryUsage(cat.name);
+    if (usage.total > 0) {
+      return res.status(409).json({
+        message: `"${cat.name}" is used by ${usage.products} product(s) and can't be renamed`,
+      });
+    }
+    const key = catKey(name);
+    if (key !== cat.key) {
+      if (BUILTIN_KEYS.has(key) || (await InventoryCategory.exists({ key, _id: { $ne: cat._id } }))) {
+        return res.status(409).json({ message: `"${name}" already exists` });
+      }
+      if ((await categoryUsage(name)).total > 0) {
+        return res.status(409).json({ message: `"${name}" is already used by products` });
+      }
+    }
+    cat.name = name;
+    cat.key = key;
+    await cat.save();
+    res.json({ id: String(cat._id), name: cat.name, source: 'custom', productCount: 0, purchaseCount: 0, locked: false });
+  } catch (error) {
+    if (error?.code === 11000) return res.status(409).json({ message: 'Category already exists' });
+    res.status(500).json({ message: error.message });
+  }
+};
+
+export const deleteCategory = async (req, res) => {
+  if (!canManageStudio(req.user)) {
+    return res.status(403).json({ message: 'Only managers can delete categories' });
+  }
+  try {
+    const cat = await InventoryCategory.findById(req.params.id);
+    if (!cat) return res.status(404).json({ message: 'Category not found' });
+    const usage = await categoryUsage(cat.name);
+    if (usage.total > 0) {
+      return res.status(409).json({
+        message: `"${cat.name}" is used by ${usage.products} product(s) and can't be deleted`,
+      });
+    }
+    await cat.deleteOne();
+    res.json({ message: 'Category removed', id: req.params.id });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

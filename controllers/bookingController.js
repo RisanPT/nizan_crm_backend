@@ -5,6 +5,7 @@ import Customer from '../models/Customer.js';
 import ServicePackage from '../models/Package.js';
 import Lead from '../models/Lead.js';
 import { regionScopedMatch, isFullGeoAccess } from '../utils/geoScope.js';
+import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { slotAvailability } from './slotController.js';
 import { ensureReviewForBooking, reviewFormUrl } from './reviewController.js';
 import {
@@ -799,7 +800,12 @@ export const getBookings = async (req, res) => {
     // Scope to the caller's territory (full-access sees all).
     const geo = await regionScopedMatch(req.user);
     const bookings = await Booking.find(geo).sort({ createdAt: -1 });
-    res.json(bookings);
+    // Stamp each booking with whether it counts toward sales totals, so the
+    // app applies the rule from the data itself (no separate list to sync).
+    const counts = await makeCountsTowardSales();
+    res.json(
+      bookings.map((b) => ({ ...b.toJSON(), countsTowardSales: counts(b) })),
+    );
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -811,7 +817,8 @@ export const getBookingById = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
-    res.json(booking);
+    const counts = await makeCountsTowardSales();
+    res.json({ ...booking.toJSON(), countsTowardSales: counts(booking) });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -1045,9 +1052,11 @@ export const getPaginatedBookings = async (req, res) => {
       cancelledCount: 0,
     };
     const totalPages = Math.max(1, Math.ceil(totalItems / limit));
+    const counts = await makeCountsTowardSales();
     const enrichedItems = items.map((item) => ({
       ...item,
       duplicateCount: duplicateCountById.get(String(item._id)) || 0,
+      countsTowardSales: counts(item),
     }));
 
     res.json({

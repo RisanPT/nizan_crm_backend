@@ -5,6 +5,7 @@ import Role from '../models/Role.js';
 import Department from '../models/Department.js';
 import Employee from '../models/Employee.js';
 import { syncUserToEmployee } from '../utils/syncUserEmployee.js';
+import { invalidateSalesRules } from '../utils/salesRules.js';
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -46,6 +47,7 @@ const toAuthResponse = async (user) => ({
     inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
     artistHead: user.artistHead ?? false,
+    countInSalesTotals: user.countInSalesTotals !== false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
     departmentId: user.departmentId?.toString() ?? null,
@@ -136,6 +138,8 @@ export const getUsers = async (req, res) => {
       inventoryAccess: u.inventoryAccess ?? false,
       inventoryManage: u.inventoryManage ?? false,
       isDepartmentHead: u.isDepartmentHead ?? false,
+      artistHead: u.artistHead ?? false,
+      countInSalesTotals: u.countInSalesTotals !== false,
       managedBy: u.managedBy?.toString() ?? null,
       employeeId: u.employeeId?.toString() ?? null,
       departmentId: u.departmentId?.toString() ?? null,
@@ -175,6 +179,8 @@ export const getUsers = async (req, res) => {
     inventoryAccess: u.inventoryAccess ?? false,
     inventoryManage: u.inventoryManage ?? false,
     isDepartmentHead: u.isDepartmentHead ?? false,
+    artistHead: u.artistHead ?? false,
+    countInSalesTotals: u.countInSalesTotals !== false,
     managedBy: u.managedBy?.toString() ?? null,
     employeeId: u.employeeId?.toString() ?? null,
     departmentId: u.departmentId?.toString() ?? null,
@@ -249,6 +255,7 @@ export const createUser = async (req, res) => {
     inventoryManage: Boolean(req.body.inventoryManage),
     isDepartmentHead: Boolean(req.body.isDepartmentHead),
     artistHead: Boolean(req.body.artistHead),
+    countInSalesTotals: req.body.countInSalesTotals !== false,
     departmentId: req.body.departmentId || null,
     managedBy: isDepartmentHeadReq && !isFullAccess ? req.user._id : null,
     employeeId: employeeId || null,
@@ -273,6 +280,7 @@ export const createUser = async (req, res) => {
     inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
     artistHead: user.artistHead ?? false,
+    countInSalesTotals: user.countInSalesTotals !== false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
     departmentId: user.departmentId?.toString() ?? null,
@@ -392,6 +400,11 @@ export const updateUser = async (req, res) => {
   if (req.body.artistHead !== undefined) {
     user.artistHead = Boolean(req.body.artistHead);
   }
+  if (req.body.countInSalesTotals !== undefined) {
+    user.countInSalesTotals = req.body.countInSalesTotals !== false;
+    // Sales totals read this flag through a short cache — refresh it now.
+    invalidateSalesRules();
+  }
   if (req.body.employeeId !== undefined) {
     user.employeeId = req.body.employeeId || null;
   }
@@ -436,6 +449,7 @@ export const updateUser = async (req, res) => {
     inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
     artistHead: user.artistHead ?? false,
+    countInSalesTotals: user.countInSalesTotals !== false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
     departmentId: user.departmentId?.toString() ?? null,
