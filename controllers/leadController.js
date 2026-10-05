@@ -506,6 +506,15 @@ export const updateLead = async (req, res) => {
       });
     }
 
+    // Once linked to a booking, the booking owns these dates (kept in step by
+    // bookingController). A lead-form save re-sends its cached copy, which
+    // drifted a day when re-serialised without a timezone — never let that
+    // overwrite the booking's values.
+    if (existing.bookingId) {
+      delete leadData.bookedDate;
+      delete leadData.eventDate;
+    }
+
     // followUpCount / followUpCompletedCount are server-owned — ignore whatever
     // the client sent and derive them from the actual transition.
     delete leadData.followUpCount;
@@ -627,56 +636,69 @@ export const requestLostApproval = async (req, res) => {
       return res.status(400).json({ message: 'Lead is already Lost.' });
     }
 
-    // Remember where the lead was so a rejection can restore it. Don't overwrite
-    // it if a request is already pending (keeps the original stage).
-    if (lead.status !== 'Pending Lost Approval') {
-      lead.previousStatus = lead.status;
-    }
-    lead.reason = String(reason).trim();
-    lead.remarks = String(remarks).trim();
-    lead.competitorName = String(competitorName ?? '').trim();
-    lead.lostAttachment = String(lostAttachment ?? '').trim();
-    lead.lostRequestedBy = req.user?._id ?? null;
-    lead.lostRequestedAt = new Date();
-    lead.lostDecision = '';
-    lead.lostReviewNote = '';
-    lead.lostReviewedBy = null;
-    lead.lostReviewedAt = null;
-
-    const reviewer = isLostReviewer(req.user?.role);
-    if (reviewer) {
-      // Managers/admins close it immediately and self-approve for the record.
-      lead.status = 'Lost';
-      lead.lostDecision = 'approved';
-      lead.lostReviewedBy = req.user?._id ?? null;
-      lead.lostReviewedAt = new Date();
-      lead.auditLog.push(auditEntry(req, 'lost_marked', lead.reason));
-    } else {
-      lead.status = 'Pending Lost Approval';
-      lead.auditLog.push(auditEntry(req, 'lost_requested', lead.reason));
-    }
-
-    await lead.save();
-
-    // Matrix: Lost Approval. A pending request pings the reviewers; a direct
-    // close by a reviewer is an FYI to the other managers/admins.
-    const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
-    await notify({
-      recipients: managerAdminIds,
-      type: NOTIFICATION_TYPES.LOST_REQUESTED,
-      title: reviewer ? 'Lead marked Lost' : 'Lost approval requested',
-      body: reviewer
-        ? `${lead.name} was closed as Lost by ${req.user?.name ?? 'a manager'}.`
-        : `${req.user?.name ?? 'A sales executive'} requested to mark ${lead.name} as Lost.`,
-      leadId: lead._id,
-      createdBy: req.user?._id ?? null,
-      excludeUserId: req.user?._id ?? null,
-    });
-
+    await applyLostRequest(lead, req, { reason, remarks, competitorName, lostAttachment });
     res.json(lead);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// Shared by the outcome dialog (requestLostApproval) and the Lead Details
+// activity log (leadActivityController), so every "mark Lost" goes through the
+// same approval + notification path. Executives → 'Pending Lost Approval' and
+// managers/admins are asked to accept or decline; reviewers close it directly.
+export const applyLostRequest = async (
+  lead,
+  req,
+  { reason, remarks, competitorName = '', lostAttachment = '' },
+) => {
+  // Remember where the lead was so a rejection can restore it. Don't overwrite
+  // it if a request is already pending (keeps the original stage).
+  if (lead.status !== 'Pending Lost Approval') {
+    lead.previousStatus = lead.status;
+  }
+  lead.reason = String(reason).trim();
+  lead.remarks = String(remarks).trim();
+  lead.competitorName = String(competitorName ?? '').trim();
+  lead.lostAttachment = String(lostAttachment ?? '').trim();
+  lead.lostRequestedBy = req.user?._id ?? null;
+  lead.lostRequestedAt = new Date();
+  lead.lostDecision = '';
+  lead.lostReviewNote = '';
+  lead.lostReviewedBy = null;
+  lead.lostReviewedAt = null;
+
+  const reviewer = isLostReviewer(req.user?.role);
+  if (reviewer) {
+    // Managers/admins close it immediately and self-approve for the record.
+    lead.status = 'Lost';
+    lead.lostDecision = 'approved';
+    lead.lostReviewedBy = req.user?._id ?? null;
+    lead.lostReviewedAt = new Date();
+    lead.auditLog.push(auditEntry(req, 'lost_marked', lead.reason));
+  } else {
+    lead.status = 'Pending Lost Approval';
+    lead.auditLog.push(auditEntry(req, 'lost_requested', lead.reason));
+  }
+
+  await lead.save();
+
+  // Matrix: Lost Approval. A pending request pings the reviewers; a direct
+  // close by a reviewer is an FYI to the other managers/admins.
+  const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+  await notify({
+    recipients: managerAdminIds,
+    type: NOTIFICATION_TYPES.LOST_REQUESTED,
+    title: reviewer ? 'Lead marked Lost' : 'Lost approval requested',
+    body: reviewer
+      ? `${lead.name} was closed as Lost by ${req.user?.name ?? 'a manager'}.`
+      : `${req.user?.name ?? 'A sales executive'} requested to mark ${lead.name} as Lost.`,
+    leadId: lead._id,
+    createdBy: req.user?._id ?? null,
+    excludeUserId: req.user?._id ?? null,
+  });
+
+  return lead;
 };
 
 // A reviewer approves (→ Lost) or rejects (→ restore previous stage) a pending

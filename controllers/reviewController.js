@@ -442,7 +442,7 @@ export const getReviewById = async (req, res) => {
 // @route PUT /api/reviews/:id  (auth) — edit the internal management block only.
 export const updateReview = async (req, res) => {
   try {
-    if (!isFullAccess(req.user) && !['crm', 'accounts'].includes(String(req.user?.role))) {
+    if (!isFullAccess(req.user) && !['crm', 'accounts', 'finance_head'].includes(String(req.user?.role))) {
       return res.status(403).json({ message: 'Not authorized to edit reviews' });
     }
     const review = await Review.findById(req.params.id);
@@ -469,54 +469,151 @@ export const updateReview = async (req, res) => {
 };
 
 // ── HTML rendering (self-contained public form) ──────────────────────────────
+//
+// A step-by-step form: only the first question is visible at first; answering
+// a question reveals the next one. Field names are unchanged, so the submit
+// payload (and everything that reads reviews) stays exactly the same.
 
 const BRAND = '#7A1220';
-const BRAND_DK = '#5E0E19';
+const BRAND_DK = '#4A0B14';
+const GOLD = '#C9A66B';
 
 function pageShell(title, inner) {
   return `<!doctype html><html lang="en"><head>
 <meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<meta name="theme-color" content="${BRAND}"/>
 <title>${esc(title)} · Team N Makeovers</title>
+<script>document.documentElement.className+=' js';</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
-:root{--brand:${BRAND};--brand-dk:${BRAND_DK};}
+:root{--brand:${BRAND};--brand-dk:${BRAND_DK};--gold:${GOLD};--ink:#2a1d20;--muted:#85777b;--line:#ebe1e3;--soft:#fbf3f4;--bg:#f7f2ef;--ok:#1f7a4d}
 *{box-sizing:border-box}
-body{margin:0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:#f4f1f2;color:#241a1c;line-height:1.5}
-.wrap{max-width:680px;margin:0 auto;padding:0 16px 48px}
-.head{background:linear-gradient(135deg,var(--brand),var(--brand-dk));color:#fff;padding:26px 20px 22px;text-align:center;border-radius:0 0 22px 22px}
-.head .logo{width:104px;height:104px;margin:0 auto 12px;background:#fff;border-radius:50%;padding:7px;box-shadow:0 6px 18px rgba(0,0,0,.22)}
-.head .logo img{width:100%;height:100%;object-fit:contain;border-radius:50%;display:block}
-.head p{margin:8px 0 0;opacity:.92;font-size:13px;letter-spacing:.2px}
-.card{background:#fff;border-radius:14px;padding:18px;margin-top:16px;box-shadow:0 1px 3px rgba(0,0,0,.06)}
-.meta{display:grid;grid-template-columns:1fr;gap:6px;font-size:14px}
-.meta b{color:var(--brand)}
-.q{margin:18px 0}
-.q-label{font-weight:600;margin-bottom:8px;font-size:15px}
-.opts{display:flex;flex-wrap:wrap;gap:8px}
-.pill{position:relative;cursor:pointer}
-.pill input{position:absolute;opacity:0;inset:0}
-.pill span{display:inline-block;min-width:40px;text-align:center;padding:9px 12px;border:1.5px solid #e0d6d8;border-radius:10px;font-size:14px;font-weight:600;color:#5b5054;background:#fff;transition:.15s}
-.pill input:checked+span{background:var(--brand);border-color:var(--brand);color:#fff}
-.opts.choices .pill span{min-width:auto}
-textarea,input[type=text]{width:100%;border:1.5px solid #e0d6d8;border-radius:10px;padding:10px 12px;font-size:15px;font-family:inherit;background:#fff}
-textarea{min-height:70px;resize:vertical}
-.matrix .row{display:flex;flex-direction:column;align-items:stretch;gap:8px;padding:12px 0;border-bottom:1px solid #f0eaec}
-.matrix .row:last-child{border-bottom:none}
-.matrix .rl{font-size:14px;font-weight:600}
-.matrix .opts{gap:6px}
-.matrix .pill{flex:1}
-.matrix .pill span{min-width:0;width:100%;padding:10px 0}
-.sec-title{font-size:16px;font-weight:800;color:var(--brand);margin:26px 4px 4px}
-.chk{display:flex;align-items:center;gap:10px;margin:10px 0;font-size:14px}
-.chk input{width:20px;height:20px;accent-color:var(--brand)}
-.nps{display:flex;flex-wrap:wrap;gap:6px}
-.nps .pill span{min-width:34px;padding:8px 0}
-.btn{width:100%;background:var(--brand);color:#fff;border:none;border-radius:12px;padding:15px;font-size:16px;font-weight:700;cursor:pointer;margin-top:22px}
-.btn:disabled{opacity:.6}
-.note{font-size:12px;color:#8a7f82;text-align:center;margin-top:14px}
-.ty{text-align:center;padding:40px 16px}
-.ty .big{font-size:52px}
-.ty h2{color:var(--brand);margin:12px 0 6px}
+html{-webkit-text-size-adjust:100%}
+body{margin:0;font-family:Inter,-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);line-height:1.5}
+h1,h2,.serif{font-family:'Playfair Display',Georgia,'Times New Roman',serif}
+
+/* Hero */
+.hero{position:relative;background:radial-gradient(120% 90% at 50% 0%,#9a1a2c 0%,var(--brand) 45%,var(--brand-dk) 100%);color:#fff;text-align:center;padding:34px 20px 88px;overflow:hidden}
+.hero:after{content:'';position:absolute;inset:auto -20% -60px;height:120px;background:var(--bg);border-radius:50% 50% 0 0/100% 100% 0 0}
+.logo{width:92px;height:92px;margin:0 auto 14px;background:#fff;border-radius:50%;padding:6px;box-shadow:0 10px 30px rgba(0,0,0,.28),0 0 0 4px rgba(201,166,107,.45)}
+.logo img{width:100%;height:100%;object-fit:contain;border-radius:50%;display:block}
+.eyebrow{display:inline-block;font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--gold);margin-bottom:6px}
+.hero h1{margin:0;font-size:clamp(26px,6vw,38px);line-height:1.15}
+.hero p{margin:10px auto 0;max-width:460px;font-size:14.5px;opacity:.9}
+
+.wrap{max-width:720px;margin:0 auto;padding:0 16px 56px;position:relative}
+.meta{position:relative;z-index:1;margin-top:-64px;background:#fff;border-radius:18px;padding:16px;box-shadow:0 10px 30px rgba(74,11,20,.10);display:flex;flex-wrap:wrap;gap:8px;justify-content:center}
+.chip{display:inline-flex;align-items:center;gap:6px;background:var(--soft);border:1px solid var(--line);border-radius:999px;padding:6px 12px;font-size:13px;color:var(--ink)}
+.chip b{color:var(--brand);font-weight:600}
+
+/* Sticky progress */
+.topbar{position:sticky;top:0;z-index:5;background:rgba(247,242,239,.92);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);padding:12px 0 10px;margin:14px 0 4px}
+.topbar .row{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;color:var(--muted);font-weight:600;margin-bottom:7px}
+.topbar .row b{color:var(--brand)}
+.track{height:6px;background:#eadfe1;border-radius:99px;overflow:hidden}
+.bar{height:100%;width:0;background:linear-gradient(90deg,var(--brand),var(--gold));border-radius:99px;transition:width .5s ease}
+
+/* Steps */
+.step{background:#fff;border-radius:20px;padding:20px 18px 18px;margin-top:14px;border:1px solid var(--line);box-shadow:0 2px 10px rgba(74,11,20,.04);transition:border-color .3s,box-shadow .3s}
+.step.current{border-color:rgba(122,18,32,.35);box-shadow:0 10px 28px rgba(74,11,20,.10)}
+.step-head{display:flex;gap:12px;align-items:flex-start}
+.badge{flex:none;width:32px;height:32px;border-radius:50%;display:grid;place-items:center;background:var(--soft);color:var(--brand);font-weight:700;font-size:13.5px;border:1px solid var(--line);transition:.3s}
+.badge svg{display:none;width:16px;height:16px}
+.step.done .badge{background:var(--brand);border-color:var(--brand);color:#fff}
+.step.done .badge .num{display:none}
+.step.done .badge svg{display:block}
+.step-title{margin:3px 0 0;font-size:clamp(18px,4.6vw,21px);line-height:1.3;color:var(--ink)}
+.hint{margin:4px 0 0 44px;font-size:13px;color:var(--muted)}
+.body{margin-top:16px}
+
+/* 1-5 rating */
+.scale{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+.scale.has-na{grid-template-columns:repeat(6,1fr)}
+.opt{position:relative;display:block;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.opt input{position:absolute;opacity:0;width:1px;height:1px}
+.opt>span{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:64px;padding:8px 4px;border:1.5px solid var(--line);border-radius:14px;background:#fff;text-align:center;transition:transform .15s,background .2s,border-color .2s,color .2s}
+.opt>span b{font-size:19px;line-height:1;color:var(--ink)}
+.opt>span small{font-size:11px;color:var(--muted);font-weight:500}
+.opt:hover>span{border-color:#d3b9be;background:var(--soft)}
+.opt:active>span{transform:scale(.96)}
+.opt input:focus-visible+span{outline:3px solid rgba(201,166,107,.7);outline-offset:2px}
+.opt input:checked+span{background:var(--brand);border-color:var(--brand);box-shadow:0 6px 16px rgba(122,18,32,.28)}
+.opt input:checked+span b,.opt input:checked+span small{color:#fff}
+
+/* Matrix (team behaviour) */
+.mrow{padding:12px 0;border-top:1px dashed var(--line)}
+.mrow:first-child{border-top:none;padding-top:0}
+.mlabel{display:flex;justify-content:space-between;align-items:center;font-size:14.5px;font-weight:600;margin-bottom:8px}
+.mlabel .tick{color:var(--ok);font-size:13px;opacity:0;transition:.3s}
+.mrow.answered .tick{opacity:1}
+.scale.compact .opt>span{min-height:46px}
+.scale.compact .opt>span b{font-size:16px}
+.scale-legend{display:flex;justify-content:space-between;font-size:11.5px;color:var(--muted);margin-top:6px}
+
+/* Choices */
+.choices{display:grid;grid-template-columns:1fr;gap:8px}
+.choices .opt>span{flex-direction:row;justify-content:flex-start;gap:10px;min-height:52px;padding:12px 14px;font-size:15px;font-weight:600;color:var(--ink);text-align:left}
+.choices .opt>span:before{content:'';flex:none;width:18px;height:18px;border-radius:50%;border:2px solid #cdbfc2;transition:.2s}
+.choices .opt input:checked+span{color:#fff}
+.choices .opt input:checked+span:before{border-color:#fff;background:radial-gradient(circle,#fff 38%,transparent 42%)}
+
+/* NPS */
+.nps{display:grid;grid-template-columns:repeat(6,1fr);gap:7px}
+.nps .opt>span{min-height:46px}
+.nps .opt>span b{font-size:16px}
+
+/* Text inputs */
+textarea,input[type=text]{width:100%;border:1.5px solid var(--line);border-radius:14px;padding:12px 14px;font-size:16px;font-family:inherit;color:var(--ink);background:#fff;transition:border-color .2s,box-shadow .2s}
+textarea{min-height:96px;resize:vertical}
+textarea:focus,input[type=text]:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 4px rgba(122,18,32,.10)}
+.field{margin-top:14px}
+.field label{display:block;font-size:13.5px;font-weight:600;margin-bottom:6px}
+.chk{display:flex;align-items:flex-start;gap:12px;margin-top:12px;padding:12px 14px;border:1.5px solid var(--line);border-radius:14px;font-size:14px;cursor:pointer}
+.chk input{flex:none;width:20px;height:20px;margin:1px 0 0;accent-color:var(--brand)}
+
+/* Buttons */
+.actions{display:flex;gap:10px;margin-top:14px}
+.btn{appearance:none;border:none;border-radius:14px;padding:13px 20px;font-size:15px;font-weight:700;font-family:inherit;cursor:pointer;transition:transform .15s,opacity .2s}
+.btn:active{transform:scale(.98)}
+.btn.primary{background:var(--brand);color:#fff;box-shadow:0 8px 20px rgba(122,18,32,.25)}
+.btn.ghost{background:transparent;color:var(--muted)}
+.step.done .actions{display:none}
+
+.submit-card{margin-top:18px;text-align:center;background:linear-gradient(135deg,var(--brand),var(--brand-dk));color:#fff;border-radius:22px;padding:26px 20px}
+.submit-card h2{margin:0 0 4px;font-size:22px}
+.submit-card p{margin:0 0 16px;opacity:.85;font-size:14px}
+.submit-card .btn{width:100%;max-width:360px;background:var(--gold);color:var(--brand-dk);font-size:16px;padding:15px}
+.submit-card .btn:disabled{opacity:.6}
+.note{font-size:12px;color:var(--muted);text-align:center;margin-top:18px}
+
+/* Reveal */
+.js .step:not(.shown),.js .submit-card:not(.shown),.js .mrow:not(.shown){display:none}
+.step.shown,.submit-card.shown,.mrow.shown{animation:rise .5s cubic-bezier(.2,.7,.2,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:none}}
+
+/* Thank-you / message pages */
+.ty{text-align:center;padding:64px 20px}
+.ty .big{width:84px;height:84px;margin:0 auto 18px;border-radius:50%;display:grid;place-items:center;font-size:40px;background:#fff;box-shadow:0 10px 30px rgba(74,11,20,.12)}
+.ty h2{color:var(--brand);margin:0 0 8px;font-size:28px}
+.ty p{max-width:420px;margin:0 auto;color:var(--muted)}
+
+@media (min-width:560px){
+  .step{padding:24px 24px 22px}
+  .choices{grid-template-columns:1fr 1fr}
+  .nps{grid-template-columns:repeat(11,1fr)}
+  .opt>span small{font-size:11.5px}
+}
+@media (max-width:380px){
+  .scale.has-na{grid-template-columns:repeat(3,1fr)}
+  .opt>span small{font-size:10px}
+  .hint{margin-left:0}
+}
+@media (prefers-reduced-motion:reduce){
+  *,*:before,*:after{animation:none!important;transition:none!important}
+}
 </style></head><body>${inner}</body></html>`;
 }
 
@@ -528,47 +625,59 @@ function thankYouInner() {
   </div></div>`;
 }
 
-// 1-5 rating row (optionally with N/A = 0)
-function ratingRow(name, label, opts = {}) {
-  const scale = [5, 4, 3, 2, 1]
-    .map(
-      (v) =>
-        `<label class="pill"><input type="radio" name="${name}" value="${v}"><span>${v}</span></label>`,
-    )
-    .join('');
-  const na = opts.na
-    ? `<label class="pill"><input type="radio" name="${name}" value="0"><span>N/A</span></label>`
-    : '';
-  return `<div class="q"><div class="q-label">${label}</div><div class="opts">${scale}${na}</div></div>`;
+const CHECK_SVG =
+  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
+const RATING_WORDS = { 1: 'Poor', 2: 'Fair', 3: 'Good', 4: 'Great', 5: 'Loved it' };
+
+// One question card. kind: 'auto' (advances on selection), 'manual'
+// (Continue / Skip buttons) or 'matrix' (advances when every row is rated).
+function step(n, title, body, opts = {}) {
+  const kind = opts.kind || 'auto';
+  const actions =
+    kind === 'manual'
+      ? `<div class="actions"><button type="button" class="btn primary next">Continue</button><button type="button" class="btn ghost skip">Skip</button></div>`
+      : '';
+  return `<section class="step" data-kind="${kind}" aria-labelledby="t${n}">
+    <div class="step-head"><span class="badge"><span class="num">${n}</span>${CHECK_SVG}</span><h2 class="step-title" id="t${n}">${title}</h2></div>
+    ${opts.hint ? `<p class="hint">${opts.hint}</p>` : ''}
+    <div class="body">${body}</div>
+    ${actions}
+  </section>`;
 }
 
-// A matrix section: [{name,label}]
+function opt(name, value, inner) {
+  return `<label class="opt"><input type="radio" name="${name}" value="${value}"><span>${inner}</span></label>`;
+}
+
+// 1-5 rating, with optional N/A (= 0).
+function ratingScale(name, { na = false } = {}) {
+  const pills = [1, 2, 3, 4, 5]
+    .map((v) => opt(name, v, `<b>${v}</b><small>${RATING_WORDS[v]}</small>`))
+    .join('');
+  const naPill = na ? opt(name, 0, '<b>N/A</b><small>Not taken</small>') : '';
+  return `<div class="scale${na ? ' has-na' : ''}" role="radiogroup">${pills}${naPill}</div>`;
+}
+
+// Rows revealed one by one: [{name,label}]
 function matrix(rows) {
   return `<div class="matrix">${rows
     .map(
-      (r) =>
-        `<div class="row"><div class="rl">${r.label}</div><div class="opts">${[5, 4, 3, 2, 1]
-          .map(
-            (v) =>
-              `<label class="pill"><input type="radio" name="${r.name}" value="${v}"><span>${v}</span></label>`,
-          )
-          .join('')}</div></div>`,
+      (r, i) => `<div class="mrow${i === 0 ? ' shown' : ''}">
+        <div class="mlabel"><span>${r.label}</span><span class="tick">✓</span></div>
+        <div class="scale compact" role="radiogroup">${[1, 2, 3, 4, 5]
+          .map((v) => opt(r.name, v, `<b>${v}</b>`))
+          .join('')}</div>
+      </div>`,
     )
+    .join('')}<div class="scale-legend"><span>1 · Poor</span><span>5 · Excellent</span></div></div>`;
+}
+
+// Single choice for string enums: options=[{value,text}]
+function choices(name, options) {
+  return `<div class="choices" role="radiogroup">${options
+    .map((o) => opt(name, o.value, o.text))
     .join('')}</div>`;
-}
-
-// Single-choice row for string enums: options=[{value,text}]
-function choiceRow(name, label, options) {
-  return `<div class="q"><div class="q-label">${label}</div><div class="opts choices">${options
-    .map(
-      (o) =>
-        `<label class="pill"><input type="radio" name="${name}" value="${o.value}"><span>${o.text}</span></label>`,
-    )
-    .join('')}</div></div>`;
-}
-
-function textRow(name, label) {
-  return `<div class="q"><div class="q-label">${label}</div><textarea name="${name}"></textarea></div>`;
 }
 
 export function renderForm(review) {
@@ -579,116 +688,190 @@ export function renderForm(review) {
         year: 'numeric',
       })
     : '';
+  const firstName = String(review.brideName || '').trim().split(/\s+/)[0] || '';
 
-  const inner = `
-<div class="head">
-  <div class="logo"><img src="${TEAM_N_LOGO}" alt="Team N Makeovers"></div>
-  <p>Bridal Service Review — your feedback helps us grow 💄</p>
-</div>
-<div class="wrap">
-  <div class="card">
-    <div class="meta">
-      ${review.brideName ? `<div><b>Bride:</b> ${esc(review.brideName)}</div>` : ''}
-      ${wed ? `<div><b>Wedding date:</b> ${esc(wed)}</div>` : ''}
-      ${review.venue ? `<div><b>Venue:</b> ${esc(review.venue)}</div>` : ''}
-      ${
-        review.teamMembers && review.teamMembers.length
-          ? `<div><b>Our team:</b> ${review.teamMembers
-              .map((m) => `${esc(m.name)}${m.role ? ` (${esc(m.role)})` : ''}`)
-              .join(', ')}</div>`
-          : review.artistName
-          ? `<div><b>Team member:</b> ${esc(review.artistName)}</div>`
-          : ''
-      }
-      ${review.bookingNumber ? `<div><b>Booking #:</b> ${esc(review.bookingNumber)}</div>` : ''}
-    </div>
-  </div>
+  const team =
+    review.teamMembers && review.teamMembers.length
+      ? review.teamMembers
+          .map((m) => `${esc(m.name)}${m.role ? ` (${esc(m.role)})` : ''}`)
+          .join(', ')
+      : esc(review.artistName || '');
 
-  <form id="f">
-    <div class="card">
-      ${ratingRow('overall', '1. Overall experience')}
-      ${ratingRow('makeup', '2. Makeup quality')}
-      ${ratingRow('hair', '3. Hair styling', { na: true })}
-      ${ratingRow('saree', '4. Saree draping / styling', { na: true })}
-    </div>
+  const chips = [
+    review.brideName && `<span class="chip">👰 <b>${esc(review.brideName)}</b></span>`,
+    wed && `<span class="chip">📅 ${esc(wed)}</span>`,
+    review.venue && `<span class="chip">📍 ${esc(review.venue)}</span>`,
+    team && `<span class="chip">💄 ${team}</span>`,
+    review.bookingNumber && `<span class="chip">#${esc(review.bookingNumber)}</span>`,
+  ]
+    .filter(Boolean)
+    .join('');
 
-    <div class="sec-title">5. Team behaviour</div>
-    <div class="card">
-      ${matrix([
+  const steps = [
+    step(1, 'How was your overall experience?', ratingScale('overall')),
+    step(2, 'How would you rate the makeup?', ratingScale('makeup')),
+    step(3, 'How was the hair styling?', ratingScale('hair', { na: true }), {
+      hint: 'Choose N/A if you didn’t take this service.',
+    }),
+    step(4, 'How was the saree draping / styling?', ratingScale('saree', { na: true }), {
+      hint: 'Choose N/A if you didn’t take this service.',
+    }),
+    step(
+      5,
+      'How was our team’s behaviour?',
+      matrix([
         { name: 'teamBehaviour.punctuality', label: 'Punctuality' },
         { name: 'teamBehaviour.professionalism', label: 'Professionalism' },
         { name: 'teamBehaviour.communication', label: 'Communication' },
         { name: 'teamBehaviour.politeness', label: 'Politeness & attitude' },
         { name: 'teamBehaviour.handlingRequests', label: 'Handling your requests' },
-      ])}
-    </div>
-
-    <div class="card">
-      ${choiceRow('lookMatch', '6. Did the final look match your expectation?', [
-        { value: 'much_better', text: 'Much better' },
+      ]),
+      { kind: 'matrix', hint: 'Rate each one — the next appears as you go.' },
+    ),
+    step(
+      6,
+      'Did the final look match your expectation?',
+      choices('lookMatch', [
+        { value: 'much_better', text: 'Much better ✨' },
         { value: 'exactly', text: 'Exactly' },
         { value: 'mostly', text: 'Mostly' },
         { value: 'not', text: 'Not what I expected' },
-      ])}
-      ${textRow('likedMost', '7. What did you like the MOST?')}
-      ${textRow('couldBeBetter', '8. Anything that could have been better?')}
-      ${choiceRow('comfortable', '9. Did you feel comfortable & confident with our team?', [
+      ]),
+    ),
+    step(
+      7,
+      'What did you like the most?',
+      '<textarea name="likedMost" placeholder="The look, the team, a special moment…"></textarea>',
+      { kind: 'manual' },
+    ),
+    step(
+      8,
+      'Did you feel comfortable & confident with our team?',
+      choices('comfortable', [
         { value: 'definitely_yes', text: 'Definitely yes' },
         { value: 'yes', text: 'Yes' },
         { value: 'not_completely', text: 'Not completely' },
         { value: 'no', text: 'No' },
-      ])}
-      ${choiceRow('recommend', '10. Would you recommend Team N Makeovers?', [
+      ]),
+    ),
+    step(
+      9,
+      'Would you recommend Team N Makeovers?',
+      choices('recommend', [
         { value: 'definitely_yes', text: 'Definitely 💖' },
         { value: 'yes', text: 'Yes' },
         { value: 'maybe', text: 'Maybe' },
         { value: 'no', text: 'No' },
-      ])}
-      ${choiceRow('bookAgain', '11. Would you book us again?', [
+      ]),
+    ),
+    step(
+      10,
+      'Would you book us again?',
+      choices('bookAgain', [
         { value: 'definitely_yes', text: 'Definitely' },
         { value: 'yes', text: 'Yes' },
         { value: 'maybe', text: 'Maybe' },
         { value: 'no', text: 'No' },
-      ])}
-    </div>
+      ]),
+    ),
+    step(
+      11,
+      'How likely are you to recommend us to a friend?',
+      `<div class="nps" role="radiogroup">${Array.from({ length: 11 }, (_, i) =>
+        opt('nps', i, `<b>${i}</b>`),
+      ).join('')}</div><div class="scale-legend"><span>0 · Not likely</span><span>10 · Extremely likely</span></div>`,
+    ),
+    step(
+      12,
+      'Share a few words for other brides',
+      `<textarea name="testimonial" placeholder="Your testimonial (optional)"></textarea>
+      <label class="chk"><input type="checkbox" name="marketingConsent"><span>You may use my review, photos or video for marketing.</span></label>
+      <label class="chk"><input type="checkbox" name="tagConsent"><span>You may tag my social media when sharing.</span></label>
+      <div class="field"><label for="ig">Instagram / social username (optional)</label><input id="ig" type="text" name="instagram" placeholder="@username" autocomplete="off"></div>`,
+      { kind: 'manual', hint: 'Optional — but it truly makes our day.' },
+    ),
+  ].join('');
 
-    <div class="sec-title">Team member review${review.artistName ? ` — ${esc(review.artistName)}` : ''}</div>
-    <div class="card">
-      ${matrix([
-        { name: 'teamMember.skill', label: 'Makeup / service skill' },
-        { name: 'teamMember.attention', label: 'Attention to detail' },
-        { name: 'teamMember.timeManagement', label: 'Time management' },
-        { name: 'teamMember.professionalism', label: 'Professionalism' },
-        { name: 'teamMember.communication', label: 'Communication' },
-        { name: 'teamMember.overall', label: 'Overall performance' },
-      ])}
-      ${textRow('teamMemberDidWell', '12. One thing this team member did exceptionally well')}
-      ${textRow('teamMemberImprove', '13. One thing they can improve')}
-    </div>
+  const inner = `
+<header class="hero">
+  <div class="logo"><img src="${TEAM_N_LOGO}" alt="Team N Makeovers"></div>
+  <div class="eyebrow">Bridal Service Review</div>
+  <h1>${firstName ? `Hi ${esc(firstName)}, how was your big day?` : 'How was your big day?'}</h1>
+  <p>Thank you for choosing Team N Makeovers. This takes about 2 minutes — answer one question and the next appears.</p>
+</header>
+<main class="wrap">
+  ${chips ? `<div class="meta">${chips}</div>` : ''}
 
-    <div class="sec-title">Testimonial & marketing</div>
-    <div class="card">
-      ${textRow('testimonial', 'Share a short testimonial (optional)')}
-      <label class="chk"><input type="checkbox" name="marketingConsent"> May we use your review/photos/video for marketing?</label>
-      <label class="chk"><input type="checkbox" name="tagConsent"> May we tag your social media when sharing?</label>
-      <div class="q"><div class="q-label">Instagram / social username (optional)</div><input type="text" name="instagram" placeholder="@username"></div>
-    </div>
+  <div class="topbar" aria-live="polite">
+    <div class="row"><span>Your review</span><span><b id="count">0</b> of 12 answered</span></div>
+    <div class="track"><div class="bar" id="bar"></div></div>
+  </div>
 
-    <div class="card">
-      <div class="q-label">On a scale of 0–10, how likely are you to recommend us?</div>
-      <div class="nps">${Array.from({ length: 11 }, (_, i) =>
-        `<label class="pill"><input type="radio" name="nps" value="${i}"><span>${i}</span></label>`,
-      ).join('')}</div>
+  <form id="f" novalidate>
+    ${steps}
+    <div class="submit-card" id="submitCard">
+      <h2 class="serif">All done 💖</h2>
+      <p>You can scroll up to change any answer before submitting.</p>
+      <button class="btn" id="sb" type="submit">Submit review</button>
     </div>
-
-    <button class="btn" id="sb" type="submit">Submit review</button>
-    <div class="note">Team N Makeovers · Thank you for choosing us 💖</div>
+    <div class="note">Team N Makeovers · Thank you for choosing us</div>
   </form>
-</div>
+</main>
 <script>
 (function(){
   var TOKEN=${JSON.stringify(review.token)};
   function setPath(o,p,v){var k=p.split('.'),c=o;for(var i=0;i<k.length-1;i++){c[k[i]]=c[k[i]]||{};c=c[k[i]];}c[k[k.length-1]]=v;}
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var steps=[].slice.call(document.querySelectorAll('.step'));
+  var total=steps.length, submitCard=document.getElementById('submitCard');
+  var bar=document.getElementById('bar'), count=document.getElementById('count');
+
+  function focusOn(el){
+    setTimeout(function(){
+      try{el.scrollIntoView({behavior:reduce?'auto':'smooth',block:'center'});}catch(e){el.scrollIntoView();}
+    },140);
+  }
+  function setCurrent(el){
+    steps.forEach(function(s){s.classList.remove('current');});
+    if(el&&el.classList.contains('step'))el.classList.add('current');
+  }
+  function reveal(el){
+    if(el.classList.contains('shown'))return;
+    el.classList.add('shown');setCurrent(el);focusOn(el);
+  }
+  function progress(){
+    var d=steps.filter(function(s){return s.classList.contains('done');}).length;
+    bar.style.width=(d/total*100)+'%';count.textContent=d;
+  }
+  function complete(i){
+    steps[i].classList.add('done');progress();
+    var next=steps[i+1];reveal(next||submitCard);
+  }
+
+  steps.forEach(function(s,i){
+    var kind=s.getAttribute('data-kind');
+    if(kind==='matrix'){
+      var rows=[].slice.call(s.querySelectorAll('.mrow'));
+      rows.forEach(function(r,j){
+        r.addEventListener('change',function(){
+          r.classList.add('answered');
+          var nr=rows[j+1];
+          if(nr&&!nr.classList.contains('shown')){nr.classList.add('shown');
+            setTimeout(function(){try{nr.scrollIntoView({behavior:reduce?'auto':'smooth',block:'nearest'});}catch(e){}},120);}
+          if(!s.classList.contains('done')&&rows.every(function(x){return x.classList.contains('answered');}))complete(i);
+        });
+      });
+    }else if(kind==='manual'){
+      s.querySelector('.next').addEventListener('click',function(){complete(i);});
+      s.querySelector('.skip').addEventListener('click',function(){complete(i);});
+    }else{
+      s.addEventListener('change',function(e){
+        if(e.target.type==='radio'&&!s.classList.contains('done'))complete(i);
+      });
+    }
+  });
+  steps[0].classList.add('shown');setCurrent(steps[0]);progress();
+
   var f=document.getElementById('f');
   f.addEventListener('submit',function(e){
     e.preventDefault();
@@ -700,7 +883,7 @@ export function renderForm(review) {
     fetch('/api/reviews/submit/'+TOKEN,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
       .then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j};});})
       .then(function(res){
-        if(res.ok){document.body.innerHTML=${JSON.stringify(thankYouInner())};}
+        if(res.ok){document.body.innerHTML=${JSON.stringify(thankYouInner())};window.scrollTo(0,0);}
         else{btn.disabled=false;btn.textContent='Submit review';alert((res.j&&res.j.message)||'Could not submit. Please try again.');}
       })
       .catch(function(){btn.disabled=false;btn.textContent='Submit review';alert('Network error. Please try again.');});

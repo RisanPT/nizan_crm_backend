@@ -3,7 +3,7 @@ import ChartOfAccount from '../models/ChartOfAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
 import BankStatementLine from '../models/BankStatementLine.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;

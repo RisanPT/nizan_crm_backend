@@ -305,7 +305,7 @@ export const createAdminExpense = async (req, res) => {
     await expense.save();
 
     await notifyRoles({
-      roles: ['accounts', 'admin'],
+      roles: ['accounts', 'finance_head', 'admin'],
       type: 'expense_recorded',
       title: approver
         ? 'New Administrative Expense'

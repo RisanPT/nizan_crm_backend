@@ -3,6 +3,7 @@ import Expense from '../models/Expense.js';
 import Booking from '../models/Booking.js';
 import Lead from '../models/Lead.js';
 import SalesReturn from '../models/SalesReturn.js';
+import { makeCountsTowardSales } from '../utils/salesRules.js';
 import PDFDocument from 'pdfkit';
 import { Parser } from 'json2csv';
 
@@ -79,11 +80,14 @@ export const getFinancialAnalystReport = async (req, res) => {
     // ── Bookings whose event falls in the month ──
     const bookings = await Booking.find({ bookingDate: { $gte: start, $lte: end } })
       .select(
-        'service customerName phone district totalPrice advanceAmount discountAmount status bookingDate serviceEnd internalRemarks'
+        'service customerName phone district totalPrice advanceAmount discountAmount status bookingDate serviceEnd internalRemarks createdBy'
       )
       .lean();
 
     const active = bookings.filter((b) => !isCancelled(b.status));
+    // Bookings entered by users excluded from sales totals add no revenue.
+    const countsTowardSales = await makeCountsTowardSales();
+    const saleValue = (b) => (countsTowardSales(b) ? b.totalPrice || 0 : 0);
     const cancelled = bookings.filter((b) => isCancelled(b.status));
 
     // Package breakdown (dynamic — every package that appears).
@@ -92,7 +96,7 @@ export const getFinancialAnalystReport = async (req, res) => {
       const k = pkgOf(b);
       const e = pkgMap.get(k) || { package: k, count: 0, revenue: 0, advance: 0, balance: 0, cancellations: 0 };
       e.count += 1;
-      e.revenue += b.totalPrice || 0;
+      e.revenue += saleValue(b);
       e.advance += b.advanceAmount || 0;
       e.balance += balanceOf(b);
       pkgMap.set(k, e);
@@ -107,7 +111,7 @@ export const getFinancialAnalystReport = async (req, res) => {
 
     const salesTotals = {
       totalBookings: active.length,
-      totalRevenue: active.reduce((s, b) => s + (b.totalPrice || 0), 0),
+      totalRevenue: active.reduce((s, b) => s + saleValue(b), 0),
       totalAdvance: active.reduce((s, b) => s + (b.advanceAmount || 0), 0),
       totalBalance: active.reduce((s, b) => s + balanceOf(b), 0),
       totalDiscounts: active.reduce((s, b) => s + (b.discountAmount || 0), 0),
@@ -139,11 +143,11 @@ export const getFinancialAnalystReport = async (req, res) => {
       bookingDate: { $gte: nextStart, $lte: nextEnd },
       status: { $nin: ['cancelled', 'rejected', 'Cancelled', 'Rejected'] },
     })
-      .select('totalPrice')
+      .select('totalPrice createdBy')
       .lean();
     const forwardBookings = {
       count: forward.length,
-      value: forward.reduce((s, b) => s + (b.totalPrice || 0), 0),
+      value: forward.reduce((s, b) => s + saleValue(b), 0),
     };
 
     // ── Customer Relations ──
@@ -153,7 +157,7 @@ export const getFinancialAnalystReport = async (req, res) => {
       const k = String(b.district ?? '').trim() || 'Unspecified';
       const e = distMap.get(k) || { district: k, count: 0, revenue: 0 };
       e.count += 1;
-      e.revenue += b.totalPrice || 0;
+      e.revenue += saleValue(b);
       distMap.set(k, e);
     }
     const districtBreakdown = [...distMap.values()].sort((a, b) => b.revenue - a.revenue);

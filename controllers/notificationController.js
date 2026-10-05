@@ -3,6 +3,7 @@ import Lead from '../models/Lead.js';
 import Booking from '../models/Booking.js';
 import Collection from '../models/Collection.js';
 import Expense from '../models/Expense.js';
+import { makeCountsTowardSales } from '../utils/salesRules.js';
 import {
   notify,
   getUserIdsByRoles,
@@ -136,14 +137,16 @@ const sweepMonthEndSummary = async () => {
     if (existing) return;
 
     const [bookings, collections, expenses] = await Promise.all([
-      Booking.find({ bookingDate: { $gte: start, $lte: end } }).select('totalPrice status').lean(),
+      Booking.find({ bookingDate: { $gte: start, $lte: end } }).select('totalPrice status createdBy').lean(),
       Collection.find({ date: { $gte: start, $lte: end } }).select('amount').lean(),
       Expense.find({ date: { $gte: start, $lte: end } }).select('amount').lean(),
     ]);
 
     const cancelled = new Set(['cancelled', 'rejected']);
     const active = bookings.filter((b) => !cancelled.has(String(b.status || '').toLowerCase()));
-    const revenue = active.reduce((s, b) => s + (b.totalPrice || 0), 0);
+    // Bookings entered by users excluded from sales totals add no sales.
+    const countsTowardSales = await makeCountsTowardSales();
+    const revenue = active.reduce((s, b) => s + (countsTowardSales(b) ? b.totalPrice || 0 : 0), 0);
     const collected = collections.reduce((s, c) => s + (c.amount || 0), 0);
     const spent = expenses.reduce((s, e) => s + (e.amount || 0), 0);
 

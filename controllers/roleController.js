@@ -55,6 +55,21 @@ const DEFAULT_ROLES = [
     permissions: ['calendar', 'bookings', 'sales', 'finance', 'payables'],
   },
   {
+    key: 'finance_head',
+    label: 'Finance Head',
+    homeRoute: '/finance-head',
+    permissions: [
+      'clients',
+      'calendar',
+      'bookings',
+      'finance',
+      'company_finance',
+      'company_reports',
+      'payables',
+      'planning',
+    ],
+  },
+  {
     key: 'fleet_manager',
     label: 'Fleet Manager',
     homeRoute: '/fleet/assignments',

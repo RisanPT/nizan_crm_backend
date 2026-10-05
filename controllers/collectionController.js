@@ -172,7 +172,7 @@ export const createCollection = async (req, res) => {
 
     // Notify Accounts + Admins that a payment came in.
     await notifyRoles({
-      roles: ['accounts', 'admin'],
+      roles: ['accounts', 'finance_head', 'admin'],
       type: 'payment_received',
       title: 'Payment received',
       body: `A payment of ₹${amountNum.toLocaleString('en-IN')} was recorded.`,
@@ -190,7 +190,7 @@ export const createCollection = async (req, res) => {
 
 export const verifyCollection = async (req, res) => {
   try {
-    if (req.user && req.user.role !== 'admin' && req.user.role !== 'accounts') {
+    if (req.user && req.user.role !== 'admin' && req.user.role !== 'accounts' && req.user.role !== 'finance_head') {
       return res.status(403).json({ message: 'Not authorized to verify collections' });
     }
 

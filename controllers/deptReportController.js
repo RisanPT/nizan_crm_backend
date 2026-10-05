@@ -10,8 +10,9 @@ import AdminExpense from '../models/AdminExpense.js';
 import ITTask from '../models/ITTask.js';
 import DepartmentReport, { DEPARTMENT_KEYS } from '../models/DepartmentReport.js';
 import { round2 } from './accountingController.js';
+import { makeCountsTowardSales } from '../utils/salesRules.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canView = (u) => FINANCE_ROLES.includes(u?.role);
 
 const DEAD_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
@@ -287,15 +288,19 @@ async function computeAuto(dept, from, to, prevFrom, prevTo) {
   const out = {};
 
   if (dept === 'sales') {
-    const bookings = await Booking.find({}).select('totalPrice bookingDate serviceStart createdAt status').limit(50000).lean();
+    const bookings = await Booking.find({}).select('totalPrice bookingDate serviceStart createdAt status createdBy').limit(50000).lean();
     const live = bookings.filter((b) => isLive(b.status));
     const cur = live.filter((b) => inP(b.bookingDate || b.createdAt));
     const prev = live.filter((b) => b.bookingDate && new Date(b.bookingDate) >= prevFrom && new Date(b.bookingDate) <= prevTo);
-    const rev = round2(cur.reduce((s, b) => s + (b.totalPrice || 0), 0));
+    // Revenue / ABV skip bookings entered by users excluded from sales totals.
+    const countsTowardSales = await makeCountsTowardSales();
+    const curSales = cur.filter(countsTowardSales);
+    const prevSales = prev.filter(countsTowardSales);
+    const rev = round2(curSales.reduce((s, b) => s + (b.totalPrice || 0), 0));
     out.bookingsConfirmed = cur.length;
     out.revenue = rev;
-    out.abv = cur.length ? round2(rev / cur.length) : 0;
-    const prevAbv = prev.length ? prev.reduce((s, b) => s + (b.totalPrice || 0), 0) / prev.length : 0;
+    out.abv = curSales.length ? round2(rev / curSales.length) : 0;
+    const prevAbv = prevSales.length ? prevSales.reduce((s, b) => s + (b.totalPrice || 0), 0) / prevSales.length : 0;
     out.abvGrowthPct = prevAbv ? pct(out.abv - prevAbv, prevAbv) : 0;
     out.cancellations = bookings.filter((b) => ['cancelled', 'canceled'].includes(String(b.status || '').toLowerCase()) && inP(b.bookingDate || b.createdAt)).length;
     out.cancellationRatePct = cur.length + out.cancellations ? pct(out.cancellations, cur.length + out.cancellations) : 0;
