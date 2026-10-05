@@ -5,7 +5,7 @@ import User from '../models/User.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
 import { salesCountMatch } from '../utils/salesRules.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;

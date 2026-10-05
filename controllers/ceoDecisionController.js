@@ -1,6 +1,6 @@
 import CeoDecision, { DECISION_TYPES, DECISION_STATUSES } from '../models/CeoDecision.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canView = (u) => FINANCE_ROLES.includes(u?.role);
 
 // @route  GET /api/reports/decisions?month=&year=&status=&scope=open

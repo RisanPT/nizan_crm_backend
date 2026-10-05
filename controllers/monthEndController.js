@@ -18,7 +18,7 @@ import { accountMovements, round2 } from './accountingController.js';
 import { filingsForPeriod } from './taxFilingController.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canView = (u) => FINANCE_ROLES.includes(u?.role);
 
 const DEAD_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];

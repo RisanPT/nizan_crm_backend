@@ -2,7 +2,7 @@ import TaxFiling, { FILING_LABELS } from '../models/TaxFiling.js';
 import ChartOfAccount from '../models/ChartOfAccount.js';
 import { accountMovements, round2 } from './accountingController.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canManage = (u) => FINANCE_ROLES.includes(u?.role);
 
 const d = (y, m, day) => new Date(y, m - 1, day); // m is 1-based

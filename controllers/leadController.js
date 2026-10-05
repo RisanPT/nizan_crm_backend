@@ -506,6 +506,15 @@ export const updateLead = async (req, res) => {
       });
     }
 
+    // Once linked to a booking, the booking owns these dates (kept in step by
+    // bookingController). A lead-form save re-sends its cached copy, which
+    // drifted a day when re-serialised without a timezone — never let that
+    // overwrite the booking's values.
+    if (existing.bookingId) {
+      delete leadData.bookedDate;
+      delete leadData.eventDate;
+    }
+
     // followUpCount / followUpCompletedCount are server-owned — ignore whatever
     // the client sent and derive them from the actual transition.
     delete leadData.followUpCount;

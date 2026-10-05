@@ -46,20 +46,20 @@ const hasInventoryAccess = (user) =>
 // Accounts may READ purchases for the finance dashboard (not create / edit).
 const canViewPurchases = (user) =>
   canManageStudio(user) ||
-  user.role === 'accounts' ||
+  user.role === 'accounts' || user.role === 'finance_head' ||
   hasInventorySection(user, 'purchases');
 
 // Vendor list. Granting Purchases implies this too, because a purchase row
 // shows its vendor.
 const canViewVendors = (user) =>
   canManageStudio(user) ||
-  user.role === 'accounts' ||
+  user.role === 'accounts' || user.role === 'finance_head' ||
   hasInventorySection(user, 'vendors', 'purchases');
 
 // Accounts team can settle vendor bills (mark paid, record payments, edit
 // billing / GST) alongside the studio managers — but not create/delete stock.
 const canManagePayables = (user) =>
-  canManageStudio(user) || user.role === 'accounts';
+  canManageStudio(user) || user.role === 'accounts' || user.role === 'finance_head';
 
 // Fully-settled once payments cover the grand total (base + GST).
 const grandTotalOf = (purchase) =>

@@ -5,7 +5,7 @@ import JournalEntry from '../models/JournalEntry.js';
 import DepreciationRun from '../models/DepreciationRun.js';
 import { fyLabelFor, nextVoucherNo, ensureLockDate, isLocked } from '../services/posting.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;

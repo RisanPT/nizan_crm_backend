@@ -129,7 +129,7 @@ export const createSalesReturn = async (req, res) => {
     await doc.save();
 
     await notifyRoles({
-      roles: ['accounts', 'admin'],
+      roles: ['accounts', 'finance_head', 'admin'],
       type: 'sales_return_created',
       title: 'New Sales Return / Credit Note',
       body: `₹${doc.amount.toLocaleString('en-IN')} credit note for ${brideName} (${creditNoteNumber}).`,

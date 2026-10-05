@@ -1,7 +1,7 @@
 import BankAccount from '../models/BankAccount.js';
 
 // Finance staff manage bank balances.
-const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canManage = (u) => FINANCE_ROLES.includes(String(u?.role || '').toLowerCase());
 
 const num = (v) => {

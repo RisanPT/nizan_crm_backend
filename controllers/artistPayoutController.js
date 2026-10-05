@@ -12,13 +12,13 @@ const payoutPopulate = [
 ];
 
 // Create / approve / pay / edit / delete — Accounts & Admin only.
-const canManage = (u) => ['admin', 'accounts'].includes(u?.role);
+const canManage = (u) => ['admin', 'accounts', 'finance_head'].includes(u?.role);
 // Read — Accounts, Admin, plus management roles that need visibility
 // (the Artist Head profile shows each freelancer's total paid, read-only).
 // `artistHead` also covers a dual-role artist who leads the team (role stays
 // 'artist' but carries the artistHead flag).
 const canRead = (u) =>
-  ['admin', 'accounts', 'manager', 'artist_head'].includes(u?.role) ||
+  ['admin', 'accounts', 'finance_head', 'manager', 'artist_head'].includes(u?.role) ||
   u?.artistHead === true;
 
 // Ensure the Artist Payouts ledger head exists so the voucher can post even if

@@ -5,7 +5,7 @@ import { makeCountsTowardSales } from '../utils/salesRules.js';
 
 const MARKETING_ROLES = ['admin', 'manager', 'marketing_admin'];
 const DEAD_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
-const READ_ROLES = [...MARKETING_ROLES, 'accounts', 'crm'];
+const READ_ROLES = [...MARKETING_ROLES, 'accounts', 'finance_head', 'crm'];
 const canManage = (u) => MARKETING_ROLES.includes(u?.role);
 const canRead = (u) => READ_ROLES.includes(u?.role);
 

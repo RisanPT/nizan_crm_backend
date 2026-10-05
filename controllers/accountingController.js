@@ -25,7 +25,7 @@ import {
 
 const SOURCE_MODELS = { Collection, AdminExpense, FuelExpense, Salary, HraRecord, SalesReturn, Booking, ArtistPayout };
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;

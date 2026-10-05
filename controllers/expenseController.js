@@ -60,7 +60,7 @@ export const createExpense = async (req, res) => {
 
     // Notify Accounts + Admins that a new expense/payable was submitted.
     await notifyRoles({
-      roles: ['accounts', 'admin'],
+      roles: ['accounts', 'finance_head', 'admin'],
       type: 'expense_recorded',
       title: 'New expense recorded',
       body: `A ${expense.category} expense of ₹${amountNum.toLocaleString('en-IN')} was submitted.`,
@@ -128,7 +128,7 @@ export const updateExpense = async (req, res) => {
 
 export const verifyExpense = async (req, res) => {
   try {
-    if (req.user && req.user.role !== 'admin' && req.user.role !== 'accounts') {
+    if (req.user && req.user.role !== 'admin' && req.user.role !== 'accounts' && req.user.role !== 'finance_head') {
       return res.status(403).json({ message: 'Not authorized to verify expenses' });
     }
 

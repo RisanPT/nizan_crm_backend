@@ -442,7 +442,7 @@ export const getReviewById = async (req, res) => {
 // @route PUT /api/reviews/:id  (auth) — edit the internal management block only.
 export const updateReview = async (req, res) => {
   try {
-    if (!isFullAccess(req.user) && !['crm', 'accounts'].includes(String(req.user?.role))) {
+    if (!isFullAccess(req.user) && !['crm', 'accounts', 'finance_head'].includes(String(req.user?.role))) {
       return res.status(403).json({ message: 'Not authorized to edit reviews' });
     }
     const review = await Review.findById(req.params.id);
