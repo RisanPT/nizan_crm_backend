@@ -63,6 +63,16 @@ const districtPopulateOption = {
   },
 };
 
+// Services display order: sortOrder ascending; packages never placed come
+// after, oldest first. Done in JS — the collection is small and Mongo sorts
+// nulls first.
+const byDisplayOrder = (a, b) => {
+  const sa = a.sortOrder ?? Number.POSITIVE_INFINITY;
+  const sb = b.sortOrder ?? Number.POSITIVE_INFINITY;
+  if (sa !== sb) return sa - sb;
+  return new Date(a.createdAt) - new Date(b.createdAt);
+};
+
 export const getPackages = async (req, res) => {
   try {
     const page = Number.parseInt(req.query.page, 10);
@@ -73,15 +83,13 @@ export const getPackages = async (req, res) => {
       const currentLimit = Math.min(100, Math.max(1, limit || 20));
       const skip = (currentPage - 1) * currentLimit;
 
-      const [items, totalItems] = await Promise.all([
-        ServicePackage.find({})
+      const all = (
+        await ServicePackage.find({})
           .populate('regionPrices.region', 'name status')
           .populate(districtPopulateOption)
-          .sort({ createdAt: -1 })
-          .skip(skip)
-          .limit(currentLimit),
-        ServicePackage.countDocuments({}),
-      ]);
+      ).sort(byDisplayOrder);
+      const totalItems = all.length;
+      const items = all.slice(skip, skip + currentLimit);
 
       return res.json({
         items,
@@ -92,10 +100,11 @@ export const getPackages = async (req, res) => {
       });
     }
 
-    const packages = await ServicePackage.find({})
-      .populate('regionPrices.region', 'name status')
-      .populate(districtPopulateOption)
-      .sort({ createdAt: -1 });
+    const packages = (
+      await ServicePackage.find({})
+        .populate('regionPrices.region', 'name status')
+        .populate(districtPopulateOption)
+    ).sort(byDisplayOrder);
     res.json(packages);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -149,7 +158,13 @@ export const savePackage = async (req, res) => {
       if (req.body.districtPrices !== undefined) servicePackage.districtPrices = normalizedDistrictPrices;
       await servicePackage.save();
     } else {
+      // Once an order exists, a new package joins the end of it.
+      const last = await ServicePackage.findOne({ sortOrder: { $ne: null } })
+        .sort({ sortOrder: -1 })
+        .select('sortOrder')
+        .lean();
       servicePackage = await ServicePackage.create({
+        sortOrder: last ? last.sortOrder + 1 : null,
         name,
         price,
         advanceAmount: advanceAmount ?? 3000,
@@ -166,6 +181,30 @@ export const savePackage = async (req, res) => {
       .populate(districtPopulateOption);
 
     res.status(id ? 200 : 201).json(populatedPackage);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// PUT /api/packages/order  { ids: [packageId, …] } — saves the Services
+// display order: each id gets its position. Packages not listed keep theirs.
+export const reorderPackages = async (req, res) => {
+  try {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(String) : [];
+    if (ids.length === 0) {
+      return res.status(400).json({ message: 'Send the package ids in their new order.' });
+    }
+    if (new Set(ids).size !== ids.length) {
+      return res.status(400).json({ message: 'A package appears twice in the order.' });
+    }
+    await ServicePackage.bulkWrite(
+      ids.map((id, index) => ({
+        updateOne: { filter: { _id: id }, update: { $set: { sortOrder: index + 1 } } },
+      })),
+      { ordered: false }
+    );
+    const packages = (await ServicePackage.find({}).select('name sortOrder createdAt')).sort(byDisplayOrder);
+    res.json(packages);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

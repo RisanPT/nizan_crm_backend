@@ -33,6 +33,19 @@ const toDisplayDate = (value) => {
   }).format(date);
 };
 
+// When the booking was made (createdAt), as the IST calendar day — a booking
+// made early morning IST is still the previous day in UTC.
+const toBookedDate = (booking) => {
+  const date = new Date(booking?.createdAt);
+  if (!booking?.createdAt || Number.isNaN(date.getTime())) return '-';
+  return new Intl.DateTimeFormat('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    timeZone: 'Asia/Kolkata',
+  }).format(date);
+};
+
 const toDisplayTime = (value) => {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return '-';
@@ -148,6 +161,7 @@ const renderAdvanceInvoiceSections = (booking) =>
           <table style="border-collapse:collapse;width:100%;">
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Invoice No</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.invoiceNumber}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Booking ID</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toBookingNumber(booking)}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Booked On</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toBookedDate(booking)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Package</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.service}</td></tr>
             ${item.eventSlot ? `<tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Slot</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.eventSlot}</td></tr>` : ''}
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Region</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${booking.region || 'Default'}</td></tr>
@@ -168,6 +182,7 @@ const renderCompletionInvoiceSections = (booking) =>
           <table style="border-collapse:collapse;width:100%;">
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Invoice No</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.invoiceNumber}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Booking ID</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toBookingNumber(booking)}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Booked On</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toBookedDate(booking)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Package</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.service}</td></tr>
             ${item.eventSlot ? `<tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Slot</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.eventSlot}</td></tr>` : ''}
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Region</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${booking.region || 'Default'}</td></tr>
