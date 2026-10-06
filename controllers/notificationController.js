@@ -4,6 +4,7 @@ import Booking from '../models/Booking.js';
 import Collection from '../models/Collection.js';
 import Expense from '../models/Expense.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
+import { sweepSalesTargetMidMonth } from '../utils/salesTargetAlerts.js';
 import {
   notify,
   getUserIdsByRoles,
@@ -171,6 +172,7 @@ export const getNotifications = async (req, res) => {
   try {
     await sweepFollowUps();
     await sweepMonthEndSummary();
+    await sweepSalesTargetMidMonth();
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 30;

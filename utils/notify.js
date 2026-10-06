@@ -22,6 +22,8 @@ export const NOTIFICATION_TYPES = {
   REPORT_UPLOADED: 'report_uploaded',
   REVIEW_SUBMITTED: 'review_submitted',
   MONTH_END_SUMMARY: 'month_end_summary',
+  SALES_TARGET_MIDMONTH: 'sales_target_midmonth',
+  SALES_TARGET_TEAM_MIDMONTH: 'sales_target_team_midmonth',
 };
 
 // Stakeholders (admin accounts) are not part of the day-to-day operational

@@ -62,6 +62,12 @@ const packageSchema = mongoose.Schema(
       type: [districtPriceSchema],
       default: [],
     },
+    // Display order set in Services → Packages (lower first). Unset = after
+    // the ordered ones, oldest first.
+    sortOrder: {
+      type: Number,
+      default: null,
+    },
   },
   {
     timestamps: true,

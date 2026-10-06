@@ -6,6 +6,7 @@ import ServicePackage from '../models/Package.js';
 import Lead from '../models/Lead.js';
 import { regionScopedMatch, isFullGeoAccess } from '../utils/geoScope.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
+import { SALES_TARGET_ROLES } from '../utils/salesAchievement.js';
 import { slotAvailability } from './slotController.js';
 import { ensureReviewForBooking, reviewFormUrl } from './reviewController.js';
 import {
@@ -1370,10 +1371,13 @@ export const createBooking = async (req, res) => {
       packageId: summaryPackageId,
       leadId: normalizeObjectId(leadId),
       // Credit the salesperson: an explicit id, else the creating user when they
-      // are a salesperson (reports still fall back to the lead's owner otherwise).
+      // are in sales (sales, sales_executive, sales_manager); reports still fall
+      // back to the lead's owner otherwise.
       salesPersonId:
         normalizeObjectId(salesPersonId) ||
-        (req.user?.role === 'sales' ? req.user._id : null),
+        (SALES_TARGET_ROLES.includes(String(req.user?.role ?? '').toLowerCase())
+          ? req.user._id
+          : null),
       regionId: normalizedRegionId,
       districtId: normalizedDistrictId,
       driverId: normalizedDriverId,
