@@ -72,6 +72,12 @@ const leadSchema = mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Tentative event date for a customer who hasn't fixed the exact day yet
+    // ("probably mid-April"). Set by sales; shown in the Lead Calendar.
+    probableDate: {
+      type: Date,
+      default: null,
+    },
     // Set automatically when a booking is created for this lead's phone
     // number, so a converted lead links straight to the work it produced.
     bookingId: {

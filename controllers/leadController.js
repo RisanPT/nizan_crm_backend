@@ -19,6 +19,42 @@ const isLostReviewer = (role) => LOST_REVIEWER_ROLES.includes(role);
 const digits = (v) => String(v ?? '').replace(/\D/g, '');
 const last10 = (v) => digits(v).slice(-10);
 
+// Matches a stored number ending in these 10 digits whatever its formatting —
+// "+91 98765 43210", "98765-43210", "09876543210" all match "9876543210".
+const phoneTailRx = (key) => new RegExp(`${key.split('').join('[^0-9]*')}[^0-9]*$`);
+
+/// The first OTHER lead using any of [numbers] as its phone or alternate
+/// number (last 10 digits), or null. One mobile number = one lead.
+const findDuplicateLead = async (numbers, excludeId = null) => {
+  const keys = [...new Set(numbers.map(last10).filter((k) => k.length === 10))];
+  if (keys.length === 0) return null;
+  const rx = keys.map(phoneTailRx);
+  return Lead.findOne({
+    $or: [{ phone: { $in: rx } }, { alternateNumber: { $in: rx } }],
+    ...(excludeId ? { _id: { $ne: excludeId } } : {}),
+  })
+    .select('name phone alternateNumber status assignedTo createdByName')
+    .populate('assignedTo', 'name')
+    .lean();
+};
+
+const duplicateResponse = (res, dupe) =>
+  res.status(409).json({
+    message: `This number already belongs to the lead "${dupe.name}". Open that lead instead of adding a new one.`,
+    duplicateId: dupe._id,
+    duplicate: {
+      id: dupe._id,
+      name: dupe.name,
+      phone: dupe.phone,
+      status: dupe.status,
+      owner: dupe.assignedTo?.name ?? dupe.createdByName ?? '',
+    },
+  });
+
+// Numbers being saved right now — stops a double-tap (two requests at once)
+// from creating the same lead twice before either is stored.
+const savingNumbers = new Set();
+
 // Fields the client must never set directly — they are owned by the lost
 // workflow / server. Stripping them stops a plain create/update from spoofing
 // an approval or forging the audit trail.
@@ -433,9 +469,7 @@ export const createLead = async (req, res) => {
     // Do NOT add a manual IST offset (that would cause double-counting: stored as UTC+5:30,
     // then Flutter adds another +5:30 = displayed as UTC+11).
     const leadData = stripServerOwned({ ...req.body });
-    // The client sets this when the user chose to create a lead despite a
-    // duplicate warning. It's a control flag, not a stored field.
-    const allowDuplicate = leadData.allowDuplicate === true || leadData.allowDuplicate === 'true';
+    // Old app versions may still send this; duplicates are no longer allowed.
     delete leadData.allowDuplicate;
     if (req.user && req.user.role === 'sales') {
       leadData.assignedTo = req.user._id;
@@ -444,25 +478,24 @@ export const createLead = async (req, res) => {
     leadData.createdBy = req.user?._id ?? null;
     leadData.createdByName = req.user?.name ?? '';
 
-    // Duplicate validation must consider BOTH the primary and the alternate
+    // One mobile number = one lead. Checks BOTH the primary and the alternate
     // number, on either side (a new lead's primary might already exist as
-    // someone's alternate). Match on the last 10 digits so formatting differs.
-    const keys = [last10(leadData.phone), last10(leadData.alternateNumber)]
-      .filter((k) => k.length === 10);
-    if (!allowDuplicate && keys.length) {
-      const rx = keys.map((k) => new RegExp(`${k}$`));
-      const dupe = await Lead.findOne({
-        $or: [{ phone: { $in: rx } }, { alternateNumber: { $in: rx } }],
-      });
-      if (dupe) {
-        return res.status(409).json({
-          message: 'A lead with this phone number already exists.',
-          duplicateId: dupe._id,
-        });
-      }
+    // someone's alternate), on the last 10 digits whatever the formatting.
+    // Checked across ALL leads, not just the caller's.
+    const keys = [...new Set([last10(leadData.phone), last10(leadData.alternateNumber)]
+      .filter((k) => k.length === 10))];
+    if (keys.some((k) => savingNumbers.has(k))) {
+      return res.status(409).json({ message: 'This number is already being saved. Please wait a moment.' });
     }
-
-    const lead = await Lead.create({ ...leadData, leadDate: new Date() });
+    keys.forEach((k) => savingNumbers.add(k));
+    let lead;
+    try {
+      const dupe = await findDuplicateLead(keys);
+      if (dupe) return duplicateResponse(res, dupe);
+      lead = await Lead.create({ ...leadData, leadDate: new Date() });
+    } finally {
+      keys.forEach((k) => savingNumbers.delete(k));
+    }
 
     // Notify managers + admins that a new lead arrived (matrix: New Lead).
     const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
@@ -492,6 +525,16 @@ export const updateLead = async (req, res) => {
     const existing = await Lead.findById(req.params.id);
     if (!existing) {
       return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    // Changing a number to one another lead already uses would create a
+    // duplicate — refuse it like createLead does.
+    const changedNumbers = ['phone', 'alternateNumber']
+      .filter((k) => leadData[k] !== undefined && last10(leadData[k]) !== last10(existing[k]))
+      .map((k) => leadData[k]);
+    if (changedNumbers.length) {
+      const dupe = await findDuplicateLead(changedNumbers, existing._id);
+      if (dupe) return duplicateResponse(res, dupe);
     }
 
     // Closing a lead as Lost (or putting it into pending review) must go through

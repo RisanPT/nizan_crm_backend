@@ -1747,13 +1747,17 @@ export const updateBooking = async (req, res) => {
     booking.pocName = pocName ?? booking.pocName;
     booking.pocPhone = pocPhone ?? booking.pocPhone;
 
-    const updatedBooking = await booking.save();
+    let updatedBooking = await booking.save();
     if (bookedAtOverride) {
       await Booking.collection.updateOne(
         { _id: booking._id },
         { $set: { createdAt: bookedAtOverride } },
       );
-      updatedBooking.createdAt = bookedAtOverride;
+      // Reload: assigning createdAt on a saved document is silently ignored
+      // (immutable timestamp), so without this the lead sync, ledger post and
+      // response below all carried the OLD booked date — linked enquiries
+      // ended up showing a different "booked on" day than the booking.
+      updatedBooking = (await Booking.findById(booking._id)) ?? updatedBooking;
     }
     await syncLinkedLeadDates(updatedBooking);
     const shouldSendAdvanceInvoice =
