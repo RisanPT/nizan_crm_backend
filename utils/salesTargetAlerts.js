@@ -118,11 +118,19 @@ export const sweepSalesTargetMidMonth = async () => {
     // One notification per person per month — keyed by the month.
     const periodKey = new Date(Date.UTC(year, month - 1, 1));
 
-    const targets = await SalesTarget.find({
+    const allTargets = await SalesTarget.find({
       month,
       year,
       $or: [{ salesTarget: { $gt: 0 } }, { bookingsTarget: { $gt: 0 } }],
     }).lean();
+    // Sales managers' targets roll up from the team (they get the team
+    // summary below), so any stored manager target is ignored here.
+    const managerIdsWithTarget = new Set(
+      (await User.find({ _id: { $in: allTargets.map((t) => t.userId) }, role: { $regex: /^sales.*manager$/i } })
+        .select('_id')
+        .lean()).map((u) => String(u._id))
+    );
+    const targets = allTargets.filter((t) => !managerIdsWithTarget.has(String(t.userId)));
     if (targets.length === 0) return;
 
     const sentTo = async (type) =>
