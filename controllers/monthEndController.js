@@ -24,6 +24,10 @@ const canView = (u) => FINANCE_ROLES.includes(u?.role);
 const DEAD_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
 const isLiveBooking = (st) => !DEAD_BOOKING.includes(String(st || '').toLowerCase());
 
+// What a booking still owes — same rule as the app's Booking.balanceDue and
+// the Receivables report: price − discount − advance − verified collections.
+const balanceDue = (b) =>
+  round2((b.totalPrice || 0) - (b.discountAmount || 0) - (b.advanceAmount || 0) - (b.collectedAmount || 0));
 const pct = (num, den) => (den ? round2((num / den) * 100) : 0);
 const monthLabel = (m, y) =>
   `${['', 'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m]} ${y}`;
@@ -110,7 +114,7 @@ export const getMonthEndReview = async (req, res) => {
       mvToDate,
     ] = await Promise.all([
       ChartOfAccount.find({}).lean(),
-      Booking.find({}).select('customerName phone totalPrice collectedAmount bookingDate serviceStart createdAt status regionId createdBy').limit(50000).lean(),
+      Booking.find({}).select('customerName phone totalPrice discountAmount advanceAmount collectedAmount bookingDate serviceStart createdAt status regionId createdBy').limit(50000).lean(),
       Collection.find({ status: 'verified' }).select('amount date').lean(),
       AdminExpense.find({ source: { $ne: 'hra' } }).select('amount category department date').lean(),
       Salary.find({ status: 'paid', month, year }).select('netAmount department').lean(),
@@ -182,7 +186,7 @@ export const getMonthEndReview = async (req, res) => {
     const arItems = [];
     const arParties = [];
     for (const b of liveBookings) {
-      const bal = round2((b.totalPrice || 0) - (b.collectedAmount || 0));
+      const bal = balanceDue(b);
       if (bal <= 0.5) continue;
       const days = daysBetween(b.serviceStart || b.bookingDate || b.createdAt, to);
       arItems.push({ amount: bal, days });
@@ -366,7 +370,7 @@ export const getMonthEndReview = async (req, res) => {
       const within = (d) => d && new Date(d) >= fFrom && new Date(d) <= fTo;
       let inflow = 0;
       for (const b of liveBookings) {
-        const bal = round2((b.totalPrice || 0) - (b.collectedAmount || 0));
+        const bal = balanceDue(b);
         if (bal > 0.5 && within(b.serviceStart || b.bookingDate)) inflow += bal;
       }
       let subOut = 0;

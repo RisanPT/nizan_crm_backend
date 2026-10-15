@@ -3,6 +3,8 @@ import Collection from '../models/Collection.js';
 import Booking from '../models/Booking.js';
 import { notifyRoles } from '../utils/notify.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { applyMoneyAccount } from '../utils/moneyAccount.js';
+import { ensureInvoiceNumber } from '../utils/invoiceNumber.js';
 
 const collectionPopulate = [
   { path: 'bookingId', select: 'bookingNumber customerName service totalOverAll status' },
@@ -27,6 +29,8 @@ const syncBookingCollectedAmount = async (bookingId) => {
     0
   );
   await Booking.findByIdAndUpdate(bookingId, { collectedAmount: totalCollected });
+  // The final collection being verified is what completes payment.
+  await ensureInvoiceNumber(bookingId);
 };
 
 // @route GET /api/collections/payments-received?from=&to=&status=verified,pending
@@ -207,6 +211,15 @@ export const verifyCollection = async (req, res) => {
     collection.status = status;
     collection.verifiedBy = verifiedBy;
     collection.verifiedAt = new Date();
+
+    // Where the money landed (approval popup): bank / cash account + mode.
+    if (status === 'verified') {
+      const err = await applyMoneyAccount(collection, req.body, {
+        modeField: 'paymentMode',
+        modes: ['cash', 'upi', 'bank_transfer', 'other'],
+      });
+      if (err) return res.status(400).json({ message: err });
+    }
 
     await collection.save();
 

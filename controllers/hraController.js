@@ -2,6 +2,8 @@ import HraRecord from '../models/HraRecord.js';
 import Employee from '../models/Employee.js';
 import AdminExpense from '../models/AdminExpense.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { applyMoneyAccount } from '../utils/moneyAccount.js';
+import { HRA_PAYMENT_METHODS } from '../models/HraRecord.js';
 
 // Treat user search text literally — an unescaped "(" or "*" would otherwise
 // throw "Invalid regular expression" and fail the whole request with a 500.
@@ -137,6 +139,10 @@ export const createHraRecord = async (req, res) => {
       notes: notes || '',
       createdBy: req.user?._id || null,
     });
+    if (record.status === 'paid') {
+      const moneyErr = await applyMoneyAccount(record, req.body, { modeField: 'paymentMethod', modes: HRA_PAYMENT_METHODS });
+      if (moneyErr) return res.status(400).json({ message: moneyErr });
+    }
     await record.save();
     await syncMirror(record, req.user?._id);
     // Post paid HRA to the ledger (best-effort).
@@ -169,6 +175,11 @@ export const updateHraRecord = async (req, res) => {
     if (paymentMethod !== undefined) record.paymentMethod = paymentMethod;
     if (status !== undefined) record.status = status;
     if (notes !== undefined) record.notes = notes;
+    // Marking paid: which bank / cash account paid it (pay popup).
+    if (record.status === 'paid') {
+      const moneyErr = await applyMoneyAccount(record, req.body, { modeField: 'paymentMethod', modes: HRA_PAYMENT_METHODS });
+      if (moneyErr) return res.status(400).json({ message: moneyErr });
+    }
 
     await record.save();
     await syncMirror(record, req.user?._id);

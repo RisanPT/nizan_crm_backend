@@ -1,6 +1,8 @@
 import Salary from '../models/Salary.js';
 import Employee from '../models/Employee.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { applyMoneyAccount } from '../utils/moneyAccount.js';
+import { SALARY_PAYMENT_METHODS } from '../models/Salary.js';
 
 // Treat user search text literally — an unescaped "(" or "*" would otherwise
 // throw "Invalid regular expression" and fail the whole request with a 500.
@@ -384,6 +386,12 @@ export const paySalary = async (req, res) => {
     if (notes) salary.notes = notes;
     salary.paidBy = req.user?._id || null;
     salary.paidAt = new Date();
+    // Which bank / cash account paid it (pay popup).
+    const moneyErr = await applyMoneyAccount(salary, { ...req.body, paymentMode: paymentMethod }, {
+      modeField: 'paymentMethod',
+      modes: SALARY_PAYMENT_METHODS,
+    });
+    if (moneyErr) return res.status(400).json({ message: moneyErr });
 
     await salary.save();
 

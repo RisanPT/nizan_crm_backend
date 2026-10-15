@@ -191,6 +191,9 @@ export const salesKpis = (bookings) => {
     orders: sales.length,
     avgOrder: round2(sales.length ? revenue / sales.length : 0),
     received: round2(received),
+    // received split: booking advance vs verified collections.
+    advance: round2(sales.reduce((s, b) => s + (Number(b.advanceAmount) || 0), 0)),
+    collected: round2(sales.reduce((s, b) => s + (Number(b.collectedAmount) || 0), 0)),
     outstanding: round2(outstanding),
     discount: round2(discount),
     completed: bookings.filter((b) => lc(b.status) === 'completed').length,
@@ -654,7 +657,15 @@ export const getFinanceDashboard = async (req, res) => {
     const trend = months.map((m) => {
       const income = (adv.get(m) ?? 0) + (col.get(m) ?? 0);
       const expense = exp.reduce((s, e) => s + (e.get(m) ?? 0), 0);
-      return { key: m, billed: round2(bil.get(m) ?? 0), income: round2(income), expense: round2(expense), net: round2(income - expense) };
+      return {
+        key: m,
+        billed: round2(bil.get(m) ?? 0),
+        advances: round2(adv.get(m) ?? 0),
+        collections: round2(col.get(m) ?? 0),
+        income: round2(income),
+        expense: round2(expense),
+        net: round2(income - expense),
+      };
     });
 
     const MODE = { cash: 'Cash', upi: 'UPI', bank_transfer: 'Bank Transfer', other: 'Other' };
@@ -667,15 +678,25 @@ export const getFinanceDashboard = async (req, res) => {
         cashIn: cashInNow,
         cashInPrev,
         advances: advNow.total,
+        advancesPrev: advPrev.total,
         collections: colVerified.total,
+        collectionsPrev: colPrev.total,
         collectionsPending: colPending.total,
         collectionsPendingCount: colPending.count,
         expenses: expenseNow,
         expensesPrev: expensePrev,
         net: round2(cashInNow - expenseNow),
         netPrev: round2(cashInPrev - expensePrev),
-        receivables: round2(Object.values(aging).reduce((s, v) => s + v, 0)),
+        // Balance still due on THIS period's billed bookings (same set as
+        // `billed`). receivablesAll is every open booking, any date (= aging).
+        receivables: billed.outstanding,
+        receivablesPrev: billedPrevK.outstanding,
+        receivablesAll: round2(Object.values(aging).reduce((s, v) => s + v, 0)),
+        // Received against this period's billed bookings (paid on any date).
+        billedAdvance: billed.advance,
+        billedCollected: billed.collected,
         collectionRate: round2(billed.revenue ? (billed.received / billed.revenue) * 100 : 0),
+        collectionRateExAdvance: round2(billed.revenue ? (billed.collected / billed.revenue) * 100 : 0),
       },
       expenses: expenses.sort((a, b) => b.amount - a.amount),
       paymentModes: byMode.map((m) => ({ label: MODE[m._id] || m._id || 'Other', amount: round2(m.total), count: m.count })),

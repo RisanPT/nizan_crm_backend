@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 const purchaseItemSchema = mongoose.Schema(
   {
@@ -21,17 +22,17 @@ const purchaseItemSchema = mongoose.Schema(
   { _id: false }
 );
 
-// One payment made against a vendor bill (Zoho "Payments Made").
-const purchasePaymentSchema = mongoose.Schema(
-  {
-    amount: { type: Number, default: 0, min: 0 },
-    date: { type: Date, default: Date.now },
-    // cash / upi / bank_transfer / cheque / card / other
-    mode: { type: String, default: 'cash', trim: true },
-    note: { type: String, default: '', trim: true },
-  },
-  { _id: false }
-);
+// One payment made against a vendor bill (Zoho "Payments Made"). Each has its
+// own _id so it posts as its own Payment voucher (source PurchasePayment).
+const purchasePaymentSchema = mongoose.Schema({
+  amount: { type: Number, default: 0, min: 0 },
+  date: { type: Date, default: Date.now },
+  // cash / upi / bank_transfer / cheque / card / other
+  mode: { type: String, default: 'cash', trim: true },
+  note: { type: String, default: '', trim: true },
+  // The bank / cash account it was paid from.
+  ...moneyAccountFields,
+});
 
 const purchaseSchema = mongoose.Schema(
   {

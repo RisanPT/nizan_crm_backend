@@ -2,8 +2,8 @@ import mongoose from 'mongoose';
 
 const kitItemSchema = mongoose.Schema(
   {
-    // Link to the studio product this kit item draws from (null = custom item
-    // not tracked in studio stock). Used to deplete the tube on work complete.
+    // Link to the studio product this kit item was issued from (null = custom
+    // item not tracked in studio stock).
     productId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'InventoryProduct',
@@ -12,10 +12,15 @@ const kitItemSchema = mongoose.Schema(
     name: { type: String, required: true, trim: true },
     brand: { type: String, default: '', trim: true },
     shade: { type: String, default: '', trim: true },
-    // Per-artist allocation: tubes assigned to this artist and the open tube's
-    // remaining fill. Independent of studio stock and of other artists.
+    // Units currently held in this kit. Issuing units moves them out of studio
+    // stock (see KitMovement); they never come back unless returned.
     quantity: { type: Number, default: 1, min: 0 },
-    fillLevel: { type: Number, default: 100, min: 0, max: 100 },
+    // When this product was first handed to the kit's artist. Usage is the
+    // number of works the artist completed as lead on or after this date.
+    assignedAt: { type: Date, default: null },
+    // Units issued to this kit since assignedAt, net of returns. Works done ÷
+    // issuedTotal gives an approximate "works per unit".
+    issuedTotal: { type: Number, default: 0, min: 0 },
   },
   { _id: false }
 );

@@ -3,6 +3,7 @@ import Employee from '../models/Employee.js';
 import Booking from '../models/Booking.js';
 import ChartOfAccount from '../models/ChartOfAccount.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { applyMoneyAccount } from '../utils/moneyAccount.js';
 
 const payoutPopulate = [
   { path: 'employeeId', select: 'name phone artistRole type status' },
@@ -202,6 +203,12 @@ export const payPayout = async (req, res) => {
     payout.status = 'paid';
     payout.paidBy = req.user?._id ?? null;
     payout.paidAt = new Date();
+    // Which bank / cash account paid it (pay popup).
+    const moneyErr = await applyMoneyAccount(payout, req.body, {
+      modeField: 'paymentMode',
+      modes: ['cash', 'upi', 'bank_transfer', 'other'],
+    });
+    if (moneyErr) return res.status(400).json({ message: moneyErr });
     await payout.save();
 
     // Post to the ledger as a Payment against the Artist Payouts head (COGS).

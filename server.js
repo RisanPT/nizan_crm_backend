@@ -70,6 +70,9 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import salesTargetRoutes from './routes/salesTargetRoutes.js';
 import slotRoutes from './routes/slotRoutes.js';
 import bankAccountRoutes from './routes/bankAccountRoutes.js';
+import cashTransactionRoutes from './routes/cashTransactionRoutes.js';
+import bookingAdvanceRoutes from './routes/bookingAdvanceRoutes.js';
+import whatsappRoutes from './routes/whatsappRoutes.js';
 import companyReportRoutes from './routes/companyReportRoutes.js';
 import ticketRoutes from './routes/ticketRoutes.js';
 import contentRoutes from './routes/contentRoutes.js';
@@ -267,6 +270,9 @@ app.use('/api/dashboard', dashboardRoutes);         // Main dashboard analytics 
 app.use('/api/sales-targets', salesTargetRoutes); // Monthly salesperson targets
 app.use('/api/slots', slotRoutes);                // Day-wise booking slot capacity
 app.use('/api/bank-accounts', bankAccountRoutes); // Manual bank balances (Finance)
+app.use('/api/cash-transactions', cashTransactionRoutes); // Accounts' Cash In / Out / Transfer entries
+app.use('/api/booking-advances', bookingAdvanceRoutes); // Accounts verifies booking advances
+app.use('/api/whatsapp', whatsappRoutes);           // TeamN Chat: send quotation / invoice PDFs on WhatsApp
 app.use('/api/company-reports', companyReportRoutes); // Per-department report library
 app.use('/api/reviews', reviewRoutes);                // Post-service client review forms
 app.use('/api/client/auth', clientAuthRoutes);        // Client app: phone-OTP / magic-link login (public)
