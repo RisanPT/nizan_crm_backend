@@ -81,6 +81,19 @@ const employeeSchema = mongoose.Schema(
       ref: 'Department',
       default: null,
     },
+    // Reporting manager (another Employee). Drives the leave/approval chain and
+    // the org-hierarchy view. Falls back to the department head when unset.
+    reportingManagerId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Employee',
+      default: null,
+    },
+    // Formal designation/title (optional). `role` stays as the free-text label.
+    designationId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Designation',
+      default: null,
+    },
     category: {
       type: String,
       enum: ['operations', 'administrative', 'creative', 'it', 'marketing', 'sales', 'admin'],
@@ -158,11 +171,76 @@ const employeeSchema = mongoose.Schema(
       default: '',
       trim: true,
     },
+    // ── SRS §3.2 & §4.1 Mandatory Employee Master Fields ─────────────────────
+    // Human-readable, unique, immutable ID (FR-2.1)
+    employeeCode: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
+    dateOfBirth: {
+      type: Date,
+      default: null,
+    },
+    dateOfJoining: {
+      type: Date,
+      default: Date.now,
+    },
+    probationEndDate: {
+      type: Date,
+      default: null,
+    },
+    employmentStatus: {
+      type: String,
+      enum: ['probation', 'confirmed', 'notice_period', 'exited'],
+      default: 'probation',
+    },
+    emergencyContact: {
+      name: { type: String, default: '', trim: true },
+      relation: { type: String, default: '', trim: true },
+      phone: { type: String, default: '', trim: true },
+    },
+    currentGrade: {
+      type: String,
+      enum: ['A', 'B', 'C', 'D'],
+      default: 'B',
+    },
+    overtimeRate: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
+    statutoryApplicability: {
+      epf: { type: Boolean, default: false },
+      esi: { type: Boolean, default: false },
+      uan: { type: String, default: '', trim: true },
+      esiNumber: { type: String, default: '', trim: true },
+    },
   },
   {
     timestamps: true,
   }
 );
+
+// Auto-generate employeeCode before first save if not explicitly assigned
+employeeSchema.pre('save', async function (next) {
+  if (!this.employeeCode) {
+    try {
+      const count = await mongoose.models.Employee.countDocuments();
+      let num = 1001 + count;
+      let candidate = `NZ-${num}`;
+      while (await mongoose.models.Employee.exists({ employeeCode: candidate })) {
+        num += 1;
+        candidate = `NZ-${num}`;
+      }
+      this.employeeCode = candidate;
+    } catch (err) {
+      this.employeeCode = `NZ-${Math.floor(1000 + Math.random() * 9000)}`;
+    }
+  }
+  next();
+});
 
 const Employee = mongoose.model('Employee', employeeSchema);
 

@@ -49,11 +49,16 @@ import departmentRoutes from './routes/departmentRoutes.js';
 import adminExpenseRoutes from './routes/adminExpenseRoutes.js';
 import expenseCategoryRoutes from './routes/expenseCategoryRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
+import clientAuthRoutes from './routes/clientAuthRoutes.js';
+import clientRoutes from './routes/clientRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
+import staffClientRoutes from './routes/staffClientRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import salaryRoutes from './routes/salaryRoutes.js';
 import salesReturnRoutes from './routes/salesReturnRoutes.js';
 import hrBridgeRoutes from './routes/hrBridgeRoutes.js';
 import timeboxRoutes from './routes/timeboxRoutes.js';
+import { performTimeboxEmployeeSync } from './controllers/timeboxController.js';
 import performanceRoutes from './routes/performanceRoutes.js';
 import hraRoutes from './routes/hraRoutes.js';
 import accountReportRoutes from './routes/accountReportRoutes.js';
@@ -71,6 +76,24 @@ import contentRoutes from './routes/contentRoutes.js';
 import backupRoutes from './routes/backupRoutes.js';
 import okrRoutes from './routes/okrRoutes.js';
 import projectDocRoutes from './routes/projectDocRoutes.js';
+import leaveRoutes from './routes/leaveRoutes.js';
+import approvalRoutes from './routes/approvalRoutes.js';
+import designationRoutes from './routes/designationRoutes.js';
+import employeeDocumentRoutes from './routes/employeeDocumentRoutes.js';
+import shiftRoutes from './routes/shiftRoutes.js';
+import timesheetRoutes from './routes/timesheetRoutes.js';
+import regularizationRoutes from './routes/regularizationRoutes.js';
+import recruitmentRoutes from './routes/recruitmentRoutes.js';
+import onboardingRoutes from './routes/onboardingRoutes.js';
+import offboardingRoutes from './routes/offboardingRoutes.js';
+import reimbursementRoutes from './routes/reimbursementRoutes.js';
+import travelRoutes from './routes/travelRoutes.js';
+import compensationRoutes from './routes/compensationRoutes.js';
+import engagementRoutes from './routes/engagementRoutes.js';
+import letterRoutes from './routes/letterRoutes.js';
+import lmsRoutes from './routes/lmsRoutes.js';
+import grievanceRoutes from './routes/grievanceRoutes.js';
+import hrAnalyticsRoutes from './routes/hrAnalyticsRoutes.js';
 
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -217,6 +240,24 @@ app.use('/api/hr', hrBridgeRoutes);               // PHP attendance bridge
 app.use('/api/timebox', timeboxRoutes);           // Timebox attendance + payroll
 app.use('/api/performance', performanceRoutes);   // HR 5-pillar evaluations
 app.use('/api/hra', hraRoutes);                   // House Rent Allowance (separate from salary)
+app.use('/api/leave', leaveRoutes);               // HR: leave types, requests, balances, holidays, comp-off
+app.use('/api/approvals', approvalRoutes);        // HR: generic approvals inbox/engine
+app.use('/api/designations', designationRoutes);  // HR: job titles / designations
+app.use('/api/employee-documents', employeeDocumentRoutes); // HR: per-employee document vault (Files)
+app.use('/api/shifts', shiftRoutes);              // HR: shifts + roster assignments
+app.use('/api/timesheets', timesheetRoutes);      // HR: time tracker / timesheets
+app.use('/api/regularizations', regularizationRoutes); // HR: attendance regularization
+app.use('/api/recruitment', recruitmentRoutes);   // HR: job posts, candidates, offers
+app.use('/api/onboarding', onboardingRoutes);     // HR: new-hire onboarding checklists
+app.use('/api/offboarding', offboardingRoutes);   // HR: employee exit / clearance
+app.use('/api/reimbursements', reimbursementRoutes); // HR: expense claims (→ ledger on pay)
+app.use('/api/travel', travelRoutes);             // HR: travel requests
+app.use('/api/compensation', compensationRoutes); // HR: salary bands + revisions
+app.use('/api/engagement', engagementRoutes);     // HR: announcements / events feed
+app.use('/api/letters', letterRoutes);            // HR: letter templates + generated letters
+app.use('/api/lms', lmsRoutes);                   // HR: courses + enrolments (training)
+app.use('/api/grievances', grievanceRoutes);      // HR: employee grievances
+app.use('/api/hr-analytics', hrAnalyticsRoutes);  // HR: headcount / attrition dashboard
 app.use('/api/account-reports', accountReportRoutes);
 app.use('/api/assets', assetRoutes);              // Company asset register (Finance)
 app.use('/api/accounting', accountingRoutes);     // Double-entry ledger (Finance)
@@ -228,6 +269,10 @@ app.use('/api/slots', slotRoutes);                // Day-wise booking slot capac
 app.use('/api/bank-accounts', bankAccountRoutes); // Manual bank balances (Finance)
 app.use('/api/company-reports', companyReportRoutes); // Per-department report library
 app.use('/api/reviews', reviewRoutes);                // Post-service client review forms
+app.use('/api/client/auth', clientAuthRoutes);        // Client app: phone-OTP / magic-link login (public)
+app.use('/api/client', clientRoutes);                 // Client app: my-profile / my-bookings (protectClient)
+app.use('/api/chat', chatRoutes);                     // Concierge chat (client + staff)
+app.use('/api/app-clients', staffClientRoutes);       // Staff: view bridal app clients (brides)
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });
@@ -258,6 +303,19 @@ const startServer = async () => {
     await ensureDefaultRoles(); // seed any new system roles (e.g. artist_head)
     await seedAdminUser();
     await migrateAndSyncAll();
+
+    // Auto-sync Timebox employees on server boot
+    performTimeboxEmployeeSync()
+      .then((res) => console.log(`[Timebox] Auto-sync complete: ${res.message}`))
+      .catch((err) => console.error('[Timebox] Boot sync failed:', err?.message || err));
+
+    // Auto-sync Timebox employees periodically every 30 minutes
+    const TIMEBOX_AUTO_SYNC_INTERVAL_MS = 30 * 60 * 1000;
+    setInterval(() => {
+      performTimeboxEmployeeSync()
+        .then((res) => console.log(`[Timebox] Periodic sync: ${res.message}`))
+        .catch((err) => console.error('[Timebox] Periodic sync failed:', err?.message || err));
+    }, TIMEBOX_AUTO_SYNC_INTERVAL_MS);
   } else {
     console.log(
       'MongoDB connection skipped: Please provide a valid MONGO_URI in the .env file'

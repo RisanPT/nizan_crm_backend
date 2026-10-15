@@ -112,6 +112,41 @@ const DEFAULT_ROLES = [
     homeRoute: '/projects',
     permissions: ['planning.manage'],
   },
+  {
+    // Employee self-service (ESS): an ordinary staff member logging in to apply
+    // for leave, view their own payslip/attendance and raise their own requests.
+    // Self endpoints are scoped by the account's linked employeeId; the `leave`
+    // key surfaces the Leave nav. HR-admin views need their own permission keys.
+    key: 'employee',
+    label: 'Employee (Self-service)',
+    homeRoute: '/hr/home',
+    permissions: ['leave'],
+  },
+];
+
+// HR module keys that every full-access role (admin, manager) should carry.
+// Added to existing roles on boot via ensureDefaultRoles() so deployments that
+// were seeded before the HRMS modules existed pick them up without a reseed.
+const HR_MODULE_KEYS = [
+  'approvals',
+  'recruitment',
+  'onboarding',
+  'offboarding',
+  'shift',
+  'timesheet',
+  'reimbursement',
+  'travel',
+  'lms',
+  'engagement',
+  'hr_letters',
+  'hr_analytics',
+  'designations',
+  'hr_files',
+  'org',
+  'regularization',
+  'compensation',
+  'grievance',
+  'leave',
 ];
 
 // Accept a module key ('sales') or a namespaced sub-feature key ('sales.leads').
@@ -162,6 +197,13 @@ export const ensureDefaultRoles = async () => {
   await Role.updateOne(
     { key: 'executive_coordinator' },
     { $addToSet: { permissions: 'planning.manage' } }
+  );
+  // Grant the HRMS module keys to the full-access roles on existing deployments
+  // (admin & manager). $addToSet only adds the missing keys; admin's other picks
+  // and any admin customisation are untouched.
+  await Role.updateMany(
+    { key: { $in: ['admin', 'manager'] } },
+    { $addToSet: { permissions: { $each: HR_MODULE_KEYS } } }
   );
 };
 

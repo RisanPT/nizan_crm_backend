@@ -24,10 +24,10 @@ export const sendMail = async (activeTransporter, mailOptions) => {
     }
 
     await activeTransporter.sendMail(mailOptions);
-    console.log('mail sent');
+    console.log('[Mailer] mail sent successfully');
     return true;
   } catch (error) {
-    console.log(error);
+    console.warn(`[Mailer] Email sending failed (${error?.responseCode || error?.code || 'ERROR'}): ${error?.message || error}`);
     return false;
   }
 };

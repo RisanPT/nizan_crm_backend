@@ -1,10 +1,11 @@
 import mongoose from 'mongoose';
 
-export const DIVISIONS = ['administrative', 'creative'];
+export const DIVISIONS = ['administrative', 'creative', 'management'];
 
-// The 9 seed departments grouped by division. `key` is a stable slug used by
+// The seed departments grouped by division. `key` is a stable slug used by
 // code (e.g. the departmental month-end reports); admins can add more.
 export const SEED_DEPARTMENTS = [
+  { key: 'management', name: 'Management', division: 'management' },
   { key: 'it', name: 'IT', division: 'administrative' },
   { key: 'accounts', name: 'Accounts', division: 'administrative' },
   { key: 'hr', name: 'HR', division: 'administrative' },
@@ -12,6 +13,7 @@ export const SEED_DEPARTMENTS = [
   { key: 'finance', name: 'Finance', division: 'administrative' },
   { key: 'marketing', name: 'Marketing', division: 'administrative' },
   { key: 'crm', name: 'CRM', division: 'administrative' },
+  { key: 'operations', name: 'Operations', division: 'creative' },
   { key: 'artist', name: 'Artist', division: 'creative' },
   { key: 'fleet', name: 'Fleet', division: 'creative' },
 ];
