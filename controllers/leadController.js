@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 import Lead from '../models/Lead.js';
+import Booking from '../models/Booking.js';
+import { postDoc, safePost } from '../services/posting.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
 import {
   notify,
@@ -71,6 +73,30 @@ const SERVER_OWNED = [
   'createdBy',
   'createdByName',
 ];
+
+const IST_OFFSET_MS = 330 * 60 * 1000;
+/// IST calendar day (YYYY-MM-DD) of an instant, '' for none.
+const istDay = (d) =>
+  d ? new Date(new Date(d).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10) : '';
+
+/// Move a booking's "booked on" date (createdAt) to [day] (IST), keeping its
+/// time of day — same raw write as a booking edit, since Mongoose treats
+/// createdAt as immutable. Then resync every linked lead and re-post the
+/// sales invoice, exactly as updateBooking does. Returns false if not found.
+const moveBookedDate = async (bookingId, day, userId) => {
+  const booking = await Booking.findById(bookingId).select('createdAt').lean();
+  if (!booking) return false;
+  const old = booking.createdAt ? new Date(booking.createdAt) : new Date();
+  const timeOfDay = new Date(old.getTime() + IST_OFFSET_MS).toISOString().slice(11, 23);
+  const next = new Date(`${day}T${timeOfDay}+05:30`);
+  await Booking.collection.updateOne({ _id: booking._id }, { $set: { createdAt: next } });
+  await Lead.updateMany({ bookingId: booking._id }, { $set: { bookedDate: next } });
+  const fresh = await Booking.findById(booking._id);
+  if (fresh) await safePost(() => postDoc('Booking', fresh.toObject(), userId));
+  // A verified advance's receipt is dated by the booked date too.
+  if (fresh) await safePost(() => postDoc('BookingAdvance', fresh.toObject(), userId));
+  return true;
+};
 
 const stripServerOwned = (data) => {
   for (const key of SERVER_OWNED) delete data[key];
@@ -553,9 +579,34 @@ export const updateLead = async (req, res) => {
     // bookingController). A lead-form save re-sends its cached copy, which
     // drifted a day when re-serialised without a timezone — never let that
     // overwrite the booking's values.
-    if (existing.bookingId) {
+    // The booked-on date CAN be corrected from the lead: it is pushed to the
+    // booking (whose createdAt it mirrors) after the lead update below. Only a
+    // change of IST calendar day counts, so the drifted cached copy is ignored.
+    let newBookedDay = null;
+    // A link to a booking that was deleted (before deletes unlinked leads) is
+    // stale: drop it and its booking-derived event date so the form's dates
+    // save like any unconverted lead.
+    if (existing.bookingId && !(await Booking.exists({ _id: existing.bookingId }))) {
+      leadData.bookingId = null;
+      leadData.eventDate = null;
+    } else if (existing.bookingId) {
+      if (leadData.bookedDate) {
+        const d = new Date(leadData.bookedDate);
+        if (!Number.isNaN(d.getTime()) && istDay(d) !== istDay(existing.bookedDate)) {
+          newBookedDay = istDay(d);
+        }
+      }
       delete leadData.bookedDate;
       delete leadData.eventDate;
+    }
+
+    // A lead-form save sends campaignId: null whenever the user couldn't load
+    // the campaign list (older app builds, filtered list) — that silently wiped
+    // existing attribution. Only clear a tag when the client says so explicitly.
+    const clearCampaign = leadData.campaignCleared === true;
+    delete leadData.campaignCleared;
+    if (!leadData.campaignId && existing.campaignId && !clearCampaign) {
+      delete leadData.campaignId;
     }
 
     // followUpCount / followUpCompletedCount are server-owned — ignore whatever
@@ -586,13 +637,18 @@ export const updateLead = async (req, res) => {
       leadData.followUpCompletedCount = (existing.followUpCompletedCount || 0) + 1;
     }
 
-    const lead = await Lead.findByIdAndUpdate(req.params.id, leadData, {
+    let lead = await Lead.findByIdAndUpdate(req.params.id, leadData, {
       new: true,
       runValidators: true,
     });
     // Deleted between the existence check above and this update.
     if (!lead) {
       return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    if (newBookedDay) {
+      const synced = await moveBookedDate(existing.bookingId, newBookedDay, req.user?._id || null);
+      if (synced) lead = (await Lead.findById(lead._id)) ?? lead;
     }
 
     // ── Follow-up notifications (matrix: assigned / rescheduled / completed) ──

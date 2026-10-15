@@ -10,6 +10,7 @@
  */
 
 import mongoose from 'mongoose';
+import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 export const SALES_RETURN_STATUSES = ['draft', 'approved', 'processed', 'cancelled'];
 export const SALES_RETURN_PAYMENT_MODES = [
@@ -126,6 +127,8 @@ const salesReturnSchema = mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    // Bank / cash account it was paid from (pay popup).
+    ...moneyAccountFields,
   },
   {
     timestamps: true,

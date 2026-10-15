@@ -2,12 +2,14 @@ import express from "express";
 import {
   getDriverJobs,
   startTripWithInspection,
+  startNextTrip,
   completeJob,
   reportAccident,
   submitDriverReview,
   getDriverReviews,
   getAccidentReports,
   getCompletedWorks,
+  getKmReport,
   getServiceReminders,
   addServiceReminder,
   completeServiceReminder
@@ -27,6 +29,7 @@ const fleetManagerOrAdmin = (req, res, next) => {
 // ── Driver routes ───────────────────────────────────────────────
 router.get("/driver/jobs", protect, getDriverJobs);
 router.post("/driver/inspection/:jobId", protect, startTripWithInspection);
+router.post("/driver/start-next/:jobId", protect, startNextTrip);
 router.post("/driver/complete/:jobId", protect, completeJob);
 router.post("/driver/accident", protect, reportAccident);
 
@@ -37,6 +40,7 @@ router.post("/review", protect, submitDriverReview);
 router.get("/manager/reviews", protect, fleetManagerOrAdmin, getDriverReviews);
 router.get("/manager/accidents", protect, fleetManagerOrAdmin, getAccidentReports);
 router.get("/manager/completed-works", protect, fleetManagerOrAdmin, getCompletedWorks);
+router.get("/manager/km-report", protect, fleetManagerOrAdmin, getKmReport);
 router.get("/manager/service-reminders", protect, fleetManagerOrAdmin, getServiceReminders);
 router.post("/manager/service-reminders", protect, fleetManagerOrAdmin, addServiceReminder);
 router.post("/manager/service-reminders/:id/complete", protect, fleetManagerOrAdmin, completeServiceReminder);

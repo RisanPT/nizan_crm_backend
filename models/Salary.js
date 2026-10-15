@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 export const SALARY_STATUSES = ['draft', 'approved_by_hr', 'paid', 'cancelled'];
 export const SALARY_TYPES = ['fixed_monthly', 'per_booking', 'daily', 'hybrid', 'commission'];
@@ -136,6 +137,8 @@ const salarySchema = mongoose.Schema(
       type: Date,
       default: null,
     },
+    // Bank / cash account it was paid from (pay popup).
+    ...moneyAccountFields,
   },
   {
     timestamps: true,

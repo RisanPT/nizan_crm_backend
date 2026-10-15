@@ -19,6 +19,7 @@ import {
 } from '../controllers/marketingInsightsController.js';
 import {
   getCampaigns,
+  getCampaignOptions,
   createCampaign,
   updateCampaign,
   deleteCampaign,
@@ -37,6 +38,8 @@ router.get('/calendar', getBookingCalendar);
 
 // Campaigns — ad spend + production cost + ROI.
 router.route('/campaigns').get(getCampaigns).post(createCampaign);
+// Names only, for the lead form picker — open to every logged-in user.
+router.get('/campaigns/options', getCampaignOptions);
 router.route('/campaigns/:id').put(updateCampaign).delete(deleteCampaign);
 
 router.route('/competitors').get(getCompetitors).post(createCompetitor);

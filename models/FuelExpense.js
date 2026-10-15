@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 const fuelExpenseSchema = mongoose.Schema(
   {
@@ -73,6 +74,8 @@ const fuelExpenseSchema = mongoose.Schema(
       enum: ['pending', 'approved', 'rejected'],
       default: 'pending',
     },
+    // Bank / cash account chosen when Accounts approved it.
+    ...moneyAccountFields,
   },
   {
     timestamps: true,

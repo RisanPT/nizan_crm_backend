@@ -38,6 +38,13 @@ const vehicleSchema = mongoose.Schema(
       enum: ['running', 'under_service', 'accident', 'complaint', 'other'],
       default: 'running',
     },
+    // Latest odometer reading (km), updated from each completed trip's endKm.
+    // Service reminders compare their dueKm against this.
+    currentKm: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     parkedLocation: {
       type: String,
       default: '',

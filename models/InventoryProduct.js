@@ -11,13 +11,9 @@ const inventoryProductSchema = mongoose.Schema(
     shade: { type: String, default: '', trim: true },
     // Scannable code (EAN/UPC or custom). Indexed for fast barcode lookup.
     barcode: { type: String, default: '', trim: true, index: true },
-    // Whole tubes/units on hand (sealed spares + the one currently open).
+    // Units on hand in the studio. Units issued to staff kits are deducted
+    // here at assignment time (see KitMovement).
     quantity: { type: Number, default: 0, min: 0 },
-    // Tube model: the currently-open tube's remaining fill, 0..100 (100 = full).
-    // Depletes as artists complete works; hitting 0 opens the next tube.
-    fillLevel: { type: Number, default: 100, min: 0, max: 100 },
-    // Fixed % of a tube consumed each time a work using this product completes.
-    usagePerWork: { type: Number, default: 10, min: 0, max: 100 },
     price: { type: Number, default: 0, min: 0 },
     category: { type: String, default: 'Other', trim: true },
     // Display group, e.g. 'Foundation', 'Setting & Fixing'.

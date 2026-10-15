@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import FuelExpense from '../models/FuelExpense.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { applyMoneyAccount } from '../utils/moneyAccount.js';
 
 const normalizeObjectId = (value) => {
   const normalized = String(value ?? '').trim();
@@ -160,6 +161,15 @@ export const updateFuelExpense = async (req, res) => {
     expense.paymentMode = paymentMode ?? expense.paymentMode;
     expense.station = station ?? expense.station;
     expense.notes = notes ?? expense.notes;
+
+    // Accounts approving with the popup: which bank / cash account paid it.
+    if (expense.status === 'approved' && req.user.role !== 'driver') {
+      const err = await applyMoneyAccount(expense, req.body, {
+        modeField: 'paymentMode',
+        modes: ['cash', 'upi', 'card', 'other'],
+      });
+      if (err) return res.status(400).json({ message: err });
+    }
 
     await expense.save();
 

@@ -5,6 +5,7 @@
  * bundled into the monthly salary slip. Each record is one HRA payment.
  */
 import mongoose from 'mongoose';
+import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 export const HRA_PAYMENT_METHODS = ['bank_transfer', 'upi', 'cash', 'cheque', 'other'];
 export const HRA_STATUSES = ['pending', 'paid'];
@@ -60,6 +61,8 @@ const hraRecordSchema = mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    // Bank / cash account it was paid from (pay popup).
+    ...moneyAccountFields,
   },
   { timestamps: true },
 );

@@ -1,6 +1,8 @@
 import mongoose from 'mongoose';
 import Expense from '../models/Expense.js';
 import { notifyRoles } from '../utils/notify.js';
+import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { applyMoneyAccount } from '../utils/moneyAccount.js';
 
 const expensePopulate = [
   { path: 'bookingId', select: 'bookingNumber customerName service' },
@@ -116,6 +118,8 @@ export const updateExpense = async (req, res) => {
     if (receiptImage !== undefined) expense.receiptImage = receiptImage ?? '';
 
     await expense.save();
+    // Keep a posted (popup-verified) expense's voucher in step with edits.
+    await safePost(() => postDoc('Expense', expense.toObject(), req.user?._id || null));
 
     const populated = await Expense.findById(expense._id).populate(
       expensePopulate
@@ -146,7 +150,18 @@ export const verifyExpense = async (req, res) => {
     expense.verifiedBy = verifiedBy;
     expense.verifiedAt = new Date();
 
+    // How it was paid back (approval popup). Only expenses verified with an
+    // account post to the ledger.
+    if (status === 'verified') {
+      const err = await applyMoneyAccount(expense, req.body, {
+        modeField: 'paymentMode',
+        modes: ['cash', 'upi', 'bank_transfer', 'other'],
+      });
+      if (err) return res.status(400).json({ message: err });
+    }
+
     await expense.save();
+    await safePost(() => postDoc('Expense', expense.toObject(), req.user?._id || null));
 
     const populated = await Expense.findById(expense._id).populate(expensePopulate);
     res.json(populated);
@@ -174,6 +189,7 @@ export const deleteExpense = async (req, res) => {
     */
 
     await expense.deleteOne();
+    await safePost(() => unpostDoc('Expense', expense._id));
     res.json({ message: 'Expense removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });

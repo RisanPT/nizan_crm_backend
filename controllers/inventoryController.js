@@ -1,10 +1,14 @@
 import mongoose from 'mongoose';
 import InventoryProduct from '../models/InventoryProduct.js';
 import StaffKit from '../models/StaffKit.js';
+import KitMovement from '../models/KitMovement.js';
+import Booking from '../models/Booking.js';
 import Purchase from '../models/Purchase.js';
 import Vendor from '../models/Vendor.js';
 import InventoryCategory from '../models/InventoryCategory.js';
 import { notifyRoles } from '../utils/notify.js';
+import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { applyMoneyAccount } from '../utils/moneyAccount.js';
 
 const STUDIO_ROLES = ['inventory_manager', 'admin', 'manager'];
 
@@ -62,6 +66,47 @@ const canManagePayables = (user) =>
   canManageStudio(user) || user.role === 'accounts' || user.role === 'finance_head';
 
 // Fully-settled once payments cover the grand total (base + GST).
+const PURCHASE_PAY_MODES = ['cash', 'upi', 'bank_transfer', 'cheque', 'card', 'other'];
+
+// A payment entry built from a request: amount / date / mode / note plus the
+// bank / cash account it came from (moneyAccountId, from the pay form).
+// Returns { payment } or { error }.
+const paymentFromBody = async (body, amount, fallbackDate) => {
+  const d = body.date ? new Date(body.date) : fallbackDate || new Date();
+  const payment = {
+    amount,
+    date: Number.isNaN(d.getTime()) ? new Date() : d,
+    mode: String(body.mode ?? body.paymentMode ?? 'cash').trim() || 'cash',
+    note: String(body.note ?? '').trim(),
+  };
+  const err = await applyMoneyAccount(payment, { ...body, paymentMode: body.mode ?? body.paymentMode }, {
+    modeField: 'mode',
+    modes: PURCHASE_PAY_MODES,
+  });
+  return err ? { error: err } : { payment };
+};
+
+// Post a studio bill (Purchase voucher) and each of its payments; reverse the
+// vouchers of payments that no longer exist ([previousPaymentIds]).
+const postPurchaseLedger = async (purchase, userId = null, previousPaymentIds = []) => {
+  const p = typeof purchase.toObject === 'function' ? purchase.toObject() : purchase;
+  let supplierName = p.supplier || '';
+  if (p.vendor) {
+    const v = await Vendor.findById(p.vendor?._id || p.vendor).select('name').lean();
+    if (v?.name) supplierName = v.name;
+  }
+  await safePost(() => postDoc('Purchase', { ...p, supplierName }, userId));
+  const live = new Set();
+  for (const pay of p.payments || []) {
+    if (!pay._id) continue;
+    live.add(String(pay._id));
+    await safePost(() => postDoc('PurchasePayment', { ...pay, owner: p.owner, supplierName }, userId));
+  }
+  for (const id of previousPaymentIds) {
+    if (!live.has(String(id))) await safePost(() => unpostDoc('PurchasePayment', id));
+  }
+};
+
 const grandTotalOf = (purchase) =>
   (Number(purchase.total) || 0) + (Number(purchase.gstAmount) || 0);
 
@@ -85,20 +130,12 @@ const toDate = (v) => {
   return Number.isNaN(d.getTime()) ? null : d;
 };
 
-const clampPct = (v, def) => {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return def;
-  return Math.max(0, Math.min(100, Math.round(n)));
-};
-
 const cleanProduct = (body) => ({
   name: String(body.name ?? '').trim(),
   brand: String(body.brand ?? '').trim(),
   shade: String(body.shade ?? '').trim(),
   barcode: String(body.barcode ?? '').trim(),
   quantity: Math.max(0, Number.parseInt(body.quantity, 10) || 0),
-  fillLevel: clampPct(body.fillLevel, 100),
-  usagePerWork: clampPct(body.usagePerWork, 10),
   price: Math.max(0, Number(body.price) || 0),
   category: String(body.category ?? 'Other').trim() || 'Other',
   productType: String(body.productType ?? body.type ?? '').trim(),
@@ -109,24 +146,6 @@ const cleanProduct = (body) => ({
     ? { lowStockThreshold: Math.max(0, Number(body.lowStockThreshold) || 0) }
     : {}),
 });
-
-// Tube model: consume `percent` of a tube from a product, cascading to the
-// next sealed tube when the open one empties. Mutates the product in place.
-//   total juice = (quantity - 1) * 100 + fillLevel   (for quantity >= 1)
-const applyTubeUsage = (product, percent) => {
-  const p = Math.max(0, Number(percent) || 0);
-  if (p <= 0) return;
-  const qty = Math.max(0, product.quantity ?? 0);
-  let total = qty <= 0 ? 0 : (qty - 1) * 100 + (product.fillLevel ?? 100);
-  total -= p;
-  if (total <= 0) {
-    product.quantity = 0;
-    product.fillLevel = 0;
-    return;
-  }
-  product.quantity = Math.floor((total - 1) / 100) + 1;
-  product.fillLevel = Math.round(total - (product.quantity - 1) * 100);
-};
 
 // ── Products ───────────────────────────────────────────────────────────────
 
@@ -335,8 +354,6 @@ export const updateProduct = async (req, res) => {
     if (req.body.shade != null) product.shade = data.shade;
     if (req.body.barcode != null) product.barcode = data.barcode;
     if (req.body.quantity != null) product.quantity = data.quantity;
-    if (req.body.fillLevel != null) product.fillLevel = data.fillLevel;
-    if (req.body.usagePerWork != null) product.usagePerWork = data.usagePerWork;
     if (req.body.price != null) product.price = data.price;
     if (req.body.category != null) product.category = data.category;
     if (req.body.productType != null || req.body.type != null) {
@@ -389,31 +406,350 @@ export const deleteProduct = async (req, res) => {
   }
 };
 
-// ── Staff Kits (studio managers only) ────────────────────────────────────────
+// ── Staff Kits ───────────────────────────────────────────────────────────────
+//
+// Handing a studio product to an artist's kit MOVES it out of studio stock:
+// the studio quantity drops the moment the kit is saved, and every hand-over,
+// return or write-off is logged in KitMovement. Usage is not measured by
+// percentage — it is estimated as the number of works the kit's artist
+// completed as LEAD on or after the day the product was assigned.
 
-const cleanKit = (body) => ({
-  name: String(body.name ?? '').trim(),
-  employeeId:
-    body.employeeId && mongoose.Types.ObjectId.isValid(body.employeeId)
-      ? body.employeeId
-      : null,
-  items: Array.isArray(body.items)
-    ? body.items
-        .map((it) => ({
-          productId:
-            it.productId && mongoose.Types.ObjectId.isValid(it.productId)
-              ? it.productId
-              : null,
-          name: String(it.name ?? '').trim(),
-          brand: String(it.brand ?? '').trim(),
-          shade: String(it.shade ?? '').trim(),
-          quantity: Math.max(1, Number.parseInt(it.quantity, 10) || 1),
-          fillLevel: clampPct(it.fillLevel, 100),
-        }))
-        .filter((it) => it.name)
-    : [],
-  notes: String(body.notes ?? '').trim(),
-});
+const idStr = (v) => (v ? String(v) : '');
+
+class KitStockError extends Error {
+  constructor(message, status = 400) {
+    super(message);
+    this.status = status;
+  }
+}
+
+const sendKitError = (res, error) =>
+  res
+    .status(error instanceof KitStockError ? error.status : 500)
+    .json({ message: error.message });
+
+const cleanKit = (body) => {
+  const items = [];
+  const byProduct = new Map();
+  for (const it of Array.isArray(body.items) ? body.items : []) {
+    const productId =
+      it.productId && mongoose.Types.ObjectId.isValid(it.productId)
+        ? String(it.productId)
+        : null;
+    // 0 is kept as-is: kits from the old tube model can hold emptied lines,
+    // and bumping them to 1 would silently deduct studio stock on re-save.
+    const qty = Number.parseInt(it.quantity, 10);
+    const item = {
+      productId,
+      name: String(it.name ?? '').trim(),
+      brand: String(it.brand ?? '').trim(),
+      shade: String(it.shade ?? '').trim(),
+      quantity: Number.isFinite(qty) ? Math.max(0, qty) : 1,
+    };
+    if (!item.name) continue;
+    // One line per studio product: a product added twice is merged.
+    if (productId && byProduct.has(productId)) {
+      byProduct.get(productId).quantity += item.quantity;
+      continue;
+    }
+    if (productId) byProduct.set(productId, item);
+    items.push(item);
+  }
+  return {
+    name: String(body.name ?? '').trim(),
+    employeeId:
+      body.employeeId && mongoose.Types.ObjectId.isValid(body.employeeId)
+        ? body.employeeId
+        : null,
+    items,
+    notes: String(body.notes ?? '').trim(),
+  };
+};
+
+// Units of each studio product held by a list of kit items.
+const qtyByProduct = (items = []) => {
+  const m = new Map();
+  for (const it of items) {
+    const id = idStr(it.productId);
+    if (!id) continue;
+    m.set(id, (m.get(id) ?? 0) + (Number(it.quantity) || 0));
+  }
+  return m;
+};
+
+const sameStock = (before, after) => {
+  const a = qtyByProduct(before);
+  const b = qtyByProduct(after);
+  if (a.size !== b.size) return false;
+  for (const [id, q] of a) if (b.get(id) !== q) return false;
+  return true;
+};
+
+const rollbackKitStock = async (applied) => {
+  for (const { id, delta } of applied) {
+    try {
+      await InventoryProduct.updateOne({ _id: id }, { $inc: { quantity: -delta } });
+    } catch (err) {
+      console.error('[inventory] kit stock rollback failed:', id, err.message);
+    }
+  }
+};
+
+// Applies the studio-stock side of a kit change: deducts units newly issued
+// and, when returnToStudio, puts back units taken out of the kit (otherwise
+// they are written off as used up). Each deduction is conditional on enough
+// stock, so two managers can't hand out the same last unit. On failure the
+// changes already applied are rolled back.
+const applyKitStock = async ({ before, after, returnToStudio }) => {
+  const oldQ = qtyByProduct(before);
+  const newQ = qtyByProduct(after);
+  const applied = []; // { id, delta } — for rollback
+  const changes = []; // { id, type, quantity, product, prevQty }
+  try {
+    for (const id of new Set([...oldQ.keys(), ...newQ.keys()])) {
+      const diff = (newQ.get(id) ?? 0) - (oldQ.get(id) ?? 0);
+      if (diff > 0) {
+        const updated = await InventoryProduct.findOneAndUpdate(
+          { _id: id, owner: null, quantity: { $gte: diff } },
+          { $inc: { quantity: -diff } },
+          { new: true }
+        );
+        if (!updated) {
+          const p = await InventoryProduct.findOne({ _id: id, owner: null }).select(
+            'name quantity'
+          );
+          throw new KitStockError(
+            p
+              ? `Only ${p.quantity} × ${p.name} left in studio stock (tried to assign ${diff})`
+              : 'A selected product is no longer in studio stock'
+          );
+        }
+        applied.push({ id, delta: -diff });
+        changes.push({
+          id,
+          type: 'assign',
+          quantity: diff,
+          product: updated,
+          prevQty: updated.quantity + diff,
+        });
+      } else if (diff < 0) {
+        const qty = -diff;
+        if (returnToStudio) {
+          const updated = await InventoryProduct.findOneAndUpdate(
+            { _id: id, owner: null },
+            { $inc: { quantity: qty } },
+            { new: true }
+          );
+          if (updated) applied.push({ id, delta: qty });
+          changes.push({ id, type: 'return', quantity: qty, product: updated });
+        } else {
+          changes.push({ id, type: 'used_up', quantity: qty, product: null });
+        }
+      }
+    }
+  } catch (err) {
+    await rollbackKitStock(applied);
+    throw err;
+  }
+  return { applied, changes };
+};
+
+// Logs the movements of a saved kit change and alerts studio managers when an
+// assignment pushes a product to / below its low-stock threshold.
+const recordKitChanges = async ({ req, kit, changes, items }) => {
+  if (!changes.length) return;
+  const info = new Map();
+  for (const it of items) {
+    const id = idStr(it.productId);
+    if (id && !info.has(id)) info.set(id, it);
+  }
+  const docs = changes.map((c) => {
+    const it = info.get(c.id) ?? {};
+    return {
+      kit: kit._id,
+      kitName: kit.name,
+      employeeId: kit.employeeId ?? null,
+      product: c.id,
+      productName: c.product?.name ?? it.name ?? '',
+      brand: c.product?.brand ?? it.brand ?? '',
+      shade: c.product?.shade ?? it.shade ?? '',
+      type: c.type,
+      quantity: c.quantity,
+      studioQtyAfter: c.product ? c.product.quantity : null,
+      by: req.user?._id ?? null,
+      byName: req.user?.name ?? '',
+    };
+  });
+  try {
+    await KitMovement.insertMany(docs);
+  } catch (err) {
+    console.error('[inventory] kit movement log failed:', err.message);
+  }
+  for (const c of changes) {
+    if (c.type !== 'assign' || !c.product) continue;
+    const threshold = c.product.lowStockThreshold ?? 0;
+    if (c.prevQty > threshold && c.product.quantity <= threshold) {
+      try {
+        await notifyRoles({
+          roles: STUDIO_ROLES,
+          type: 'low_stock',
+          title: 'Low stock alert',
+          body: `${c.product.name} is low on stock (${c.product.quantity} left).`,
+          link: '/inventory/alerts',
+          createdBy: req.user?._id ?? null,
+          excludeUserId: req.user?._id ?? null,
+        });
+      } catch (err) {
+        console.error('[inventory] low-stock alert failed:', err.message);
+      }
+    }
+  }
+};
+
+const itemKey = (it) =>
+  idStr(it.productId)
+    ? `p:${idStr(it.productId)}`
+    : `c:${[it.name, it.brand, it.shade].map((s) => String(s ?? '').trim().toLowerCase()).join('|')}`;
+
+// Carries each line's assignment date and issued count over from the saved
+// kit. A product new to the kit — or every product, when the kit is handed to
+// a different artist (reset) — starts its usage window now.
+const stampKitItems = ({ before, after, kitCreatedAt, returnToStudio, reset }) => {
+  const now = new Date();
+  const prevByKey = new Map(before.map((it) => [itemKey(it), it]));
+  return after.map((it) => {
+    const prev = reset ? null : prevByKey.get(itemKey(it));
+    if (!prev) return { ...it, assignedAt: now, issuedTotal: it.quantity };
+    const oldQty = Number(prev.quantity) || 0;
+    const diff = it.quantity - oldQty;
+    // Kits saved before this feature have no issuedTotal yet.
+    let issued = prev.issuedTotal > 0 ? prev.issuedTotal : oldQty;
+    if (diff > 0) issued += diff;
+    // Returned units were never used, so they don't count as issued.
+    else if (diff < 0 && returnToStudio) issued = Math.max(it.quantity, issued + diff);
+    return {
+      ...it,
+      assignedAt: prev.assignedAt ?? kitCreatedAt ?? now,
+      issuedTotal: issued,
+    };
+  });
+};
+
+// ── Usage estimate (works completed since assignment) ──
+
+const IST_OFFSET_MS = 330 * 60 * 1000;
+// Calendar day (YYYY-MM-DD) in studio time. Booking work dates are stored as
+// plain day keys, so assignment times are compared on the same footing.
+const studioDayKey = (d) =>
+  new Date(new Date(d).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
+
+const dayKeys = (dates) =>
+  (Array.isArray(dates) ? dates : [])
+    .map((d) => String(d ?? '').slice(0, 10))
+    .filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d));
+
+const isLeadIn = (staff, empId) =>
+  Array.isArray(staff) &&
+  staff.some((s) => idStr(s.employeeId) === empId && s.roleType === 'lead');
+
+// One "work" = one date of a completed booking (or booking package) on which
+// the artist was the LEAD. A three-day wedding is three works; two packages
+// on the same day (e.g. bride + family) are two works.
+const leadWorkDates = (booking, empId) => {
+  const bookingDates = dayKeys(booking.selectedDates);
+  const fallback = bookingDates.length
+    ? bookingDates
+    : booking.serviceStart
+      ? [studioDayKey(booking.serviceStart)]
+      : [];
+  const packages = Array.isArray(booking.bookingItems) ? booking.bookingItems : [];
+  // Multi-package bookings carry staff per package; the booking-level list is
+  // only a merged summary of them, so counting both would double up.
+  if (packages.some((p) => Array.isArray(p.assignedStaff) && p.assignedStaff.length)) {
+    const out = [];
+    for (const p of packages) {
+      if (!isLeadIn(p.assignedStaff, empId)) continue;
+      const own = dayKeys(p.selectedDates);
+      out.push(...(own.length ? own : fallback));
+    }
+    return out;
+  }
+  return isLeadIn(booking.assignedStaff, empId) ? fallback : [];
+};
+
+// Returns the kits as plain objects with each item's usage estimate:
+//   worksDone    — completed lead works on/after the item's assignment day
+//   lastWorkDate — most recent of those works (YYYY-MM-DD) or null
+const attachKitUsage = async (kits) => {
+  const plain = kits.map((k) => (typeof k.toObject === 'function' ? k.toObject() : k));
+  const startOf = (k, it) => it.assignedAt ?? k.createdAt ?? null;
+  const empIds = [...new Set(plain.map((k) => idStr(k.employeeId)).filter(Boolean))];
+  let earliest = null;
+  for (const k of plain) {
+    for (const it of k.items ?? []) {
+      const s = startOf(k, it);
+      if (s && (!earliest || new Date(s) < earliest)) earliest = new Date(s);
+    }
+  }
+
+  const worksByEmp = new Map(); // employeeId → [YYYY-MM-DD, …]
+  if (empIds.length && earliest) {
+    // Loose pre-filter with a 2-day margin; the exact day check is below.
+    const since = new Date(earliest.getTime() - 2 * 86400000);
+    const sinceKey = studioDayKey(since);
+    const leadMatch = {
+      $elemMatch: {
+        employeeId: { $in: empIds.map((id) => new mongoose.Types.ObjectId(id)) },
+        roleType: 'lead',
+      },
+    };
+    const bookings = await Booking.find({
+      status: { $regex: /^completed$/i },
+      $and: [
+        {
+          $or: [
+            { serviceEnd: { $gte: since } },
+            { selectedDates: { $gte: sinceKey } },
+            { 'bookingItems.selectedDates': { $gte: sinceKey } },
+          ],
+        },
+        { $or: [{ assignedStaff: leadMatch }, { 'bookingItems.assignedStaff': leadMatch }] },
+      ],
+    })
+      .select(
+        'selectedDates serviceStart assignedStaff bookingItems.assignedStaff bookingItems.selectedDates'
+      )
+      .lean();
+    for (const b of bookings) {
+      for (const empId of empIds) {
+        const dates = leadWorkDates(b, empId);
+        if (!dates.length) continue;
+        if (!worksByEmp.has(empId)) worksByEmp.set(empId, []);
+        worksByEmp.get(empId).push(...dates);
+      }
+    }
+  }
+
+  for (const k of plain) {
+    const works = worksByEmp.get(idStr(k.employeeId)) ?? [];
+    k.items = (k.items ?? []).map((it) => {
+      const start = startOf(k, it);
+      const from = start ? studioDayKey(start) : null;
+      const counted = from ? works.filter((d) => d >= from) : [];
+      return {
+        ...it,
+        assignedAt: start,
+        worksDone: counted.length,
+        lastWorkDate: counted.length
+          ? counted.reduce((a, b) => (b > a ? b : a))
+          : null,
+      };
+    });
+  }
+  return plain;
+};
+
+const withUsage = async (kit) => (await attachKitUsage([kit]))[0];
 
 export const getKits = async (req, res) => {
   if (!canAccessKits(req.user)) {
@@ -421,7 +757,7 @@ export const getKits = async (req, res) => {
   }
   try {
     const kits = await StaffKit.find(kitScope(req.user)).sort({ name: 1 });
-    res.json(kits);
+    res.json(await attachKitUsage(kits));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -436,17 +772,41 @@ export const createKit = async (req, res) => {
     if (!data.name) {
       return res.status(400).json({ message: 'Kit name is required' });
     }
-    // Artists' kits are always bound to their own employee record.
+    // Artists' kits are always bound to their own employee record, and only
+    // the inventory manager hands out studio stock.
     if (!canManageStudio(req.user)) {
       data.employeeId = req.user.employeeId ?? null;
+      if (qtyByProduct(data.items).size) {
+        return res.status(403).json({
+          message: 'Only the inventory manager can assign studio products to a kit',
+        });
+      }
     }
-    const kit = await StaffKit.create(data);
-    res.status(201).json(kit);
+    const { applied, changes } = await applyKitStock({
+      before: [],
+      after: data.items,
+      returnToStudio: false,
+    });
+    let kit;
+    try {
+      kit = await StaffKit.create({
+        ...data,
+        items: stampKitItems({ before: [], after: data.items }),
+      });
+    } catch (err) {
+      await rollbackKitStock(applied);
+      throw err;
+    }
+    await recordKitChanges({ req, kit, changes, items: data.items });
+    res.status(201).json(await withUsage(kit));
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    sendKitError(res, error);
   }
 };
 
+// Saving a kit sends its full item list. Units added to a studio product are
+// deducted from studio stock; units removed are returned to studio stock when
+// `returnToStudio` is true, otherwise written off as used up.
 export const updateKit = async (req, res) => {
   if (!canAccessKits(req.user)) {
     return res.status(403).json({ message: 'No access' });
@@ -459,42 +819,49 @@ export const updateKit = async (req, res) => {
     if (!kit) {
       return res.status(404).json({ message: 'Kit not found' });
     }
+    const manager = canManageStudio(req.user);
     const data = cleanKit(req.body);
-    if (req.body.name != null) kit.name = data.name || kit.name;
+    const returnToStudio =
+      req.body.returnToStudio === true || req.body.returnToStudio === 'true';
+    const before = kit.items.map((it) => it.toObject());
+    const after = req.body.items !== undefined ? data.items : before;
+    if (!manager && !sameStock(before, after)) {
+      return res.status(403).json({
+        message: 'Only the inventory manager can change studio products in a kit',
+      });
+    }
     // Only managers may reassign a kit to a different employee.
-    if (req.body.employeeId !== undefined && canManageStudio(req.user)) {
-      kit.employeeId = data.employeeId;
+    const employeeId =
+      req.body.employeeId !== undefined && manager ? data.employeeId : kit.employeeId;
+    const reassigned = idStr(employeeId) !== idStr(kit.employeeId);
+
+    const { applied, changes } = await applyKitStock({ before, after, returnToStudio });
+    try {
+      if (req.body.name != null) kit.name = data.name || kit.name;
+      kit.employeeId = employeeId;
+      kit.items = stampKitItems({
+        before,
+        after,
+        kitCreatedAt: kit.createdAt,
+        returnToStudio,
+        reset: reassigned,
+      });
+      if (req.body.notes !== undefined) kit.notes = data.notes;
+      await kit.save();
+    } catch (err) {
+      await rollbackKitStock(applied);
+      throw err;
     }
-    if (req.body.items !== undefined) kit.items = data.items;
-    if (req.body.notes !== undefined) kit.notes = data.notes;
-    await kit.save();
-    res.json(kit);
+    await recordKitChanges({ req, kit, changes, items: [...after, ...before] });
+    res.json(await withUsage(kit));
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    sendKitError(res, error);
   }
 };
 
+// Deleting a kit takes its studio products out of the kit too: back into
+// studio stock with ?returnToStudio=true, otherwise written off as used up.
 export const deleteKit = async (req, res) => {
-  if (!canAccessKits(req.user)) {
-    return res.status(403).json({ message: 'No access' });
-  }
-  try {
-    const kit = await StaffKit.findOneAndDelete({
-      _id: req.params.id,
-      ...kitScope(req.user),
-    });
-    if (!kit) {
-      return res.status(404).json({ message: 'Kit not found' });
-    }
-    res.json({ message: 'Kit removed', id: req.params.id });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Update one kit item's PER-ARTIST allocation — its tube fill and/or tube
-// count. This touches only this artist's kit, never the shared studio stock.
-export const updateKitItem = async (req, res) => {
   if (!canAccessKits(req.user)) {
     return res.status(403).json({ message: 'No access' });
   }
@@ -506,20 +873,50 @@ export const updateKitItem = async (req, res) => {
     if (!kit) {
       return res.status(404).json({ message: 'Kit not found' });
     }
-    const idx = Number.parseInt(req.params.index, 10);
-    if (!Number.isInteger(idx) || idx < 0 || idx >= kit.items.length) {
-      return res.status(400).json({ message: 'Invalid kit item' });
+    const before = kit.items.map((it) => it.toObject());
+    if (!canManageStudio(req.user) && qtyByProduct(before).size) {
+      return res.status(403).json({
+        message: 'Only the inventory manager can delete a kit holding studio products',
+      });
     }
-    const item = kit.items[idx];
-    if (req.body.fillLevel != null) {
-      item.fillLevel = clampPct(req.body.fillLevel, item.fillLevel ?? 100);
+    const returnToStudio =
+      req.query.returnToStudio === 'true' || req.body?.returnToStudio === true;
+    const { applied, changes } = await applyKitStock({
+      before,
+      after: [],
+      returnToStudio,
+    });
+    try {
+      await kit.deleteOne();
+    } catch (err) {
+      await rollbackKitStock(applied);
+      throw err;
     }
-    if (req.body.quantity != null) {
-      item.quantity = Math.max(0, Number.parseInt(req.body.quantity, 10) || 0);
-      if (item.quantity <= 0) item.fillLevel = 0;
+    await recordKitChanges({ req, kit, changes, items: before });
+    res.json({ message: 'Kit removed', id: req.params.id });
+  } catch (error) {
+    sendKitError(res, error);
+  }
+};
+
+// Assignment history (newest first). Managers see every kit; an artist sees
+// only movements on their own kits.
+export const getKitMovements = async (req, res) => {
+  if (!canAccessKits(req.user)) {
+    return res.status(403).json({ message: 'No access' });
+  }
+  try {
+    const filter = {};
+    if (req.query.kitId && mongoose.Types.ObjectId.isValid(req.query.kitId)) {
+      filter.kit = req.query.kitId;
     }
-    await kit.save();
-    res.json(kit);
+    if (req.query.productId && mongoose.Types.ObjectId.isValid(req.query.productId)) {
+      filter.product = req.query.productId;
+    }
+    if (!canManageStudio(req.user)) filter.employeeId = req.user.employeeId ?? null;
+    const limit = Math.min(500, Math.max(1, Number.parseInt(req.query.limit, 10) || 200));
+    const rows = await KitMovement.find(filter).sort({ createdAt: -1 }).limit(limit).lean();
+    res.json(rows);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -862,8 +1259,6 @@ export const createPurchase = async (req, res) => {
       }
 
       if (product) {
-        // Restocking an emptied product opens a fresh, full tube.
-        if (product.quantity <= 0) product.fillLevel = 100;
         product.quantity += qty; // stock in
         if (unitCost > 0) product.price = unitCost; // latest cost
         if (barcode && !product.barcode) product.barcode = barcode;
@@ -930,6 +1325,18 @@ export const createPurchase = async (req, res) => {
     const amountPaid = req.body.paid
       ? grandTotal
       : Math.max(0, Number(req.body.amountPaid) || 0);
+    // Money already paid at purchase time is recorded as a payment entry, so
+    // it posts against the bank / cash account like any other payment.
+    const openingPayments = [];
+    if (amountPaid > 0) {
+      const { payment, error } = await paymentFromBody(
+        { ...req.body, note: req.body.paymentNote ?? 'Paid at purchase' },
+        amountPaid,
+        Number.isNaN(purchaseDate.getTime()) ? new Date() : purchaseDate
+      );
+      if (error) return res.status(400).json({ message: error });
+      openingPayments.push(payment);
+    }
     const purchase = await Purchase.create({
       supplier,
       vendor: vendorId,
@@ -945,11 +1352,13 @@ export const createPurchase = async (req, res) => {
       gstAmount,
       interState: !!req.body.interState,
       amountPaid,
+      payments: openingPayments,
       paid: grandTotal > 0 ? amountPaid >= grandTotal - 0.01 : !!req.body.paid,
       owner,
       notes: String(req.body.notes ?? '').trim(),
     });
 
+    await postPurchaseLedger(purchase, req.user?._id || null);
     res.status(201).json(purchase);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -971,9 +1380,24 @@ export const setPurchasePaid = async (req, res) => {
       return res.status(404).json({ message: 'Purchase not found' });
     }
     const paid = !!req.body.paid;
+    const previousIds = (purchase.payments || []).map((x) => x._id).filter(Boolean);
+    if (paid) {
+      // Settle the remaining balance as one payment entry.
+      const remaining = grandTotalOf(purchase) - (Number(purchase.amountPaid) || 0);
+      if (remaining > 0.01) {
+        const { payment, error } = await paymentFromBody(req.body, Math.round(remaining * 100) / 100);
+        if (error) return res.status(400).json({ message: error });
+        purchase.payments.push(payment);
+      }
+      purchase.amountPaid = grandTotalOf(purchase);
+    } else {
+      // Back to unpaid: clear the payments (their vouchers are reversed below).
+      purchase.payments = [];
+      purchase.amountPaid = 0;
+    }
     purchase.paid = paid;
-    purchase.amountPaid = paid ? grandTotalOf(purchase) : 0;
     await purchase.save();
+    await postPurchaseLedger(purchase, req.user?._id || null, previousIds);
     res.json(purchase);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -1000,17 +1424,14 @@ export const recordPurchasePayment = async (req, res) => {
         .status(400)
         .json({ message: 'Payment amount must be greater than zero' });
     }
-    const payDate = req.body.date ? new Date(req.body.date) : new Date();
-    purchase.payments.push({
-      amount,
-      date: Number.isNaN(payDate.getTime()) ? new Date() : payDate,
-      mode: String(req.body.mode ?? 'cash').trim() || 'cash',
-      note: String(req.body.note ?? '').trim(),
-    });
+    const { payment, error } = await paymentFromBody(req.body, amount);
+    if (error) return res.status(400).json({ message: error });
+    purchase.payments.push(payment);
     purchase.amountPaid = (Number(purchase.amountPaid) || 0) + amount;
     const grand = grandTotalOf(purchase);
     purchase.paid = grand > 0 ? purchase.amountPaid >= grand - 0.01 : false;
     await purchase.save();
+    await postPurchaseLedger(purchase, req.user?._id || null);
     res.json(purchase);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -1064,6 +1485,7 @@ export const updatePurchase = async (req, res) => {
     purchase.paid =
       grand > 0 ? (Number(purchase.amountPaid) || 0) >= grand - 0.01 : false;
     await purchase.save();
+    await postPurchaseLedger(purchase, req.user?._id || null);
     res.json(purchase);
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -1083,94 +1505,12 @@ export const deletePurchase = async (req, res) => {
     if (!purchase) {
       return res.status(404).json({ message: 'Purchase not found' });
     }
+    // Reverse the bill and its payments in the books.
+    await safePost(() => unpostDoc('Purchase', purchase._id));
+    for (const pay of purchase.payments || []) {
+      if (pay._id) await safePost(() => unpostDoc('PurchasePayment', pay._id));
+    }
     res.json({ message: 'Purchase removed', id: req.params.id });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// ── Tube consumption ─────────────────────────────────────────────────────────
-
-// Deplete tubes when a work is completed. Depletes the completing artist's OWN
-// kit-item allocations (never the shared studio stock, never other artists) by
-// each item's linked-product usagePerWork% (default 10%).
-export const consumeForWork = async (req, res) => {
-  if (!hasInventoryAccess(req.user)) {
-    return res.status(403).json({ message: 'No inventory access' });
-  }
-  try {
-    let employeeId = req.user.employeeId ?? null;
-    if (
-      canManageStudio(req.user) &&
-      req.body.employeeId &&
-      mongoose.Types.ObjectId.isValid(req.body.employeeId)
-    ) {
-      employeeId = req.body.employeeId;
-    }
-    if (!employeeId) {
-      return res.status(400).json({ message: 'No artist to deplete for' });
-    }
-
-    // Cache usagePerWork per linked product so we don't refetch per item.
-    const usageCache = new Map();
-    const usageFor = async (productId) => {
-      if (!productId) return 10;
-      const key = productId.toString();
-      if (usageCache.has(key)) return usageCache.get(key);
-      const prod = await InventoryProduct.findById(key).select('usagePerWork');
-      const pct = prod && prod.usagePerWork != null ? prod.usagePerWork : 10;
-      usageCache.set(key, pct);
-      return pct;
-    };
-
-    const kits = await StaffKit.find({ employeeId });
-    let updated = 0;
-    for (const kit of kits) {
-      let changed = false;
-      for (const item of kit.items) {
-        const percent = await usageFor(item.productId);
-        if (percent <= 0) continue;
-        applyTubeUsage(item, percent); // mutates item.quantity / item.fillLevel
-        changed = true;
-        updated += 1;
-      }
-      if (changed) await kit.save();
-    }
-
-    res.json({ updated });
-  } catch (error) {
-    res.status(500).json({ message: error.message });
-  }
-};
-
-// Manually set a product's open-tube fill (0..100) — used by the artist tube
-// adjuster and by managers. Opening/closing a tube nudges the tube count.
-export const setProductFill = async (req, res) => {
-  if (!hasInventoryAccess(req.user)) {
-    return res.status(403).json({ message: 'No inventory access' });
-  }
-  try {
-    const product = await InventoryProduct.findOne({
-      _id: req.params.id,
-      ...ownerScope(req.user),
-    });
-    if (!product) {
-      return res.status(404).json({ message: 'Product not found' });
-    }
-    if (req.body.fillLevel != null) {
-      const f = clampPct(req.body.fillLevel, product.fillLevel ?? 100);
-      product.fillLevel = f;
-      // Keep quantity coherent with an empty / freshly-opened tube.
-      if (f > 0 && product.quantity <= 0) product.quantity = 1;
-      if (f === 0 && product.quantity <= 1) product.quantity = 0;
-    }
-    if (req.body.quantity != null) {
-      product.quantity = Math.max(0, Number.parseInt(req.body.quantity, 10) || 0);
-      // No tubes on hand → nothing in the open tube.
-      if (product.quantity <= 0) product.fillLevel = 0;
-    }
-    await product.save();
-    res.json(product);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

@@ -10,11 +10,9 @@ import {
   createKit,
   updateKit,
   deleteKit,
-  updateKitItem,
+  getKitMovements,
   getPurchases,
   createPurchase,
-  consumeForWork,
-  setProductFill,
   lookupExternalBarcode,
   setPurchasePaid,
   recordPurchasePayment,
@@ -43,12 +41,11 @@ router.post('/products/bulk', bulkCreateProducts);
 router.get('/products/barcode/:code', getProductByBarcode);
 router.get('/products/external/:code', lookupExternalBarcode);
 router.route('/products/:id').put(updateProduct).delete(deleteProduct);
-router.patch('/products/:id/fill', setProductFill);
-router.post('/consume', consumeForWork);
 
 router.route('/kits').get(getKits).post(createKit);
+// Assignment history: who handed which product to which kit, and returns.
+router.get('/kits/movements', getKitMovements);
 router.route('/kits/:id').put(updateKit).delete(deleteKit);
-router.patch('/kits/:id/item/:index', updateKitItem);
 
 router.route('/purchases').get(getPurchases).post(createPurchase);
 router.patch('/purchases/:id/paid', setPurchasePaid);
