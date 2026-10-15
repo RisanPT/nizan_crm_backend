@@ -56,6 +56,22 @@ const toDisplayTime = (value) => {
   }).format(date);
 };
 
+// "HH:mm" (a booking line's own time) → "4:00 pm", matching toDisplayTime.
+const hhmmToDisplay = (raw) => {
+  const m = /^(\d{1,2}):(\d{2})$/.exec(String(raw ?? '').trim());
+  if (!m) return null;
+  const h = Number(m[1]);
+  return `${h % 12 === 0 ? 12 : h % 12}:${m[2]} ${h < 12 ? 'am' : 'pm'}`;
+};
+
+// Time range for one line: a multi-day programme's day can have its own
+// start / end (bookingItems[].startTime / endTime); otherwise the booking's.
+const toItemTimeLabel = (item, booking) => {
+  const start = hhmmToDisplay(item?.startTime) ?? toDisplayTime(booking.serviceStart);
+  const end = hhmmToDisplay(item?.endTime) ?? toDisplayTime(booking.serviceEnd);
+  return `${start} - ${end}`;
+};
+
 const toSelectedDatesLabel = (booking) => {
   const selectedDates = Array.isArray(booking.selectedDates)
     ? booking.selectedDates
@@ -95,13 +111,19 @@ const toBookingNumber = (booking) => {
   return digitsOnly || '0000000000';
 };
 
+// Tax invoice number (e.g. "TN/26-27/0001") — one per booking, issued by
+// utils/invoiceNumber.js once the booking is fully paid. Until then the
+// emails say so rather than inventing a number from the booking ID.
+const INVOICE_PENDING_LABEL = 'Issued on full payment';
+const toInvoiceNumber = (booking) =>
+  String(booking?.invoiceNumber ?? '').trim() || INVOICE_PENDING_LABEL;
+
 const toInvoiceItems = (booking) => {
   const bookingItems = Array.isArray(booking?.bookingItems)
     ? booking.bookingItems
     : [];
 
   if (bookingItems.length > 0) {
-    let invoiceCounter = 1;
     return bookingItems.flatMap((item) => {
       const itemDates =
         Array.isArray(item?.selectedDates) && item.selectedDates.length > 0
@@ -110,9 +132,9 @@ const toInvoiceItems = (booking) => {
       const normalizedDates = itemDates.length > 0 ? itemDates : [''];
 
       return normalizedDates.map((selectedDate) => ({
-        invoiceNumber: `${toBookingNumber(booking)}-${String(invoiceCounter++).padStart(2, '0')}`,
         service: String(item?.service ?? booking?.service ?? '').trim() || 'Package',
         eventSlot: String(item?.eventSlot ?? '').trim(),
+        time: toItemTimeLabel(item, booking),
         selectedDates: selectedDate ? [selectedDate] : [],
         totalPrice: Number(item?.totalPrice) || 0,
         advanceAmount: Number(item?.advanceAmount) || 0,
@@ -125,10 +147,10 @@ const toInvoiceItems = (booking) => {
       ? booking.selectedDates
       : [''];
 
-  return bookingDates.map((selectedDate, index) => ({
-    invoiceNumber: `${toBookingNumber(booking)}-${String(index + 1).padStart(2, '0')}`,
+  return bookingDates.map((selectedDate) => ({
     service: booking?.service ?? 'Package',
     eventSlot: booking?.eventSlot ?? '',
+    time: toItemTimeLabel(null, booking),
     selectedDates: selectedDate ? [selectedDate] : [],
     totalPrice: Number(booking?.totalPrice) || 0,
     advanceAmount: Number(booking?.advanceAmount) || 0,
@@ -159,13 +181,14 @@ const renderAdvanceInvoiceSections = (booking) =>
         <div style="border:1px solid #d9dde3;border-radius:14px;padding:18px;margin:16px 0;background:#fcfcfd;">
           <div style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:12px;">Package ${index + 1}</div>
           <table style="border-collapse:collapse;width:100%;">
-            <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Invoice No</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.invoiceNumber}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Invoice No</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toInvoiceNumber(booking)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Booking ID</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toBookingNumber(booking)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Booked On</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toBookedDate(booking)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Package</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.service}</td></tr>
             ${item.eventSlot ? `<tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Slot</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.eventSlot}</td></tr>` : ''}
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Region</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${booking.region || 'Default'}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Selected Dates</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toInvoiceDateLabel(item.selectedDates, booking)}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Time</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.time}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Advance Paid</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toCurrency(item.advanceAmount)}</td></tr>
           </table>
         </div>
@@ -180,14 +203,14 @@ const renderCompletionInvoiceSections = (booking) =>
         <div style="border:1px solid #d9dde3;border-radius:14px;padding:18px;margin:16px 0;background:#fcfcfd;">
           <div style="font-size:16px;font-weight:700;color:#0f172a;margin-bottom:12px;">Package ${index + 1}</div>
           <table style="border-collapse:collapse;width:100%;">
-            <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Invoice No</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.invoiceNumber}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Invoice No</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toInvoiceNumber(booking)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Booking ID</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toBookingNumber(booking)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Booked On</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toBookedDate(booking)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Package</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.service}</td></tr>
             ${item.eventSlot ? `<tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Slot</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.eventSlot}</td></tr>` : ''}
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Region</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${booking.region || 'Default'}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Selected Dates</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toInvoiceDateLabel(item.selectedDates, booking)}</td></tr>
-            <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Time</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toDisplayTime(booking.serviceStart)} - ${toDisplayTime(booking.serviceEnd)}</td></tr>
+            <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Time</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${item.time}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Package Total</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toCurrency(item.totalPrice)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Amount Paid</strong></td><td style="padding:8px;border:1px solid #d9dde3;">${toCurrency(item.totalPrice)}</td></tr>
             <tr><td style="padding:8px;border:1px solid #d9dde3;"><strong>Payment Status</strong></td><td style="padding:8px;border:1px solid #d9dde3;">Paid in Full</td></tr>
@@ -309,7 +332,7 @@ export const sendCompletionInvoiceEmail = async (booking) => {
     from: fromEmail,
     to: booking.email,
     subject: `Work Completion Invoice - ${booking.customerName}`,
-    text: `Hello ${booking.customerName},\n\nYour work has been marked as completed.\n\nBooking ID: ${toBookingNumber(booking)}\nTotal: ${toCurrency(subtotal)}\nAdvance Paid: ${toCurrency(totalAdvance)}\nFinal Payment Collected: ${toCurrency(collectedAmt)}\nBalance Due: ${toCurrency(balanceDue)}\nPayment Status: ${isFullyPaid ? 'Paid in Full' : 'Pending'}\n\nRegards,\n${companyName}`,
+    text: `Hello ${booking.customerName},\n\nYour work has been marked as completed.\n\nInvoice No: ${toInvoiceNumber(booking)}\nBooking ID: ${toBookingNumber(booking)}\nTotal: ${toCurrency(subtotal)}\nAdvance Paid: ${toCurrency(totalAdvance)}\nFinal Payment Collected: ${toCurrency(collectedAmt)}\nBalance Due: ${toCurrency(balanceDue)}\nPayment Status: ${isFullyPaid ? 'Paid in Full' : 'Pending'}\n\nRegards,\n${companyName}`,
     html: `
       <div style="font-family:Arial,sans-serif;color:#0f172a;line-height:1.6;max-width:640px;margin:0 auto;">
         <h2 style="margin-bottom:8px;">Work Completion Invoice</h2>
@@ -317,6 +340,10 @@ export const sendCompletionInvoiceEmail = async (booking) => {
         <p>Your work has been marked as completed. Please find the final payment summary below.</p>
 
         <div style="display:grid;grid-template-columns:repeat(2,minmax(200px,1fr));gap:14px;margin:20px 0;">
+          <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fcfcfd;">
+            <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Invoice No</div>
+            <div style="font-size:22px;font-weight:700;">${toInvoiceNumber(booking)}</div>
+          </div>
           <div style="border:1px solid #d9dde3;border-radius:14px;padding:16px;background:#fcfcfd;">
             <div style="font-size:12px;text-transform:uppercase;color:#667085;margin-bottom:8px;">Booking ID</div>
             <div style="font-size:22px;font-weight:700;">${toBookingNumber(booking)}</div>

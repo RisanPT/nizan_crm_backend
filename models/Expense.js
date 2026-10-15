@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 const expenseSchema = mongoose.Schema(
   {
@@ -71,6 +72,10 @@ const expenseSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // How it was paid back + the bank / cash account, set when Accounts
+    // verifies it. Only expenses verified this way post to the ledger.
+    paymentMode: { type: String, default: '', trim: true },
+    ...moneyAccountFields,
   },
   {
     timestamps: true,

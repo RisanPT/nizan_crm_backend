@@ -1,6 +1,8 @@
 import SalesReturn from '../models/SalesReturn.js';
 import { notifyRoles } from '../utils/notify.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { applyMoneyAccount } from '../utils/moneyAccount.js';
+import { SALES_RETURN_PAYMENT_MODES } from '../models/SalesReturn.js';
 
 const populate = [
   { path: 'bookingId', select: 'bookingDate customer package totalAmount' },
@@ -214,6 +216,12 @@ export const updateSalesReturnStatus = async (req, res) => {
     if (status === 'processed') {
       doc.processedBy = req.user?._id || null;
       doc.processedAt = new Date();
+      // The refund leaves a bank / cash account (pay popup).
+      const moneyErr = await applyMoneyAccount(doc, req.body, {
+        modeField: 'paymentMode',
+        modes: SALES_RETURN_PAYMENT_MODES,
+      });
+      if (moneyErr) return res.status(400).json({ message: moneyErr });
     }
 
     await doc.save();

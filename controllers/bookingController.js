@@ -1,6 +1,7 @@
 import mongoose from 'mongoose';
 import Booking from '../models/Booking.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { syncBookingAdvance, unpostBookingAdvance } from './bookingAdvanceController.js';
 import Customer from '../models/Customer.js';
 import ServicePackage from '../models/Package.js';
 import Lead from '../models/Lead.js';
@@ -9,6 +10,7 @@ import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { SALES_TARGET_ROLES } from '../utils/salesAchievement.js';
 import { slotAvailability } from './slotController.js';
 import { ensureReviewForBooking, reviewFormUrl } from './reviewController.js';
+import { ensureInvoiceNumber } from '../utils/invoiceNumber.js';
 import {
   sendAdvanceInvoiceEmail,
   sendCompletionInvoiceEmail,
@@ -512,9 +514,18 @@ const phoneKey = (value = '') => {
 /// Marks the matching lead(s) as Converted once a booking exists for the same
 /// mobile number, and links them to that booking. Never throws — a failure
 /// here must not fail the booking itself.
+// Matches a stored number ending in these 10 digits whatever its formatting
+// ("98765-43210", "+91 98765 43210").
+const phoneTailRegex = (key) => new RegExp(`${key.split('').join('[^0-9]*')}[^0-9]*$`);
+
 const linkLeadsToBooking = async (booking) => {
   try {
-    const key = phoneKey(booking?.phone);
+    // A cancelled / rejected booking doesn't make anyone a customer.
+    if (['cancelled', 'canceled', 'rejected'].includes(String(booking?.status ?? '').toLowerCase())) return;
+    // The booking's main number and its secondary contact both identify the
+    // customer; a lead may hold either as its phone or alternate number.
+    const keys = [...new Set([phoneKey(booking?.phone), phoneKey(booking?.secondaryContact)])]
+      .filter((k) => k.length === 10);
     const leadId = booking?.leadId ? String(booking.leadId) : '';
 
     // Convert both the explicitly-linked lead (from a Convert-to-Booking) AND any
@@ -522,7 +533,10 @@ const linkLeadsToBooking = async (booking) => {
     // salesperson corrected the phone number during conversion.
     const or = [];
     if (leadId) or.push({ _id: leadId });
-    if (key.length === 10) or.push({ phone: { $regex: `${key}$` } });
+    for (const k of keys) {
+      or.push({ phone: { $regex: phoneTailRegex(k) } });
+      or.push({ alternateNumber: { $regex: phoneTailRegex(k) } });
+    }
     if (or.length === 0) return;
 
     const candidates = await Lead.find({ $or: or });
@@ -530,7 +544,9 @@ const linkLeadsToBooking = async (booking) => {
     for (const lead of candidates) {
       const isExplicit = leadId && String(lead._id) === leadId;
       // Phone-matched (non-explicit) leads must match on the full last 10 digits.
-      if (!isExplicit && phoneKey(lead.phone) !== key) continue;
+      if (!isExplicit && !keys.includes(phoneKey(lead.phone)) && !keys.includes(phoneKey(lead.alternateNumber))) {
+        continue;
+      }
       // Don't overwrite a lead already tied to another booking.
       if (lead.bookingId && String(lead.bookingId) !== String(booking._id)) {
         continue;
@@ -1381,6 +1397,7 @@ export const createBooking = async (req, res) => {
       regionId: normalizedRegionId,
       districtId: normalizedDistrictId,
       driverId: normalizedDriverId,
+      tripStatus: normalizedDriverId ? 'assigned' : 'unassigned',
       vehicleId: normalizedVehicleId,
       customerName,
       email: normalizedEmail,
@@ -1483,6 +1500,8 @@ export const createBooking = async (req, res) => {
 
     // Post the sales invoice to the ledger (best-effort).
     await safePost(() => postDoc('Booking', booking.toObject(), req.user?._id || null));
+    // An advance taken now waits for Accounts to verify where it landed.
+    await safePost(() => syncBookingAdvance(booking, undefined, req.user?._id || null));
 
     res.status(201).json({
       ...booking.toObject(),
@@ -1500,6 +1519,8 @@ export const updateBooking = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
+    // To tell whether the advance changed in this edit.
+    const previousAdvance = booking.advanceAmount;
 
     const {
       bookingItems,
@@ -1689,6 +1710,12 @@ export const updateBooking = async (req, res) => {
     booking.regionId = nextRegionId;
     booking.districtId = nextDistrictId;
     booking.driverId = driverId != null ? normalizedDriverId : booking.driverId;
+    // Keep the trip status in step with the driver assignment until the trip
+    // starts (assigning a driver → 'assigned', removing them → 'unassigned').
+    // A trip already in progress, completed or in an accident keeps its status.
+    if (!booking.tripStatus || ['unassigned', 'assigned'].includes(booking.tripStatus)) {
+      booking.tripStatus = booking.driverId ? 'assigned' : 'unassigned';
+    }
     booking.vehicleId = vehicleId != null ? normalizedVehicleId : booking.vehicleId;
     booking.service = finalService;
     booking.region = region ?? booking.region;
@@ -1760,6 +1787,9 @@ export const updateBooking = async (req, res) => {
       updatedBooking = (await Booking.findById(booking._id)) ?? updatedBooking;
     }
     await syncLinkedLeadDates(updatedBooking);
+    // Linking used to run on create only — a number corrected (or a lead
+    // added) after booking never converted the lead. Idempotent.
+    await linkLeadsToBooking(updatedBooking);
     const shouldSendAdvanceInvoice =
       previousStatus != 'confirmed' &&
       String(updatedBooking.status ?? '').toLowerCase() == 'confirmed';
@@ -1784,6 +1814,16 @@ export const updateBooking = async (req, res) => {
 
     let completionInvoiceEmailSent = false;
     if (shouldSendCompletionInvoice) {
+      // Issue the tax invoice number now (if fully paid) so the completion
+      // email carries it. Skipped when this edit changed the advance — its
+      // verification status is only settled later by syncBookingAdvance,
+      // which issues the number itself.
+      if (Number(previousAdvance || 0) === Number(updatedBooking.advanceAmount || 0)) {
+        const invoiceNumber = await ensureInvoiceNumber(updatedBooking._id);
+        if (invoiceNumber && !updatedBooking.invoiceNumber) {
+          updatedBooking.set({ invoiceNumber });
+        }
+      }
       try {
         if (
           !updatedBooking.legacyBooking &&
@@ -1805,6 +1845,7 @@ export const updateBooking = async (req, res) => {
 
     // Re-post the sales invoice to reflect the update (best-effort).
     await safePost(() => postDoc('Booking', updatedBooking.toObject(), req.user?._id || null));
+    await safePost(() => syncBookingAdvance(updatedBooking, previousAdvance, req.user?._id || null));
 
     // A completed booking gets a client review request; return its public form
     // URL so the app can append it to the completion WhatsApp message. Idempotent
@@ -1840,6 +1881,17 @@ export const deleteBooking = async (req, res) => {
       await booking.deleteOne();
       // Remove its ledger voucher too, so revenue/A/R don't keep an orphan.
       await safePost(() => unpostDoc('Booking', booking._id));
+      await unpostBookingAdvance(booking._id);
+      // Unlink its leads: a dangling bookingId made the lead form ignore date
+      // edits, and the booking-derived dates/status no longer apply.
+      await Lead.updateMany(
+        { bookingId: booking._id, status: 'Converted' },
+        { $set: { status: 'Contacted' } }
+      );
+      await Lead.updateMany(
+        { bookingId: booking._id },
+        { $set: { bookingId: null, eventDate: null, bookedDate: null } }
+      );
       res.json({ message: 'Booking removed' });
     } else {
       res.status(404).json({ message: 'Booking not found' });

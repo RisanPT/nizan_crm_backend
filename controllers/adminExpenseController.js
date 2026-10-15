@@ -2,6 +2,48 @@ import AdminExpense from '../models/AdminExpense.js';
 import Salary from '../models/Salary.js';
 import { notifyRoles, notify } from '../utils/notify.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { ADMIN_PAYMENT_METHODS, EXPENSE_HEADS } from '../models/AdminExpense.js';
+import ChartOfAccount from '../models/ChartOfAccount.js';
+
+// Expense heads = active expense ledgers in the Chart of Accounts (plus the
+// Sales Return contra head). The original seeded heads keep their flags.
+const HEAD_FLAGS = new Map(EXPENSE_HEADS.map((h) => [h.code, h]));
+const headQuery = () => ({
+  status: { $ne: 'archived' },
+  $or: [{ nature: 'expense' }, { code: 'SRT-01' }],
+  // Non-cash ledgers (depreciation) are never paid out.
+  group: { $not: /non-cash/i },
+});
+
+// @route GET /api/admin-expenses/heads
+export const getExpenseHeads = async (req, res) => {
+  try {
+    const accounts = await ChartOfAccount.find(headQuery()).select('code name group').sort({ code: 1 }).lean();
+    res.json(
+      accounts.map((a) => {
+        const f = HEAD_FLAGS.get(a.code) || {};
+        return {
+          code: a.code,
+          label: a.name,
+          group: a.group || f.group || '',
+          jobLinked: !!f.jobLinked,
+          recurring: !!f.recurring,
+          foreign: !!f.foreign,
+        };
+      })
+    );
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// '' is allowed (legacy rows); anything else must be an expense head.
+const checkHead = async (code) => {
+  if (!code) return null;
+  const ok = await ChartOfAccount.exists({ ...headQuery(), code });
+  return ok ? null : `Unknown expense head "${code}"`;
+};
+import { applyMoneyAccount } from '../utils/moneyAccount.js';
 import { isApprover, resolveUserDeptName } from '../utils/departmentScope.js';
 
 // Treat user search text literally — an unescaped "(" or "*" would otherwise
@@ -276,6 +318,9 @@ export const createAdminExpense = async (req, res) => {
       deptForExpense = deptName;
     }
 
+    const headErr = await checkHead(expenseHead);
+    if (headErr) return res.status(400).json({ message: headErr });
+
     const status = approver ? 'approved' : 'pending';
 
     const expense = new AdminExpense({
@@ -382,7 +427,11 @@ export const updateAdminExpense = async (req, res) => {
     // Only approvers may re-assign the department or move the approval status.
     if (approver && department !== undefined) expense.department = department;
     if (category !== undefined) expense.category = category;
-    if (expenseHead !== undefined) expense.expenseHead = expenseHead;
+    if (expenseHead !== undefined) {
+      const headErr = await checkHead(expenseHead);
+      if (headErr) return res.status(400).json({ message: headErr });
+      expense.expenseHead = expenseHead;
+    }
     if (vendor !== undefined) expense.vendor = vendor;
     if (costTag !== undefined) expense.costTag = costTag;
     if (isRecurring !== undefined) expense.isRecurring = isRecurring === true || isRecurring === 'true';
@@ -437,6 +486,15 @@ export const verifyAdminExpense = async (req, res) => {
     expense.status = status;
     expense.approvedBy = req.user?._id || null;
     expense.approvedAt = status !== 'pending' ? new Date() : null;
+
+    // Which bank / cash account paid it (approval popup).
+    if (status === 'approved') {
+      const err = await applyMoneyAccount(expense, req.body, {
+        modeField: 'paymentMethod',
+        modes: ADMIN_PAYMENT_METHODS,
+      });
+      if (err) return res.status(400).json({ message: err });
+    }
 
     await expense.save();
 

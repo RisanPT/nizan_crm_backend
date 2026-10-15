@@ -111,6 +111,22 @@ export const getCampaigns = async (req, res) => {
   }
 };
 
+// @route GET /api/marketing/campaigns/options
+// Lightweight list for the lead form's campaign picker. Anyone who can add a
+// lead needs it (sales tag their leads), so no role gate — but only names, no
+// spend/revenue/ROI.
+export const getCampaignOptions = async (req, res) => {
+  try {
+    const docs = await Campaign.find({})
+      .select('title channel status')
+      .sort({ startDate: -1, createdAt: -1 })
+      .lean();
+    res.json(docs);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const clean = (b) => ({
   title: String(b.title ?? '').trim(),
   channel: String(b.channel ?? '').trim(),

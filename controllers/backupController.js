@@ -15,7 +15,7 @@ const DEPARTMENT_COLLECTIONS = {
   finance: ['Asset', 'BankAccount', 'Budget', 'JournalEntry', 'ChartOfAccount',
     'MonthlyTarget', 'CeoDecision', 'DepartmentReport'],
   hr: ['Employee', 'Attendance', 'HraRecord', 'Salary', 'SalaryIncrement',
-    'StaffKit', 'SlotCapacity'],
+    'StaffKit', 'KitMovement', 'SlotCapacity'],
   marketing: ['Competitor', 'CompetitorSnapshot', 'ScoringConfig', 'ContentItem'],
   it: ['Project', 'ITTask', 'Ticket'],
   fleet: ['Vehicle', 'FuelExpense', 'AccidentReport', 'ServiceReminder',

@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 const collectionSchema = mongoose.Schema(
   {
@@ -71,6 +72,8 @@ const collectionSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // Bank / cash account chosen when Accounts verified it.
+    ...moneyAccountFields,
   },
   {
     timestamps: true,

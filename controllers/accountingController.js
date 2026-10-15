@@ -1,5 +1,11 @@
 import mongoose from 'mongoose';
-import ChartOfAccount, { naturalSide } from '../models/ChartOfAccount.js';
+import ChartOfAccount, {
+  naturalSide,
+  ACCOUNT_TYPES,
+  accountTypeOf,
+  resolveAccountType,
+  nextAccountCode,
+} from '../models/ChartOfAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
 import { EXPENSE_HEADS } from '../models/AdminExpense.js';
 import Collection from '../models/Collection.js';
@@ -11,6 +17,11 @@ import SalesReturn from '../models/SalesReturn.js';
 import Booking from '../models/Booking.js';
 import ArtistPayout from '../models/ArtistPayout.js';
 import Purchase from '../models/Purchase.js';
+import Expense from '../models/Expense.js';
+import Subscription from '../models/Subscription.js';
+import Trial from '../models/Trial.js';
+import CashTransaction from '../models/CashTransaction.js';
+import { liveCashBankTotals } from './bankAccountController.js';
 import GstSetting from '../models/GstSetting.js';
 import AccountingSetting from '../models/AccountingSetting.js';
 import {
@@ -23,7 +34,7 @@ import {
   isLocked,
 } from '../services/posting.js';
 
-const SOURCE_MODELS = { Collection, AdminExpense, FuelExpense, Salary, HraRecord, SalesReturn, Booking, ArtistPayout };
+const SOURCE_MODELS = { Collection, AdminExpense, FuelExpense, Expense, CashTransaction, Salary, HraRecord, SalesReturn, Booking, BookingAdvance: Booking, ArtistPayout, Purchase, PurchasePayment: Purchase };
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
@@ -113,7 +124,7 @@ const seedAccounts = async (req, res) => {
     );
     const toInsert = seed
       .filter((a) => !existing.has(a.code))
-      .map((a) => ({ ...a, isSystem: true }));
+      .map((a) => ({ ...a, accountType: resolveAccountType(a), isSystem: true }));
     if (toInsert.length) await ChartOfAccount.insertMany(toInsert);
     res.json({ inserted: toInsert.length, total: existing.size + toInsert.length });
   } catch (error) {
@@ -131,11 +142,37 @@ const getAccounts = async (req, res) => {
     const q = {};
     if (req.query.nature && req.query.nature !== 'all') q.nature = req.query.nature;
     if (req.query.status && req.query.status !== 'all') q.status = req.query.status;
-    const accounts = await ChartOfAccount.find(q).sort({ code: 1 });
-    res.json(accounts);
+    const accounts = await ChartOfAccount.find(q).sort({ code: 1 }).lean();
+    res.json(accounts.map(withAccountType));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+// Every account goes out with its Account Type filled in — stored, or derived
+// for accounts saved before the field existed.
+const withAccountType = (a) => {
+  const obj = typeof a.toObject === 'function' ? a.toObject() : a;
+  return { ...obj, accountType: resolveAccountType(obj) };
+};
+
+// @desc    Account Type master (grouped under each nature)
+// @route   GET /api/accounting/account-types
+const getAccountTypes = async (req, res) => {
+  res.json(ACCOUNT_TYPES.map(({ key, label, nature }) => ({ key, label, nature })));
+};
+
+// When the form sends an Account Type, it decides the nature and the
+// cash / bank / party role. Returns an error message for an unknown type.
+const applyAccountType = (data, typeKey) => {
+  const t = accountTypeOf(typeKey);
+  if (!t) return 'Unknown account type';
+  data.accountType = t.key;
+  data.nature = t.nature;
+  data.isCash = t.key === 'cash';
+  data.isBank = t.key === 'bank';
+  data.isParty = t.key === 'accounts_receivable' || t.key === 'accounts_payable';
+  return null;
 };
 
 const cleanAccount = (b) => ({
@@ -157,15 +194,21 @@ const createAccount = async (req, res) => {
     return res.status(403).json({ message: 'No finance access' });
   }
   try {
-    const code = String(req.body.code ?? '').trim();
     const data = cleanAccount(req.body);
-    if (!code || !data.name || !data.nature) {
-      return res.status(400).json({ message: 'Code, name and nature are required' });
+    if (req.body.accountType) {
+      const err = applyAccountType(data, req.body.accountType);
+      if (err) return res.status(400).json({ message: err });
     }
+    if (!data.name || !data.nature) {
+      return res.status(400).json({ message: 'Account type and name are required' });
+    }
+    const code =
+      String(req.body.code ?? '').trim() ||
+      (await nextAccountCode(data.accountType || resolveAccountType(data)));
     const exists = await ChartOfAccount.findOne({ code });
     if (exists) return res.status(400).json({ message: `Account code ${code} already exists` });
     const account = await ChartOfAccount.create({ ...data, code, createdBy: req.user?._id || null });
-    res.status(201).json(account);
+    res.status(201).json(withAccountType(account));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -178,7 +221,18 @@ const updateAccount = async (req, res) => {
   try {
     const account = await ChartOfAccount.findById(req.params.id);
     if (!account) return res.status(404).json({ message: 'Account not found' });
-    Object.assign(account, cleanAccount({ ...account.toObject(), ...req.body }));
+    const data = cleanAccount({ ...account.toObject(), ...req.body });
+    if (req.body.accountType) {
+      const err = applyAccountType(data, req.body.accountType);
+      if (err) return res.status(400).json({ message: err });
+      // Seeded accounts keep their nature (postings depend on it).
+      if (account.isSystem && data.nature !== account.nature) {
+        return res
+          .status(400)
+          .json({ message: 'A system account can only move to a type of the same nature.' });
+      }
+    }
+    Object.assign(account, data);
     // `code` is editable on the COA form but cleanAccount doesn't carry it, so a
     // code edit was silently reverted. Apply it here with a uniqueness guard.
     if (req.body.code !== undefined) {
@@ -190,7 +244,7 @@ const updateAccount = async (req, res) => {
       }
     }
     await account.save();
-    res.json(account);
+    res.json(withAccountType(account));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -389,6 +443,158 @@ const accountMovements = async ({ from, to } = {}) => {
 // @desc    Profit & Loss for a period (income − expense). Nominal accounts, so
 //          no opening balances — pure period movement.
 // @route   GET /api/accounting/profit-loss
+// ── Cash Flow (from the books) ───────────────────────────────────────────────
+// Direct method over the ledger: every voucher that moves a Cash / Bank account
+// is split across its other lines (pro rata) and grouped by what that account
+// is — operating, investing or financing. Cash ↔ bank moves are transfers.
+const CASH_FLOW_SECTION = {
+  fixed_asset: 'investing',
+  equity: 'financing',
+  non_current_liability: 'financing',
+  other_liability: 'financing',
+};
+const CASH_FLOW_LABELS = {
+  operating: 'Operating activities',
+  investing: 'Investing activities',
+  financing: 'Financing activities',
+};
+
+// @desc    Cash flow statement from the ledger for a period
+// @route   GET /api/accounting/cash-flow?from=YYYY-MM-DD&to=YYYY-MM-DD
+const getCashFlow = async (req, res) => {
+  if (!canManageFinance(req.user)) {
+    return res.status(403).json({ message: 'No finance access' });
+  }
+  try {
+    const start = req.query.from ? new Date(`${req.query.from}T00:00:00.000+05:30`) : null;
+    const end = req.query.to ? new Date(`${req.query.to}T23:59:59.999+05:30`) : null;
+    const accounts = await ChartOfAccount.find({}).lean();
+    const byId = new Map(accounts.map((a) => [String(a._id), { ...a, type: resolveAccountType(a) }]));
+    const cashAccs = accounts.filter((a) => ['cash', 'bank'].includes(byId.get(String(a._id)).type));
+    const cashIds = new Set(cashAccs.map((a) => String(a._id)));
+    const cashObjIds = cashAccs.map((a) => a._id);
+
+    const signedOpening = (a) => (a.openingType === 'cr' ? -1 : 1) * (Number(a.openingBalance) || 0);
+    // Per cash/bank account: opening (before the period) and in / out within it.
+    const acct = new Map(cashAccs.map((a) => [String(a._id), { opening: signedOpening(a), in: 0, out: 0 }]));
+    if (start) {
+      const before = await JournalEntry.aggregate([
+        { $match: { status: 'posted', date: { $lt: start }, 'lines.account': { $in: cashObjIds } } },
+        { $unwind: '$lines' },
+        { $match: { 'lines.account': { $in: cashObjIds } } },
+        { $group: { _id: '$lines.account', dr: { $sum: '$lines.debit' }, cr: { $sum: '$lines.credit' } } },
+      ]);
+      for (const b of before) {
+        const row = acct.get(String(b._id));
+        if (row) row.opening += (b.dr || 0) - (b.cr || 0);
+      }
+    }
+
+    const match = { status: 'posted', 'lines.account': { $in: cashObjIds } };
+    if (start || end) {
+      match.date = {};
+      if (start) match.date.$gte = start;
+      if (end) match.date.$lte = end;
+    }
+    const entries = await JournalEntry.find(match).select('lines').lean();
+
+    const items = new Map(); // accountId → { in, out }
+    let transfers = 0;
+    for (const e of entries) {
+      let cashNet = 0;
+      const others = [];
+      for (const l of e.lines) {
+        const id = String(l.account);
+        if (cashIds.has(id)) {
+          cashNet += (l.debit || 0) - (l.credit || 0);
+          const row = acct.get(id);
+          row.in += l.debit || 0;
+          row.out += l.credit || 0;
+        } else {
+          others.push(l);
+        }
+      }
+      if (!others.length) {
+        // Only cash / bank lines: money moved between our own accounts.
+        transfers += e.lines.reduce((sum, l) => sum + (l.debit || 0), 0);
+        continue;
+      }
+      if (Math.abs(cashNet) < 0.005) continue;
+      const weight = others.reduce((sum, l) => sum + (l.debit || 0) + (l.credit || 0), 0) || 1;
+      for (const l of others) {
+        const share = (cashNet * ((l.debit || 0) + (l.credit || 0))) / weight;
+        const id = String(l.account);
+        if (!items.has(id)) items.set(id, { in: 0, out: 0 });
+        const it = items.get(id);
+        if (share >= 0) it.in += share;
+        else it.out -= share;
+      }
+    }
+
+    const sections = Object.keys(CASH_FLOW_LABELS).map((key) => ({
+      key,
+      label: CASH_FLOW_LABELS[key],
+      inflow: 0,
+      outflow: 0,
+      net: 0,
+      items: [],
+    }));
+    const sectionOf = (key) => sections.find((x) => x.key === key);
+    for (const [id, v] of items) {
+      const a = byId.get(id);
+      const sec = sectionOf(CASH_FLOW_SECTION[a?.type] || 'operating');
+      sec.items.push({
+        accountId: id,
+        code: a?.code || '',
+        name: a?.name || 'Unknown account',
+        accountType: a?.type || '',
+        in: round2(v.in),
+        out: round2(v.out),
+        net: round2(v.in - v.out),
+      });
+      sec.inflow += v.in;
+      sec.outflow += v.out;
+    }
+    for (const sec of sections) {
+      sec.items.sort((x, y) => Math.abs(y.net) - Math.abs(x.net));
+      sec.inflow = round2(sec.inflow);
+      sec.outflow = round2(sec.outflow);
+      sec.net = round2(sec.inflow - sec.outflow);
+    }
+
+    const accountRows = cashAccs.map((a) => {
+      const row = acct.get(String(a._id));
+      return {
+        accountId: a._id,
+        code: a.code,
+        name: a.name,
+        accountType: byId.get(String(a._id)).type,
+        opening: round2(row.opening),
+        in: round2(row.in),
+        out: round2(row.out),
+        closing: round2(row.opening + row.in - row.out),
+      };
+    });
+    const opening = round2(accountRows.reduce((sum, a) => sum + a.opening, 0));
+    const inflow = round2(sections.reduce((sum, x) => sum + x.inflow, 0));
+    const outflow = round2(sections.reduce((sum, x) => sum + x.outflow, 0));
+    res.json({
+      from: req.query.from || null,
+      to: req.query.to || null,
+      opening,
+      inflow,
+      outflow,
+      net: round2(inflow - outflow),
+      closing: round2(accountRows.reduce((sum, a) => sum + a.closing, 0)),
+      transfers: round2(transfers),
+      sections,
+      accounts: accountRows,
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 const getProfitAndLoss = async (req, res) => {
   if (!canManageFinance(req.user)) {
     return res.status(403).json({ message: 'No finance access' });
@@ -552,6 +758,48 @@ const buildAging = (items, asOf) => {
   };
 };
 
+const INACTIVE_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
+const isActiveBooking = (b) => !INACTIVE_BOOKING.includes(String(b.status || '').toLowerCase());
+
+// What a booking still owes — the same rule as the app's Booking.balanceDue:
+// price less discount, the advance taken at booking, and verified collections.
+const bookingBilled = (b) => round2((b.totalPrice || 0) - (b.discountAmount || 0));
+const bookingReceived = (b) => round2((b.advanceAmount || 0) + (b.collectedAmount || 0));
+
+const receivableItems = async (asOf) => {
+  const bookings = await Booking.find({})
+    .select('customerName phone totalPrice discountAmount advanceAmount collectedAmount bookingDate serviceStart createdAt status')
+    .limit(20000)
+    .lean();
+  const items = [];
+  for (const b of bookings) {
+    if (!isActiveBooking(b)) continue;
+    const amount = round2(bookingBilled(b) - bookingReceived(b));
+    if (amount <= 0.5) continue;
+    // The balance is due by the event (serviceStart); overdue once it passes.
+    const due = b.serviceStart || b.bookingDate || b.createdAt;
+    items.push({ name: b.customerName || 'Unknown', phone: b.phone || '', amount, days: daysTo(due, asOf) });
+  }
+  return items;
+};
+
+const payableItems = async (asOf) => {
+  const purchases = await Purchase.find({ paid: { $ne: true } })
+    .populate('vendor', 'name')
+    .select('supplier vendor total gstAmount amountPaid paid date dueDate')
+    .limit(20000)
+    .lean();
+  const items = [];
+  for (const p of purchases) {
+    const grand = round2((p.total || 0) + (p.gstAmount || 0));
+    const amount = round2(grand - (p.amountPaid || 0));
+    if (amount <= 0.5) continue;
+    const name = (p.vendor && p.vendor.name) || p.supplier || 'Unknown vendor';
+    items.push({ name, phone: '', amount, days: daysTo(p.dueDate || p.date, asOf) });
+  }
+  return items;
+};
+
 // @desc    Receivables aging — who owes us, from bookings' unpaid balance.
 // @route   GET /api/accounting/receivables
 const getReceivables = async (req, res) => {
@@ -560,21 +808,7 @@ const getReceivables = async (req, res) => {
   }
   try {
     const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
-    const bookings = await Booking.find({})
-      .select('customerName phone totalPrice collectedAmount bookingDate serviceStart createdAt status')
-      .limit(20000)
-      .lean();
-    const items = [];
-    for (const b of bookings) {
-      const st = String(b.status || '').toLowerCase();
-      if (['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'].includes(st)) continue;
-      const amount = round2((b.totalPrice || 0) - (b.collectedAmount || 0));
-      if (amount <= 0.5) continue;
-      // The balance is due by the event (serviceStart); overdue once it passes.
-      const due = b.serviceStart || b.bookingDate || b.createdAt;
-      items.push({ name: b.customerName || 'Unknown', phone: b.phone || '', amount, days: daysTo(due, asOf) });
-    }
-    res.json(buildAging(items, asOf));
+    res.json(buildAging(await receivableItems(asOf), asOf));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -588,20 +822,209 @@ const getPayables = async (req, res) => {
   }
   try {
     const asOf = req.query.asOf ? new Date(req.query.asOf) : new Date();
-    const purchases = await Purchase.find({ paid: { $ne: true } })
-      .populate('vendor', 'name')
-      .select('supplier vendor total gstAmount amountPaid paid date dueDate')
-      .limit(20000)
-      .lean();
-    const items = [];
-    for (const p of purchases) {
-      const grand = round2((p.total || 0) + (p.gstAmount || 0));
-      const amount = round2(grand - (p.amountPaid || 0));
-      if (amount <= 0.5) continue;
-      const name = (p.vendor && p.vendor.name) || p.supplier || 'Unknown vendor';
-      items.push({ name, phone: '', amount, days: daysTo(p.dueDate || p.date, asOf) });
+    res.json(buildAging(await payableItems(asOf), asOf));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ── Combined Accounts Dashboard ──────────────────────────────────────────────
+// One company-wide income vs expense view for a period (no Operations /
+// Administrative split), plus outstanding receivables & payables. Only money
+// that has cleared approval counts; anything still awaiting approval is
+// reported separately under `pending`.
+
+// The dashboard is also visible to roles granted `payables.dashboard`, not just
+// the finance roles, so it gets its own check.
+const canSeeAccountsDashboard = (user) =>
+  canManageFinance(user) ||
+  (user?.permissions || []).some((p) => p === 'payables' || p === 'payables.dashboard');
+
+// 'YYYY-MM-DD' → start / end of that day in IST. Falls back to [fallback].
+const istDayStart = (s, fallback) => (s ? new Date(`${s}T00:00:00.000+05:30`) : fallback);
+const istDayEnd = (s, fallback) => (s ? new Date(`${s}T23:59:59.999+05:30`) : fallback);
+
+const currentIstMonth = () => {
+  const ist = new Date(Date.now() + 330 * 60 * 1000);
+  const y = ist.getUTCFullYear();
+  const m = ist.getUTCMonth();
+  const pad = (n) => String(n).padStart(2, '0');
+  const last = new Date(Date.UTC(y, m + 1, 0)).getUTCDate();
+  return { from: `${y}-${pad(m + 1)}-01`, to: `${y}-${pad(m + 1)}-${pad(last)}` };
+};
+
+const sumMatch = async (Model, match, field) => {
+  const [r] = await Model.aggregate([
+    { $match: match },
+    { $group: { _id: null, amount: { $sum: { $ifNull: [`$${field}`, 0] } }, count: { $sum: 1 } } },
+  ]);
+  return { amount: round2(r?.amount || 0), count: r?.count || 0 };
+};
+
+const agingSummary = (report) => ({
+  totalOutstanding: report.totalOutstanding,
+  totalOverdue: report.totalOverdue,
+  totalNotYetDue: report.totalNotYetDue,
+  buckets: report.buckets,
+  partyCount: report.parties.length,
+  top: report.parties.slice(0, 5).map((p) => ({
+    name: p.name,
+    phone: p.phone,
+    outstanding: p.outstanding,
+    overdue: p.overdue,
+    oldestDays: p.oldestDays,
+  })),
+});
+
+// @desc    Combined accounts dashboard summary for a period
+// @route   GET /api/accounting/dashboard-summary?from=YYYY-MM-DD&to=YYYY-MM-DD
+const getDashboardSummary = async (req, res) => {
+  if (!canSeeAccountsDashboard(req.user)) {
+    return res.status(403).json({ message: 'No access to the accounts dashboard' });
+  }
+  try {
+    const month = currentIstMonth();
+    const fromStr = req.query.from || month.from;
+    const toStr = req.query.to || month.to;
+    const start = istDayStart(fromStr);
+    const end = istDayEnd(toStr);
+    if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || start > end) {
+      return res.status(400).json({ message: 'Invalid date range' });
     }
-    res.json(buildAging(items, asOf));
+    const inRange = { $gte: start, $lte: end };
+    const within = (d) => d && new Date(d) >= start && new Date(d) <= end;
+    const asOf = new Date();
+
+    const [
+      collections,
+      advances,
+      trials,
+      admin,
+      salaries,
+      hra,
+      artistExp,
+      payouts,
+      fleet,
+      purchases,
+      subs,
+      refunds,
+      pendCollections,
+      pendAdmin,
+      pendArtistExp,
+      pendFleet,
+      recvItems,
+      payItems,
+      cashTxns,
+      cashBank,
+    ] = await Promise.all([
+      // Trial-only collections are left out: the trial's fee is counted below.
+      sumMatch(Collection, { status: 'verified', date: inRange, bookingId: { $ne: null } }, 'amount'),
+      sumMatch(
+        Booking,
+        { createdAt: inRange, advanceAmount: { $gt: 0 }, status: { $nin: INACTIVE_BOOKING } },
+        'advanceAmount'
+      ),
+      Trial.find({ trialDate: inRange, status: { $ne: 'cancelled' } }).select('trialItems.price').lean(),
+      sumMatch(AdminExpense, { status: 'approved', source: { $ne: 'hra' }, date: inRange }, 'amount'),
+      Salary.find({ status: 'paid' }).select('netAmount paymentDate month year').lean(),
+      sumMatch(HraRecord, { status: 'paid', date: inRange }, 'amount'),
+      sumMatch(Expense, { status: 'verified', date: inRange }, 'amount'),
+      ArtistPayout.find({ status: 'paid' }).select('amount paidAt date').lean(),
+      sumMatch(FuelExpense, { status: 'approved', date: inRange }, 'totalAmount'),
+      Purchase.find({ date: inRange }).select('total gstAmount').lean(),
+      Subscription.find({ status: 'active' }).select('cost billingCycle').lean(),
+      sumMatch(SalesReturn, { status: { $in: ['approved', 'processed'] }, date: inRange }, 'amount'),
+      sumMatch(Collection, { status: 'pending', date: inRange }, 'amount'),
+      sumMatch(AdminExpense, { status: 'pending', source: { $ne: 'hra' }, date: inRange }, 'amount'),
+      sumMatch(Expense, { status: 'pending', date: inRange }, 'amount'),
+      sumMatch(FuelExpense, { status: 'pending', date: inRange }, 'totalAmount'),
+      receivableItems(asOf),
+      payableItems(asOf),
+      // Accounts' own Cash In / Out entries, split by the booked account's
+      // nature (only income / expense count; capital, loans etc. don't).
+      CashTransaction.aggregate([
+        { $match: { type: { $in: ['in', 'out'] }, date: inRange } },
+        { $lookup: { from: 'chartofaccounts', localField: 'account', foreignField: '_id', as: 'acc' } },
+        { $unwind: '$acc' },
+        { $match: { 'acc.nature': { $in: ['income', 'expense'] } } },
+        { $group: { _id: '$acc.nature', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
+      ]),
+      liveCashBankTotals(),
+    ]);
+    const cashBy = Object.fromEntries(cashTxns.map((c) => [c._id, c]));
+    const cashIncome = { amount: round2(cashBy.income?.amount), count: cashBy.income?.count || 0 };
+    const cashExpense = { amount: round2(cashBy.expense?.amount), count: cashBy.expense?.count || 0 };
+
+    const trialFees = {
+      amount: round2(trials.reduce((s, t) => s + (t.trialItems || []).reduce((a, i) => a + (i.price || 0), 0), 0)),
+      count: trials.length,
+    };
+    const paidSalaries = salaries.filter((s) =>
+      within(s.paymentDate || new Date(s.year, (s.month || 1) - 1, 15))
+    );
+    const salary = {
+      amount: round2(paidSalaries.reduce((s, x) => s + (x.netAmount || 0), 0)),
+      count: paidSalaries.length,
+    };
+    const paidPayouts = payouts.filter((p) => within(p.paidAt || p.date));
+    const artistPayouts = {
+      amount: round2(paidPayouts.reduce((s, p) => s + (p.amount || 0), 0)),
+      count: paidPayouts.length,
+    };
+    const vendorBills = {
+      amount: round2(purchases.reduce((s, p) => s + (p.total || 0) + (p.gstAmount || 0), 0)),
+      count: purchases.length,
+    };
+    // Subscriptions record a plan cost, not individual payments, so this is the
+    // active plans' monthly run-rate scaled to the length of the period.
+    const perMonth = subs.reduce((s, x) => {
+      const c = Number(x.cost) || 0;
+      return s + (x.billingCycle === 'monthly' ? c : x.billingCycle === 'quarterly' ? c / 3 : c / 12);
+    }, 0);
+    const periodMonths = (end - start + 1) / (86400000 * (365 / 12));
+    const subscriptions = { amount: round2(perMonth * periodMonths), count: subs.length, estimated: true };
+
+    const line = (key, label, v, extra = {}) => ({ key, label, amount: v.amount, count: v.count, ...extra });
+    const incomeItems = [
+      line('collections', 'Booking collections', collections),
+      line('advances', 'Booking advances', advances),
+      line('trial_fees', 'Trial fees', trialFees),
+      line('other_income', 'Other income (Cash In)', cashIncome),
+    ];
+    const expenseItems = [
+      line('salaries', 'Salaries', salary),
+      line('admin_expenses', 'Office & admin expenses', admin),
+      line('artist_expenses', 'Artist expenses', artistExp),
+      line('artist_payouts', 'Artist payouts', artistPayouts),
+      line('fleet', 'Fleet & fuel', fleet),
+      line('hra', 'HRA', hra),
+      line('vendor_bills', 'Vendor bills', vendorBills),
+      line('subscriptions', 'Subscriptions', subscriptions, { estimated: true }),
+      line('refunds', 'Customer refunds', refunds),
+      line('cash_out', 'Other expenses (Cash Out)', cashExpense),
+    ];
+    const pendingItems = [
+      line('collections', 'Collections to verify', pendCollections),
+      line('admin_expenses', 'Admin expenses to approve', pendAdmin),
+      line('artist_expenses', 'Artist expenses to verify', pendArtistExp),
+      line('fleet', 'Fleet expenses to approve', pendFleet),
+    ];
+    const total = (items) => round2(items.reduce((s, i) => s + i.amount, 0));
+    const incomeTotal = total(incomeItems);
+    const expenseTotal = total(expenseItems);
+
+    res.json({
+      from: fromStr,
+      to: toStr,
+      income: { total: incomeTotal, items: incomeItems },
+      expense: { total: expenseTotal, items: expenseItems },
+      net: round2(incomeTotal - expenseTotal),
+      pending: { total: total(pendingItems), items: pendingItems },
+      // Live balances, as on the Bank & Cash Balance screen (today, not the period).
+      cashBank,
+      receivables: agingSummary(buildAging(recvItems, asOf)),
+      payables: agingSummary(buildAging(payItems, asOf)),
+    });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -654,22 +1077,17 @@ const getPartyStatement = async (req, res) => {
       const q = { customerName: name };
       if (phone) q.phone = phone;
       const bookings = await Booking.find(q)
-        .select('type service customerName phone totalPrice collectedAmount bookingDate createdAt status')
+        .select('type service customerName phone totalPrice discountAmount advanceAmount collectedAmount bookingDate createdAt status')
         .limit(5000)
         .lean();
-      const active = bookings.filter(
-        (b) =>
-          !['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'].includes(
-            String(b.status || '').toLowerCase()
-          )
-      );
+      const active = bookings.filter(isActiveBooking);
       active.sort(
         (a, b) => new Date(a.bookingDate || a.createdAt || 0) - new Date(b.bookingDate || b.createdAt || 0)
       );
       let running = 0;
       for (const b of active) {
-        const inv = round2(b.totalPrice || 0);
-        const rec = round2(b.collectedAmount || 0);
+        const inv = bookingBilled(b);
+        const rec = bookingReceived(b);
         const balance = round2(inv - rec);
         running = round2(running + balance);
         invoiced += inv;
@@ -903,7 +1321,7 @@ const getGstr1 = async (req, res) => {
       if (to) q.bookingDate.$lte = new Date(to);
     }
     const bookings = await Booking.find(q)
-      .select('bookingNumber customerName totalPrice bookingDate status')
+      .select('bookingNumber invoiceNumber customerName totalPrice bookingDate status')
       .limit(20000)
       .lean();
 
@@ -923,7 +1341,7 @@ const getGstr1 = async (req, res) => {
       const igst = gst.interState ? tax : 0;
       const total = round2(taxable + tax);
       rows.push({
-        invoiceNo: b.bookingNumber || '',
+        invoiceNo: b.invoiceNumber || b.bookingNumber || '',
         customer: b.customerName || '',
         date: b.bookingDate,
         rate: gst.rate,
@@ -971,6 +1389,11 @@ const backfillLedger = async (req, res) => {
     // 1) Load the chart of accounts once (code → id).
     const accounts = await ChartOfAccount.find({}).select('code').lean();
     const codeToId = new Map(accounts.map((a) => [a.code, String(a._id)]));
+    // Lines may also name a ledger directly (the bank / cash account chosen
+    // in the approval popup).
+    const knownIds = new Set(accounts.map((a) => String(a._id)));
+    const idFor = (l) =>
+      l.accountId ? (knownIds.has(String(l.accountId)) ? String(l.accountId) : null) : codeToId.get(l.code);
 
     // 2) Build every entry in memory (no per-doc DB calls).
     const summary = {};
@@ -978,7 +1401,16 @@ const backfillLedger = async (req, res) => {
     for (const model of requested) {
       const Model = SOURCE_MODELS[model];
       if (!Model) continue;
-      const docs = await Model.find({}).limit(20000).lean();
+      // Vendor payments live inside their bill — flatten them into one doc
+      // per payment (carrying the bill's owner / supplier) for the builder.
+      const docs =
+        model === 'PurchasePayment'
+          ? (await Purchase.find({}).populate('vendor', 'name').limit(20000).lean()).flatMap((b) =>
+              (b.payments || [])
+                .filter((x) => x._id)
+                .map((x) => ({ ...x, owner: b.owner, supplierName: b.vendor?.name || b.supplier || '' }))
+            )
+          : await Model.find({}).limit(20000).lean();
       let posted = 0;
       for (const d of docs) {
         const spec = buildSpecFor(model, d);
@@ -988,7 +1420,7 @@ const backfillLedger = async (req, res) => {
         let cr = 0;
         let ok = true;
         for (const l of spec.rawLines) {
-          const id = codeToId.get(l.code);
+          const id = idFor(l);
           if (!id) { ok = false; break; }
           const debit = round2(l.debit);
           const credit = round2(l.credit);
@@ -1055,6 +1487,7 @@ const backfillLedger = async (req, res) => {
 export {
   seedAccounts,
   getAccounts,
+  getAccountTypes,
   createAccount,
   updateAccount,
   deleteAccount,
@@ -1063,9 +1496,11 @@ export {
   voidJournalEntry,
   getTrialBalance,
   getProfitAndLoss,
+  getCashFlow,
   getBalanceSheet,
   getReceivables,
   getPayables,
+  getDashboardSummary,
   getPartyStatement,
   getAccountLedger,
   getAccountingSettings,

@@ -236,9 +236,17 @@ const bookingSchema = mongoose.Schema(
     },
     tripStatus: {
       type: String,
-      enum: ['unassigned', 'assigned', 'inspection_pending', 'in_progress', 'completed'],
+      // 'accident' is set by fleetController.reportAccident; without it in the
+      // enum, every later save of that booking failed validation.
+      enum: ['unassigned', 'assigned', 'inspection_pending', 'in_progress', 'completed', 'accident'],
       default: 'unassigned',
     },
+    // Vehicle odometer readings entered by the driver: at trip start (with the
+    // pre-trip inspection) and at trip completion. Distance = endKm − startKm.
+    startKm: { type: Number, default: null, min: 0 },
+    endKm: { type: Number, default: null, min: 0 },
+    tripStartedAt: { type: Date, default: null },
+    tripCompletedAt: { type: Date, default: null },
     customerName: {
       type: String,
       required: true,
@@ -457,6 +465,28 @@ const bookingSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // ── Advance received at booking, verified by Accounts ──────────────────
+    // '' = booked before advance verification existed (not tracked);
+    // pending → verified posts a receipt for the advance into the chosen bank /
+    // cash account (services/posting.js, BookingAdvance builder).
+    advanceStatus: {
+      type: String,
+      enum: ['', 'pending', 'verified', 'rejected'],
+      default: '',
+    },
+    advanceMode: { type: String, default: '', trim: true },
+    advancePaymentRef: { type: String, default: '', trim: true },
+    advanceMoneyAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'BankAccount', default: null },
+    advanceLedgerAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
+    advanceVerifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    advanceVerifiedAt: { type: Date, default: null },
+    // ── Tax invoice number ────────────────────────────────────────────────
+    // Issued once, the moment the booking is fully paid (utils/invoiceNumber.js),
+    // e.g. "TN/26-27/0001" — sequential per Indian financial year. Never
+    // reassigned or cleared. Absent = not yet fully paid (no default so the
+    // sparse unique index skips unpaid bookings).
+    invoiceNumber: { type: String, unique: true, sparse: true, trim: true },
+    invoiceDate: { type: Date },
   },
   {
     timestamps: true,

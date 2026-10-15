@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 // A per-booking fee owed to an OUTSOURCE (freelance) artist for a job they
 // worked. This is the freelancer's compensation path — they are NOT on monthly
@@ -80,6 +81,8 @@ const artistPayoutSchema = mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    // Bank / cash account it was paid from (pay popup).
+    ...moneyAccountFields,
   },
   {
     timestamps: true,

@@ -17,6 +17,13 @@ const balanceEntrySchema = mongoose.Schema(
 const bankAccountSchema = mongoose.Schema(
   {
     name: { type: String, required: true, trim: true }, // label, e.g. "HDFC Current"
+    // 'cash' = cash in hand / petty cash; 'bank' = a bank account.
+    kind: { type: String, enum: ['bank', 'cash'], default: 'bank' },
+    // The Cash / Bank ledger (Chart of Accounts) this account's money posts to.
+    // When set, the live balance = the latest manual balance (closing balance
+    // on its as-of date) + ledger receipts − payments dated after that day.
+    // null = not linked yet: the manual balance is shown as-is.
+    ledger: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
     bankName: { type: String, default: '', trim: true },
     accountNumber: { type: String, default: '', trim: true },
     // The latest manually-entered balance and the date it is as of.

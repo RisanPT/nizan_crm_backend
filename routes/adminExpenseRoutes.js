@@ -2,6 +2,7 @@ import express from 'express';
 import {
   getAdminExpenses,
   getAdminExpenseStats,
+  getExpenseHeads,
   getAdminExpenseById,
   createAdminExpense,
   updateAdminExpense,
@@ -15,6 +16,7 @@ const router = express.Router();
 router.use(protect);
 
 router.route('/stats').get(getAdminExpenseStats);
+router.get('/heads', getExpenseHeads);
 router.route('/').get(getAdminExpenses).post(createAdminExpense);
 router.route('/:id').get(getAdminExpenseById).put(updateAdminExpense).delete(deleteAdminExpense);
 router.route('/:id/verify').put(verifyAdminExpense);

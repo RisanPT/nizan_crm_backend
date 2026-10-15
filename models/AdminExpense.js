@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 // Suggested department names for the UI dropdown. The stored `department`
 // field is a free string (not enum-locked) so department heads of ANY
@@ -96,10 +97,12 @@ const adminExpenseSchema = mongoose.Schema(
     },
     // Controlled expense head (ledger) code from EXPENSE_HEADS — the doc's
     // "no free-text heads" requirement. Optional for legacy rows.
+    // Any expense ledger in the Chart of Accounts (checked in the controller);
+    // EXPENSE_HEADS are the original seeded ones.
     expenseHead: {
       type: String,
-      enum: [...EXPENSE_HEAD_CODES, ''],
       default: '',
+      trim: true,
     },
     // Vendor / payee the money was paid to.
     vendor: {
@@ -200,6 +203,8 @@ const adminExpenseSchema = mongoose.Schema(
       default: null,
       index: true,
     },
+    // Bank / cash account chosen when Accounts approved it.
+    ...moneyAccountFields,
   },
   {
     timestamps: true,
