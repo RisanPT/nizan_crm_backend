@@ -966,6 +966,20 @@ export const getPaginatedBookings = async (req, res) => {
     if (createdBy && mongoose.Types.ObjectId.isValid(createdBy)) {
       baseMatch.createdBy = new mongoose.Types.ObjectId(createdBy);
     }
+    // Package filter — the booking uses this package on ANY of its lines: by
+    // package id, or by name for imported / older bookings that only carry the
+    // service name. Added via $and so it never clobbers the date $or above.
+    const packageId = String(req.query.packageId ?? '').trim();
+    if (packageId && mongoose.Types.ObjectId.isValid(packageId)) {
+      const pkgOid = new mongoose.Types.ObjectId(packageId);
+      const pkg = await ServicePackage.findById(pkgOid).select('name').lean();
+      const anyLine = [{ packageId: pkgOid }, { 'bookingItems.packageId': pkgOid }];
+      if (pkg?.name?.trim()) {
+        const nameRx = new RegExp(`^\\s*${escapeRegex(pkg.name.trim())}\\s*$`, 'i');
+        anyLine.push({ service: nameRx }, { 'bookingItems.service': nameRx });
+      }
+      baseMatch.$and = [...(baseMatch.$and || []), { $or: anyLine }];
+    }
     // (Optional) salesperson-credit filter, kept for report use.
     const salesPersonId = String(req.query.salesPersonId ?? '').trim();
     if (salesPersonId && mongoose.Types.ObjectId.isValid(salesPersonId)) {
