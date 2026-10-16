@@ -138,7 +138,7 @@ export const notFound = (req, res) => {
 export const errorHandler = (err, req, res, next) => {
   if (res.headersSent) return next(err);
 
-  let status = Number(err?.status || err?.statusCode) || 0;
+  let status = Number(err?.status || err?.statusCode || (res.statusCode >= 400 ? res.statusCode : 0)) || 0;
   let message = err?.message || GENERIC_500;
 
   if (err?.type === 'entity.parse.failed') {

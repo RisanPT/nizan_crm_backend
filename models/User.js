@@ -108,6 +108,20 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // Employee self-service (ESS) provisioning: when HR creates a login for an
+    // employee, the account starts with a random password and an emailed
+    // set-password link. These hold the hashed token + its expiry; cleared once
+    // the employee sets their own password.
+    passwordSetupToken: {
+      type: String,
+      default: null,
+      select: false,
+    },
+    passwordSetupExpires: {
+      type: Date,
+      default: null,
+      select: false,
+    },
   },
   {
     timestamps: true,

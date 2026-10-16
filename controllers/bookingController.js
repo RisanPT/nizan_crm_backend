@@ -1175,6 +1175,8 @@ export const createBooking = async (req, res) => {
     discountAmount,
     discountType,
     discountValue,
+    discountReason,
+    discountNote,
     assignedStaff = [],
     addons = [],
     selectedDates = [],
@@ -1450,6 +1452,7 @@ export const createBooking = async (req, res) => {
       discountAmount,
       discountType,
       discountValue,
+      discountReason: (discountReason ?? discountNote ?? '').toString().trim(),
       assignedStaff: summaryAssignedStaff,
       addons: normalizedAddons,
       bookingItems: normalizedBookingItems,
@@ -1579,6 +1582,8 @@ export const updateBooking = async (req, res) => {
       discountAmount,
       discountType,
       discountValue,
+      discountReason,
+      discountNote,
       assignedStaff,
       addons,
       selectedDates,
@@ -1781,6 +1786,9 @@ export const updateBooking = async (req, res) => {
     booking.discountAmount = discountAmount ?? booking.discountAmount;
     booking.discountType = discountType ?? booking.discountType;
     booking.discountValue = discountValue ?? booking.discountValue;
+    if (discountReason !== undefined || discountNote !== undefined) {
+      booking.discountReason = (discountReason ?? discountNote ?? '').toString().trim();
+    }
     booking.assignedStaff = finalAssignedStaff;
     booking.addons = addons != null ? normalizedAddons : booking.addons;
     booking.bookingItems = bookingItems != null ? finalBookingItems : booking.bookingItems;

@@ -221,139 +221,113 @@ export const getTimeboxDays = async (req, res) => {
 
 // ── POST /api/timebox/sync-employees ─────────────────────────────────────────
 /**
+ * Core synchronization worker.
  * Scan all Timebox employees, find matching CRM employee records by email or
  * name, and write back the `timeboxEmployeeId` + `timeboxName` onto the CRM
  * Employee document so future payroll runs use the permanent integer ID match.
  *
- * Safe to run multiple times (idempotent). Never creates new CRM employees.
- *
- * Returns a summary: { synced, alreadySynced, unmatched, conflicts }
+ * Safe to run multiple times (idempotent).
+ * Returns a summary: { ok, mode, created, synced, alreadySynced, unmatched, conflictCount, conflicts, results, message }
  */
-export const syncEmployees = async (req, res) => {
-  try {
-    const empRes = await timeboxFetch('employees');
-    const tbEmployees = empRes.data;
+export async function performTimeboxEmployeeSync() {
+  const empRes = await timeboxFetch('employees');
+  const tbEmployees = empRes.data || [];
 
-    // Build a fresh CRM index (by email + name — NOT by timeboxId yet, since
-    // this is the sync that establishes those bindings).
-    const crmEmps = await Employee.find({}).lean();
-    const byEmail = new Map();
-    const byName = new Map();
-    for (const e of crmEmps) {
-      if (e.email) byEmail.set(norm(e.email), e);
-      if (e.name) byName.set(norm(e.name), e);
+  // Build a fresh CRM index (by email + name — NOT by timeboxId yet, since
+  // this is the sync that establishes those bindings).
+  const crmEmps = await Employee.find({}).lean();
+  const byEmail = new Map();
+  const byName = new Map();
+  for (const e of crmEmps) {
+    if (e.email) byEmail.set(norm(e.email), e);
+    if (e.name) byName.set(norm(e.name), e);
+  }
+
+  // Map a Timebox department name → our Department entity id (by name or key).
+  const departments = await Department.find({}).lean();
+  const deptByName = new Map(departments.map((d) => [norm(d.name), d._id]));
+  const deptByKey = new Map(departments.map((d) => [d.key, d._id]));
+  const deptIdForTimebox = (tbDept) => {
+    const n = norm(tbDept);
+    return deptByName.get(n) || deptByKey.get(n) || null;
+  };
+
+  let synced = 0;
+  let created = 0;
+  let alreadySynced = 0;
+  let unmatched = 0;
+  const conflicts = [];
+  const results = [];
+
+  for (const tb of tbEmployees) {
+    const tbId = Number(tb.id);
+    const tbEmail = norm(tb.email || '');
+    const tbName = tb.full_name || tb.name || '';
+
+    // Attempt match: email first, then name
+    let crmMatch = tbEmail ? byEmail.get(tbEmail) : null;
+    let matchedBy = crmMatch ? 'email' : null;
+
+    if (!crmMatch && tbName) {
+      crmMatch = byName.get(norm(tbName));
+      if (crmMatch) matchedBy = 'name';
     }
 
-    // Map a Timebox department name → our Department entity id (by name or key).
-    const departments = await Department.find({}).lean();
-    const deptByName = new Map(departments.map((d) => [norm(d.name), d._id]));
-    const deptByKey = new Map(departments.map((d) => [d.key, d._id]));
-    const deptIdForTimebox = (tbDept) => {
-      const n = norm(tbDept);
-      return deptByName.get(n) || deptByKey.get(n) || null;
-    };
+    // No CRM match → CREATE the Timebox person as an administrative Employee,
+    // slotted into their department. This is how Timebox staff are saved into
+    // our DB and shown under the departments.
+    if (!crmMatch) {
+      const newEmp = await Employee.create({
+        name: tbName || tb.email || `Timebox #${tbId}`,
+        email: tb.email || '',
+        role: 'staff',
+        artistRole: 'staff',
+        category: categoryForDept(tb.department),
+        department: tb.department || 'Administrative',
+        departmentId: deptIdForTimebox(tb.department),
+        status: tb.active === false ? 'inactive' : 'active',
+        timeboxEmployeeId: tbId,
+        timeboxName: tbName,
+      });
+      created += 1;
+      results.push({
+        timeboxId: tbId,
+        timeboxName: tbName,
+        crmId: String(newEmp._id),
+        crmName: newEmp.name,
+        matched: true,
+        action: 'created',
+        department: newEmp.department,
+      });
+      continue;
+    }
 
-    let synced = 0;
-    let created = 0;
-    let alreadySynced = 0;
-    let unmatched = 0;
-    const conflicts = [];
-    const results = [];
+    // Check for conflicts: two Timebox employees binding to the same CRM employee
+    if (crmMatch.timeboxEmployeeId != null && Number(crmMatch.timeboxEmployeeId) !== tbId) {
+      conflicts.push({
+        timeboxId: tbId,
+        timeboxName: tbName,
+        crmName: crmMatch.name,
+        existingTimeboxId: crmMatch.timeboxEmployeeId,
+      });
+      results.push({
+        timeboxId: tbId,
+        timeboxName: tbName,
+        crmId: String(crmMatch._id),
+        crmName: crmMatch.name,
+        matched: false,
+        reason: 'conflict',
+      });
+      continue;
+    }
 
-    for (const tb of tbEmployees) {
-      const tbId = Number(tb.id);
-      const tbEmail = norm(tb.email || '');
-      const tbName = tb.full_name || tb.name || '';
-
-      // Attempt match: email first, then name
-      let crmMatch = tbEmail ? byEmail.get(tbEmail) : null;
-      let matchedBy = crmMatch ? 'email' : null;
-
-      if (!crmMatch && tbName) {
-        crmMatch = byName.get(norm(tbName));
-        if (crmMatch) matchedBy = 'name';
-      }
-
-      // No CRM match → CREATE the Timebox person as an administrative Employee,
-      // slotted into their department. This is how Timebox staff are saved into
-      // our DB and shown under the departments.
-      if (!crmMatch) {
-        const newEmp = await Employee.create({
-          name: tbName || tb.email || `Timebox #${tbId}`,
-          email: tb.email || '',
-          role: 'staff',
-          // Imported staff are administrative by default. `artistRole` is the
-          // real role classifier and its schema default is 'artist', so we MUST
-          // set it explicitly here — otherwise every imported admin/ops person
-          // is silently treated as an artist and leaks into artist pickers.
-          artistRole: 'staff',
-          category: categoryForDept(tb.department),
-          department: tb.department || 'Administrative',
-          departmentId: deptIdForTimebox(tb.department),
-          status: tb.active === false ? 'inactive' : 'active',
-          timeboxEmployeeId: tbId,
-          timeboxName: tbName,
-        });
-        created += 1;
-        results.push({
-          timeboxId: tbId,
-          timeboxName: tbName,
-          crmId: String(newEmp._id),
-          crmName: newEmp.name,
-          matched: true,
-          action: 'created',
-          department: newEmp.department,
-        });
-        continue;
-      }
-
-      // Check for conflicts: two Timebox employees binding to the same CRM employee
-      if (crmMatch.timeboxEmployeeId != null && Number(crmMatch.timeboxEmployeeId) !== tbId) {
-        conflicts.push({
-          timeboxId: tbId,
-          timeboxName: tbName,
-          crmName: crmMatch.name,
-          existingTimeboxId: crmMatch.timeboxEmployeeId,
-        });
-        results.push({
-          timeboxId: tbId,
-          timeboxName: tbName,
-          crmId: String(crmMatch._id),
-          crmName: crmMatch.name,
-          matched: false,
-          reason: 'conflict',
-        });
-        continue;
-      }
-
-      // Already synced with the same ID — just backfill the department if unset.
-      if (Number(crmMatch.timeboxEmployeeId) === tbId) {
-        if (!crmMatch.departmentId) {
-          const did = deptIdForTimebox(tb.department);
-          if (did) await Employee.findByIdAndUpdate(crmMatch._id, { departmentId: did });
-        }
-        alreadySynced += 1;
-        results.push({
-          timeboxId: tbId,
-          timeboxName: tbName,
-          crmId: String(crmMatch._id),
-          crmName: crmMatch.name,
-          matched: true,
-          matchedBy,
-          action: 'already_synced',
-        });
-        continue;
-      }
-
-      // Write the binding back to CRM (+ slot into their department if unset).
-      const patch = { timeboxEmployeeId: tbId, timeboxName: tbName };
+    // Already synced with the same ID — just backfill the department if unset.
+    if (Number(crmMatch.timeboxEmployeeId) === tbId) {
       if (!crmMatch.departmentId) {
         const did = deptIdForTimebox(tb.department);
-        if (did) patch.departmentId = did;
+        if (did) await Employee.findByIdAndUpdate(crmMatch._id, { departmentId: did });
       }
-      await Employee.findByIdAndUpdate(crmMatch._id, patch);
-
-      synced += 1;
+      alreadySynced += 1;
       results.push({
         timeboxId: tbId,
         timeboxName: tbName,
@@ -361,22 +335,49 @@ export const syncEmployees = async (req, res) => {
         crmName: crmMatch.name,
         matched: true,
         matchedBy,
-        action: 'synced',
+        action: 'already_synced',
       });
+      continue;
     }
 
-    res.json({
-      ok: true,
-      mode: timeboxMode(),
-      created,
-      synced,
-      alreadySynced,
-      unmatched,
-      conflictCount: conflicts.length,
-      conflicts,
-      results,
-      message: `Imported ${created} new staff, linked ${synced}, ${alreadySynced} already up to date${conflicts.length ? `, ${conflicts.length} conflicts` : ''}.`,
+    // Write the binding back to CRM (+ slot into their department if unset).
+    const patch = { timeboxEmployeeId: tbId, timeboxName: tbName };
+    if (!crmMatch.departmentId) {
+      const did = deptIdForTimebox(tb.department);
+      if (did) patch.departmentId = did;
+    }
+    await Employee.findByIdAndUpdate(crmMatch._id, patch);
+
+    synced += 1;
+    results.push({
+      timeboxId: tbId,
+      timeboxName: tbName,
+      crmId: String(crmMatch._id),
+      crmName: crmMatch.name,
+      matched: true,
+      matchedBy,
+      action: 'synced',
     });
+  }
+
+  return {
+    ok: true,
+    mode: timeboxMode(),
+    created,
+    synced,
+    alreadySynced,
+    unmatched,
+    conflictCount: conflicts.length,
+    conflicts,
+    results,
+    message: `Imported ${created} new staff, linked ${synced}, ${alreadySynced} already up to date${conflicts.length ? `, ${conflicts.length} conflicts` : ''}.`,
+  };
+}
+
+export const syncEmployees = async (req, res) => {
+  try {
+    const summary = await performTimeboxEmployeeSync();
+    res.json(summary);
   } catch (err) {
     sendTimeboxError(res, err, 'Timebox sync error');
   }

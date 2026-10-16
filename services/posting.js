@@ -357,6 +357,22 @@ const builders = {
     };
   },
 
+  // Paid staff reimbursement → Payment (expense debit, cash/bank credit).
+  ExpenseClaim: (d) => {
+    if (d.status !== 'paid') return null;
+    const amt = round2(d.amount);
+    if (amt <= 0) return null;
+    return {
+      voucherType: 'payment',
+      date: d.paidAt || d.date || d.updatedAt || d.createdAt,
+      narration: `Reimbursement · ${d.employeeName || ''} · ${d.title || ''}`.trim(),
+      rawLines: [
+        { code: '5010', debit: amt, credit: 0 },
+        { code: cashOrBank(d.paymentMethod), debit: 0, credit: amt },
+      ],
+    };
+  },
+
   // Refund to a bride → Credit note (Sales Return contra + refund paid).
   SalesReturn: (d) => {
     // Only a processed refund has left the bank / cash account.
