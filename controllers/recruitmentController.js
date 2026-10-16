@@ -351,10 +351,61 @@ const updateCandidate = asyncHandler(async (req, res) => {
 
 const deleteCandidate = asyncHandler(async (req, res) => {
   guard(req, res);
-  const cand = await Candidate.findByIdAndDelete(req.params.id);
+  const cand = await Candidate.findById(req.params.id);
   if (!cand) { res.status(404); throw new Error('Candidate not found'); }
-  await Offer.deleteMany({ candidateId: cand._id, status: { $in: ['draft', 'sent'] } });
+
+  const deleteLinked = req.query.deleteLinkedEmployee === 'true' || req.body?.deleteLinkedEmployee === true;
+
+  // Clean up offers for this candidate
+  const offers = await Offer.find({ candidateId: cand._id });
+  for (const offer of offers) {
+    if (deleteLinked && offer.employeeId) {
+      await Employee.findByIdAndDelete(offer.employeeId);
+    }
+  }
+
+  if (deleteLinked) {
+    await Onboarding.deleteMany({
+      $or: [
+        { candidateId: cand._id },
+        { employeeName: cand.name },
+      ],
+    });
+  }
+
+  await Offer.deleteMany({ candidateId: cand._id });
+  await Candidate.findByIdAndDelete(req.params.id);
+
   res.json({ message: 'Candidate removed', id: req.params.id });
+});
+
+const deleteOffer = asyncHandler(async (req, res) => {
+  guard(req, res);
+  const offer = await Offer.findById(req.params.id);
+  if (!offer) { res.status(404); throw new Error('Offer not found'); }
+
+  const deleteLinked = req.query.deleteLinkedEmployee === 'true' || req.body?.deleteLinkedEmployee === true;
+  if (deleteLinked && offer.employeeId) {
+    await Employee.findByIdAndDelete(offer.employeeId);
+    await Onboarding.deleteMany({
+      $or: [
+        { candidateId: offer.candidateId },
+        { employeeId: offer.employeeId },
+      ],
+    });
+  }
+
+  // If candidate was in 'offer' or 'hired' stage, revert back to 'interview'
+  if (offer.candidateId) {
+    const cand = await Candidate.findById(offer.candidateId);
+    if (cand && (cand.stage === 'offer' || cand.stage === 'hired')) {
+      cand.stage = 'interview';
+      await cand.save();
+    }
+  }
+
+  await Offer.findByIdAndDelete(req.params.id);
+  res.json({ message: 'Offer deleted successfully', id: req.params.id });
 });
 
 // ── Offers ───────────────────────────────────────────────────────────────────
@@ -1160,6 +1211,7 @@ export {
   getOffers,
   createOffer,
   updateOffer,
+  deleteOffer,
   acceptOffer,
   declineOffer,
   getJobRoles,

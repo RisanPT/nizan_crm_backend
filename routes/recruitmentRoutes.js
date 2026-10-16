@@ -12,6 +12,7 @@ import {
   getOffers,
   createOffer,
   updateOffer,
+  deleteOffer,
   acceptOffer,
   declineOffer,
   getJobRoles,
@@ -65,7 +66,7 @@ router.post('/candidates/bulk-import', bulkImportCandidates);
 router.route('/candidates/:id').put(updateCandidate).delete(deleteCandidate);
 
 router.route('/offers').get(getOffers).post(createOffer);
-router.route('/offers/:id').put(updateOffer);
+router.route('/offers/:id').put(updateOffer).delete(deleteOffer);
 router.post('/offers/:id/accept', acceptOffer);
 router.post('/offers/:id/decline', declineOffer);
 

@@ -1,4 +1,9 @@
 import Booking from '../models/Booking.js';
+import ClientUser from '../models/ClientUser.js';
+import Conversation from '../models/Conversation.js';
+import Message from '../models/Message.js';
+import Otp from '../models/Otp.js';
+import TryOnPreview from '../models/TryOnPreview.js';
 import { normalizePhone, phoneSuffixFilter } from '../utils/phone.js';
 
 // Fields safe to expose to the client app for their own bookings.
@@ -47,6 +52,33 @@ export const getMe = async (req, res) => {
     communityTag: c.communityTag || '',
     skinTone: c.skinTone || '',
   });
+};
+
+// @route DELETE /api/client/me — permanently delete the caller's account.
+//
+// Removes everything the CLIENT APP holds about her: the profile (preferences,
+// saved looks, look plan, face-photo consent), AI previews, one-time codes and
+// her concierge chat. It deliberately does NOT touch Bookings, Collections or
+// the CRM Customer record: those are the studio's own business/accounting
+// records, not app data. Her token stops working immediately because
+// protectClient looks the user up on every request.
+export const deleteMe = async (req, res) => {
+  try {
+    const client = req.client;
+    const convos = await Conversation.find({ clientUserId: client._id }).select('_id').lean();
+    const convoIds = convos.map((c) => c._id);
+    await Promise.all([
+      Message.deleteMany({ conversationId: { $in: convoIds } }),
+      Conversation.deleteMany({ clientUserId: client._id }),
+      TryOnPreview.deleteMany({ clientUserId: client._id }),
+      Otp.deleteMany({ phone: client.phone }),
+    ]);
+    await ClientUser.deleteOne({ _id: client._id });
+    res.json({ deleted: true });
+  } catch (error) {
+    console.error('deleteMe failed:', error.message);
+    res.status(500).json({ message: 'Could not delete your account. Please try again.' });
+  }
 };
 
 // @route PUT /api/client/me  { name?, email?, communityTag?, skinTone? }

@@ -3,6 +3,7 @@ import { protectClient } from '../middleware/clientAuthMiddleware.js';
 import {
   getMe,
   updateMe,
+  deleteMe,
   getMyBookings,
   getMyBooking,
   forceClientIdentity,
@@ -22,6 +23,7 @@ router.use(protectClient);
 
 router.get('/me', getMe);
 router.put('/me', updateMe);
+router.delete('/me', deleteMe);
 router.get('/preferences', getPreferences);
 router.put('/preferences', savePreferences);
 router.get('/lookboard', getLookBoard);
