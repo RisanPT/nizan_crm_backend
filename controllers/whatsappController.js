@@ -47,8 +47,11 @@ export const pingWhatsApp = async (req, res) => {
 export const sendWhatsAppDocument = async (req, res) => {
   const mode = req.params.mode === 'send' ? 'send' : 'handover';
   const kind = String(req.body.kind || '').toLowerCase();
-  if (!['quotation', 'invoice'].includes(kind)) {
-    return res.status(400).json({ ok: false, error: 'kind must be quotation or invoice.' });
+  // 'confirmation' = the Booking Confirmation PDF from the Bookings list.
+  // TeamN Chat has no confirmation template, so it goes out with the
+  // invoice template (decided by the business), referenced by booking number.
+  if (!['quotation', 'invoice', 'confirmation'].includes(kind)) {
+    return res.status(400).json({ ok: false, error: 'kind must be quotation, invoice or confirmation.' });
   }
   // Either a ready PDF, or the CRM's own print HTML (field `html`), which is
   // rendered here with headless Chrome so the customer gets exactly the page
@@ -99,6 +102,26 @@ export const sendWhatsAppDocument = async (req, res) => {
     if (!bookingDate) {
       return res.status(400).json({ ok: false, error: 'This booking has no event date for the invoice message.' });
     }
+  } else if (kind === 'confirmation') {
+    if (!mongoose.Types.ObjectId.isValid(req.body.bookingId)) {
+      return res.status(400).json({ ok: false, error: 'Invalid booking.' });
+    }
+    const booking = await Booking.findById(req.body.bookingId)
+      .select('bookingNumber customerName phone bookingDate serviceStart status')
+      .lean();
+    if (!booking) return res.status(404).json({ ok: false, error: 'Booking not found.' });
+    if (['cancelled', 'canceled', 'rejected'].includes(String(booking.status || '').toLowerCase())) {
+      return res.status(400).json({ ok: false, error: 'This booking is cancelled — no confirmation to send.' });
+    }
+    bookingId = booking._id;
+    reference = String(booking.bookingNumber || booking._id);
+    customerName = booking.customerName || '';
+    phone = toWhatsAppPhone(booking.phone);
+    const eventDate = booking.bookingDate || booking.serviceStart;
+    bookingDate = eventDate ? IST_DATE.format(new Date(eventDate)) : '';
+    if (!bookingDate) {
+      return res.status(400).json({ ok: false, error: 'This booking has no event date for the message.' });
+    }
   } else {
     reference = String(req.body.reference || '').trim();
     customerName = String(req.body.customer_name || '').trim();
@@ -117,7 +140,7 @@ export const sendWhatsAppDocument = async (req, res) => {
   }
   inFlight.add(lockKey);
 
-  const filename = `${kind === 'invoice' ? 'Invoice' : 'Quotation'}_${safeFilenamePart(reference)}_${safeFilenamePart(customerName) || 'Customer'}.pdf`;
+  const filename = `${kind === 'invoice' ? 'Invoice' : kind === 'confirmation' ? 'Booking_Confirmation' : 'Quotation'}_${safeFilenamePart(reference)}_${safeFilenamePart(customerName) || 'Customer'}.pdf`;
   const sentByName = req.user?.name || req.user?.email || '';
 
   try {
@@ -125,7 +148,8 @@ export const sendWhatsAppDocument = async (req, res) => {
       pdf,
       filename,
       phone,
-      kind,
+      // TeamN Chat template: confirmations use the invoice template.
+      kind: kind === 'confirmation' ? 'invoice' : kind,
       reference,
       customerName,
       bookingDate,
