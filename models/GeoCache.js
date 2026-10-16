@@ -13,6 +13,12 @@ const geoCacheSchema = new mongoose.Schema(
     // Human label from OSM, e.g. 'Kozhikode' / 'Feroke'.
     label: { type: String, default: '' },
     district: { type: String, default: '' },
+    // Road route from the headquarters (keys 'route:<pincode>'): driving
+    // distance and time from OpenRouteService. Null on geocode-only rows.
+    roadKm: { type: Number, default: null },
+    durationMin: { type: Number, default: null },
+    // 'lat,lng' of the headquarters the route was measured from.
+    origin: { type: String, default: '' },
     attempts: { type: Number, default: 1 },
   },
   { timestamps: true }

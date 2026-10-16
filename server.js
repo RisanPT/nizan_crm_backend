@@ -68,6 +68,7 @@ import bankAccountRoutes from './routes/bankAccountRoutes.js';
 import cashTransactionRoutes from './routes/cashTransactionRoutes.js';
 import bookingAdvanceRoutes from './routes/bookingAdvanceRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
+import geoRoutes from './routes/geoRoutes.js';
 import companyReportRoutes from './routes/companyReportRoutes.js';
 import ticketRoutes from './routes/ticketRoutes.js';
 import contentRoutes from './routes/contentRoutes.js';
@@ -232,6 +233,7 @@ app.use('/api/bank-accounts', bankAccountRoutes); // Manual bank balances (Finan
 app.use('/api/cash-transactions', cashTransactionRoutes); // Accounts' Cash In / Out / Transfer entries
 app.use('/api/booking-advances', bookingAdvanceRoutes); // Accounts verifies booking advances
 app.use('/api/whatsapp', whatsappRoutes);           // TeamN Chat: send quotation / invoice PDFs on WhatsApp
+app.use('/api/geo', geoRoutes);                    // Road distance from HQ (OpenRouteService)
 app.use('/api/company-reports', companyReportRoutes); // Per-department report library
 app.use('/api/reviews', reviewRoutes);                // Post-service client review forms
 
