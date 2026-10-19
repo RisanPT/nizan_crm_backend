@@ -17,6 +17,7 @@ import CeoDecision from '../models/CeoDecision.js';
 import { accountMovements, round2 } from './accountingController.js';
 import { filingsForPeriod } from './taxFilingController.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
+import { istDayKey, istMonthBounds } from '../utils/istDate.js';
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canView = (u) => FINANCE_ROLES.includes(u?.role);
@@ -99,13 +100,16 @@ export const getMonthEndReview = async (req, res) => {
   }
   try {
     const now = new Date();
-    const month = Number(req.query.month) || now.getMonth() + 1;
-    const year = Number(req.query.year) || now.getFullYear();
+    // Months are IST calendar months, cut exactly like the P&L / GST reports
+    // (which read the same ledger) so the review reconciles with them.
+    const [istYear, istMonth] = istDayKey(now).split('-').map(Number);
+    const month = Number(req.query.month) || istMonth;
+    const year = Number(req.query.year) || istYear;
 
-    const from = new Date(year, month - 1, 1);
-    const to = new Date(year, month, 0, 23, 59, 59, 999);
-    const prevFrom = new Date(year, month - 2, 1);
-    const prevTo = new Date(year, month - 1, 0, 23, 59, 59, 999);
+    const { start: from, end: to, to: lastDay } = istMonthBounds(year, month);
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const { start: prevFrom, end: prevTo } = istMonthBounds(prevYear, prevMonth);
     const inPeriod = (d) => d && new Date(d) >= from && new Date(d) <= to;
 
     const [
@@ -274,7 +278,7 @@ export const getMonthEndReview = async (req, res) => {
 
     // ── Financial ratios: DSO, DPO, Inventory Turnover, Debt-to-Equity, Free
     //    Cash Flow, CapEx (all from the same posted ledger + period figures). ──
-    const daysInPeriod = to.getDate(); // `to` is the last day of the month
+    const daysInPeriod = Number(lastDay.slice(8)); // day number of the month's last day
     const periodMv = await accountMovements({ from, to });
     let capex = 0;
     let totalLiabilities = 0;
@@ -365,8 +369,7 @@ export const getMonthEndReview = async (req, res) => {
       const total = year * 12 + (month - 1) + k;
       const fy = Math.floor(total / 12);
       const fm = (total % 12) + 1;
-      const fFrom = new Date(fy, fm - 1, 1);
-      const fTo = new Date(fy, fm, 0, 23, 59, 59, 999);
+      const { start: fFrom, end: fTo } = istMonthBounds(fy, fm);
       const within = (d) => d && new Date(d) >= fFrom && new Date(d) <= fTo;
       let inflow = 0;
       for (const b of liveBookings) {
@@ -525,9 +528,10 @@ export const getMonthEndReview = async (req, res) => {
 export const getMonthlyTarget = async (req, res) => {
   if (!canView(req.user)) return res.status(403).json({ message: 'No finance access' });
   try {
-    const now = new Date();
-    const month = Number(req.query.month) || now.getMonth() + 1;
-    const year = Number(req.query.year) || now.getFullYear();
+    // Default to the current IST month, same as the Month-End Review.
+    const [istYear, istMonth] = istDayKey(new Date()).split('-').map(Number);
+    const month = Number(req.query.month) || istMonth;
+    const year = Number(req.query.year) || istYear;
     const doc = await MonthlyTarget.findOne({ month, year }).lean();
     res.json(doc || { month, year, revenueTarget: 0, profitTarget: 0, collectionTarget: 0, expenseLimit: 0, allocations: [], notes: '' });
   } catch (error) {

@@ -16,6 +16,16 @@ import { regionScopedMatch } from '../utils/geoScope.js';
 import { makeCountsTowardSales, salesCountMatch } from '../utils/salesRules.js';
 import { serviceTypeOf } from './bookingMapController.js';
 import { SALES_TARGET_ROLES } from '../utils/salesAchievement.js';
+import {
+  DAY_MS,
+  addDays,
+  isDay,
+  istDayKey,
+  istEnd,
+  istMonthKey,
+  istStart,
+  todayIst,
+} from '../utils/istDate.js';
 
 // ── Main dashboard analytics ─────────────────────────────────────────────────
 // Server-side aggregates for the dashboard's Sales, Sales Team, Work Completed
@@ -37,8 +47,6 @@ const NOT_A_SALE = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pendi
 const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const SELF_SCOPED_ROLES = ['sales', 'sales_executive'];
 const NO_DASHBOARD_ROLES = ['artist', 'driver'];
-const IST_OFFSET_MS = 330 * 60 * 1000;
-const DAY_MS = 86400000;
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const lc = (v) => String(v ?? '').trim().toLowerCase();
@@ -55,14 +63,8 @@ export const outstandingOf = (b) => Math.max(0, netValue(b) - receivedOf(b));
 
 // ── Date helpers ──────────────────────────────────────────────────────────────
 
-const isDay = (s) => /^\d{4}-\d{2}-\d{2}$/.test(String(s ?? ''));
-const istStart = (day) => new Date(`${day}T00:00:00+05:30`);
-const istEnd = (day) => new Date(`${day}T23:59:59.999+05:30`);
-/// IST calendar day (YYYY-MM-DD) for an instant.
-export const istDayKey = (d) => new Date(new Date(d).getTime() + IST_OFFSET_MS).toISOString().slice(0, 10);
-const istMonthKey = (d) => istDayKey(d).slice(0, 7);
-const todayIst = () => istDayKey(new Date());
-const addDays = (day, n) => istDayKey(new Date(istStart(day).getTime() + n * DAY_MS));
+// Shared with every report — see utils/istDate.js.
+export { istDayKey };
 
 /// The requested window (default: last 30 days) plus the equal-length window
 /// right before it, for period-over-period comparison.

@@ -68,11 +68,13 @@ import taxFilingRoutes from './routes/taxFilingRoutes.js';
 import salesReportRoutes from './routes/salesReportRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import salesTargetRoutes from './routes/salesTargetRoutes.js';
+import goalRoutes from './routes/goalRoutes.js';
 import slotRoutes from './routes/slotRoutes.js';
 import bankAccountRoutes from './routes/bankAccountRoutes.js';
 import cashTransactionRoutes from './routes/cashTransactionRoutes.js';
 import bookingAdvanceRoutes from './routes/bookingAdvanceRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
+import helpRoutes from './routes/helpRoutes.js';
 import geoRoutes from './routes/geoRoutes.js';
 import companyReportRoutes from './routes/companyReportRoutes.js';
 import ticketRoutes from './routes/ticketRoutes.js';
@@ -269,10 +271,12 @@ app.use('/api/tax-filings', taxFilingRoutes);     // GST/TDS filing-status track
 app.use('/api/sales-reports', salesReportRoutes); // Sales analytics reports
 app.use('/api/dashboard', dashboardRoutes);         // Main dashboard analytics tabs
 app.use('/api/sales-targets', salesTargetRoutes); // Monthly salesperson targets
+app.use('/api/goals', goalRoutes); // Company day / week / month goals + day-wise report
 app.use('/api/slots', slotRoutes);                // Day-wise booking slot capacity
 app.use('/api/bank-accounts', bankAccountRoutes); // Manual bank balances (Finance)
 app.use('/api/cash-transactions', cashTransactionRoutes); // Accounts' Cash In / Out / Transfer entries
 app.use('/api/booking-advances', bookingAdvanceRoutes); // Accounts verifies booking advances
+app.use('/api/help', helpRoutes);                     // In-app help bot (manual-grounded; no business data)
 app.use('/api/whatsapp', whatsappRoutes);           // TeamN Chat: send quotation / invoice PDFs on WhatsApp
 app.use('/api/geo', geoRoutes);                    // Road distance from HQ (OpenRouteService)
 app.use('/api/company-reports', companyReportRoutes); // Per-department report library
