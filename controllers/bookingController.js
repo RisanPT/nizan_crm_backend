@@ -11,6 +11,7 @@ import { SALES_TARGET_ROLES } from '../utils/salesAchievement.js';
 import { slotAvailability } from './slotController.js';
 import { ensureReviewForBooking, reviewFormUrl } from './reviewController.js';
 import { ensureInvoiceNumber } from '../utils/invoiceNumber.js';
+import { istStart, istEnd, istMonthBounds, rangeCondition } from '../utils/istDate.js';
 import {
   sendAdvanceInvoiceEmail,
   sendCompletionInvoiceEmail,
@@ -890,8 +891,9 @@ export const getPaginatedBookings = async (req, res) => {
       const endYear = 2000 + Number.parseInt(parts[1], 10);
 
       // Financial year in India: April 1st to March 31st
-      const fyStart = new Date(startYear, 3, 1, 0, 0, 0); // April 1st
-      const fyEnd = new Date(endYear, 2, 31, 23, 59, 59); // March 31st
+      // IST calendar days, so an event just after midnight stays in its own FY.
+      const fyStart = istStart(`${startYear}-04-01`); // April 1st
+      const fyEnd = istEnd(`${endYear}-03-31`); // March 31st
 
       const dateField = dateBasis === 'booking_date' ? 'createdAt' : 'bookingDate';
 
@@ -908,8 +910,8 @@ export const getPaginatedBookings = async (req, res) => {
       const year = Number.parseInt(parts[0], 10);
       const monthIndex = Number.parseInt(parts[1], 10) - 1;
 
-      const startOfMonth = new Date(year, monthIndex, 1, 0, 0, 0);
-      const endOfMonth = new Date(year, monthIndex + 1, 0, 23, 59, 59);
+      // IST calendar month (a 1 Nov event must not land in October).
+      const { start: startOfMonth, end: endOfMonth } = istMonthBounds(year, monthIndex + 1);
 
       const dateField = dateBasis === 'booking_date' ? 'createdAt' : 'bookingDate';
 
@@ -926,20 +928,9 @@ export const getPaginatedBookings = async (req, res) => {
     const toRaw = String(req.query.to ?? '').trim();
     if (fromRaw || toRaw) {
       const dateField = dateBasis === 'booking_date' ? 'createdAt' : 'bookingDate';
-      const range = {};
-      if (fromRaw) {
-        const d = new Date(fromRaw);
-        if (!Number.isNaN(d.getTime())) {
-          range.$gte = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0);
-        }
-      }
-      if (toRaw) {
-        const d = new Date(toRaw);
-        if (!Number.isNaN(d.getTime())) {
-          range.$lte = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 23, 59, 59);
-        }
-      }
-      if (range.$gte || range.$lte) baseMatch[dateField] = range;
+      // from / to are IST calendar days; `to` includes its whole day.
+      const range = rangeCondition(dateField, fromRaw, toRaw)[dateField];
+      if (range) baseMatch[dateField] = range;
     }
 
     // Apply Map Link filter if provided
@@ -970,14 +961,20 @@ export const getPaginatedBookings = async (req, res) => {
     // package id, or by name for imported / older bookings that only carry the
     // service name. Added via $and so it never clobbers the date $or above.
     const packageId = String(req.query.packageId ?? '').trim();
+    // Set when filtering by package: whether one of a booking's lines IS that
+    // package, used below to count how many times it was taken.
+    let packageLineCond = null;
     if (packageId && mongoose.Types.ObjectId.isValid(packageId)) {
       const pkgOid = new mongoose.Types.ObjectId(packageId);
       const pkg = await ServicePackage.findById(pkgOid).select('name').lean();
       const anyLine = [{ packageId: pkgOid }, { 'bookingItems.packageId': pkgOid }];
+      const lineConds = [{ $eq: ['$$i.packageId', pkgOid] }];
       if (pkg?.name?.trim()) {
         const nameRx = new RegExp(`^\\s*${escapeRegex(pkg.name.trim())}\\s*$`, 'i');
         anyLine.push({ service: nameRx }, { 'bookingItems.service': nameRx });
+        lineConds.push({ $regexMatch: { input: { $ifNull: ['$$i.service', ''] }, regex: nameRx } });
       }
+      packageLineCond = { $or: lineConds };
       baseMatch.$and = [...(baseMatch.$and || []), { $or: anyLine }];
     }
     // (Optional) salesperson-credit filter, kept for report use.
@@ -1026,7 +1023,7 @@ export const getPaginatedBookings = async (req, res) => {
 
     const query = duplicatesOnly ? { _id: { $in: duplicateIds } } : baseMatch;
 
-    const [items, totalItems, summaryResult] = await Promise.all([
+    const [items, totalItems, summaryResult, packageResult] = await Promise.all([
       Booking.aggregate([
         { $match: query },
         ...buildBookingSortPipeline(search),
@@ -1074,6 +1071,33 @@ export const getPaginatedBookings = async (req, res) => {
           },
         },
       ]),
+      // Package filter only: how many times the package was taken across ALL
+      // matching bookings (every page). One per matching line, at least 1 per
+      // booking (older bookings carry the package on the booking itself).
+      packageLineCond
+        ? Booking.aggregate([
+            { $match: query },
+            {
+              $project: {
+                n: {
+                  $max: [
+                    1,
+                    {
+                      $size: {
+                        $filter: {
+                          input: { $ifNull: ['$bookingItems', []] },
+                          as: 'i',
+                          cond: packageLineCond,
+                        },
+                      },
+                    },
+                  ],
+                },
+              },
+            },
+            { $group: { _id: null, packages: { $sum: '$n' } } },
+          ])
+        : Promise.resolve(null),
     ]);
 
     const summary = summaryResult[0] ?? {
@@ -1103,6 +1127,8 @@ export const getPaginatedBookings = async (req, res) => {
         totalAdvance: Number(summary.totalAdvance) || 0,
         completedCount: Number(summary.completedCount) || 0,
         cancelledCount: Number(summary.cancelledCount) || 0,
+        // null unless a package filter is on
+        packageCount: packageResult ? Number(packageResult[0]?.packages) || 0 : null,
       },
     });
   } catch (error) {

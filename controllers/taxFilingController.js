@@ -1,6 +1,7 @@
 import TaxFiling, { FILING_LABELS } from '../models/TaxFiling.js';
 import ChartOfAccount from '../models/ChartOfAccount.js';
 import { accountMovements, round2 } from './accountingController.js';
+import { istMonthBounds } from '../utils/istDate.js';
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canManage = (u) => FINANCE_ROLES.includes(u?.role);
@@ -58,8 +59,8 @@ export const filingsForPeriod = async (month, year) => {
 // Suggested payable amount from the ledger for the period, for GSTR-3B (GST net)
 // and TDS payment (TDS Payable account credit).
 const suggestedAmounts = async (month, year) => {
-  const from = new Date(year, month - 1, 1);
-  const to = new Date(year, month, 0, 23, 59, 59, 999);
+  // IST calendar month — the same cut the GST summary report uses on this ledger.
+  const { start: from, end: to } = istMonthBounds(year, month);
   const [accounts, mv] = await Promise.all([
     ChartOfAccount.find({ code: { $in: ['2100', '2110', '2120', '1300', '2200'] } }).select('code').lean(),
     accountMovements({ from, to }),

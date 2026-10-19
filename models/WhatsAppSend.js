@@ -6,7 +6,7 @@ import mongoose from 'mongoose';
 const whatsAppSendSchema = mongoose.Schema(
   {
     mode: { type: String, enum: ['handover', 'send'], required: true },
-    kind: { type: String, enum: ['quotation', 'invoice'], required: true },
+    kind: { type: String, enum: ['quotation', 'invoice', 'confirmation'], required: true },
     reference: { type: String, default: '', trim: true },
     bookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', default: null },
     customerName: { type: String, default: '', trim: true },

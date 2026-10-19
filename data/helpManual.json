@@ -1,0 +1,611 @@
+{
+  "_readme": "Help-bot user manual. Edit freely. Each entry: id (unique), title, module, route (screen the 'Open' button goes to; omit for info-only), gate (optional route whose permission decides who sees the entry, defaults to route; entry with neither is visible to everyone), menuPath (text path shown to the user), keywords (extra words/synonyms incl. Malayalam-in-English), summary, steps[], tips[]. inPage (optional) = what to do inside the screen after it opens, for tabs/filters/buttons a link cannot reach. Routes must exist in app_router.dart. DRAFT - generated from the code, needs owner review.",
+  "entries": [
+    {
+      "id": "dashboard", "title": "Dashboard", "module": "General", "route": "/",
+      "menuPath": "Sidebar → Dashboard (mobile: Home tab)",
+      "keywords": ["home", "overview", "main page", "summary", "landing"],
+      "summary": "The overview home page shown after login.",
+      "steps": ["Tap Dashboard in the sidebar (Home tab on mobile).", "Use the cards to see today's headline numbers; tap a card to drill into it."],
+      "tips": ["What you see depends on your role."]
+    },
+    {
+      "id": "notifications", "title": "Notifications", "module": "General", "route": "/notifications",
+      "menuPath": "Top bar → bell icon (sidebar → Notifications)",
+      "keywords": ["alerts", "bell", "unread", "messages"],
+      "summary": "All alerts sent to you in the CRM.",
+      "steps": ["Tap the bell icon at the top (mobile) or Notifications in the sidebar.", "Tap a notification to open the related item."]
+    },
+    {
+      "id": "profile", "title": "My Profile", "module": "General", "route": "/profile",
+      "menuPath": "Sidebar → My Profile (mobile: Menu → Profile)",
+      "keywords": ["account", "password", "change password", "my details", "logout", "sign out"],
+      "summary": "Your own account details. Logout is in the sidebar too.",
+      "steps": ["Open My Profile from the sidebar.", "Review or update your details.", "To sign out use Logout at the bottom of the sidebar."]
+    },
+    {
+      "id": "report-bug", "title": "Report a bug / problem", "module": "General",
+      "menuPath": "Sidebar → Report Bug",
+      "keywords": ["bug", "issue", "error", "problem", "not working", "complaint", "feedback"],
+      "summary": "Send a problem report to the team from the bottom of the sidebar.",
+      "steps": ["Scroll to the bottom of the sidebar and tap Report Bug.", "Describe what happened and what you expected, then send."]
+    },
+    {
+      "id": "clients", "title": "Clients directory", "module": "Clients", "route": "/clients",
+      "menuPath": "Sidebar → Clients",
+      "keywords": ["customers", "customer", "client list", "find client", "search client", "profile"],
+      "summary": "Directory of all clients with profiles and history.",
+      "steps": ["Open Clients from the sidebar.", "Search by name or phone.", "Tap a client to open their profile."]
+    },
+    {
+      "id": "client-reviews", "title": "Client Reviews", "module": "Clients", "route": "/reviews",
+      "menuPath": "Sidebar → Client Reviews",
+      "keywords": ["feedback", "rating", "review", "testimonials"],
+      "summary": "Reviews and ratings clients have given.",
+      "steps": ["Open Client Reviews from the sidebar.", "Open a review to read or respond."]
+    },
+    {
+      "id": "client-chat", "title": "Client Chat", "module": "Clients", "route": "/client-chat",
+      "menuPath": "Sidebar → Client Chat",
+      "keywords": ["chat", "concierge", "message client", "app client chat"],
+      "summary": "Chat with clients who use the bridal app.",
+      "steps": ["Open Client Chat from the sidebar.", "Pick a conversation and reply."]
+    },
+    {
+      "id": "app-clients", "title": "App Clients (brides)", "module": "Clients", "route": "/app-clients",
+      "menuPath": "Sidebar → App Clients",
+      "keywords": ["bride", "bridal app", "app users", "mobile app clients"],
+      "summary": "Brides registered in the client mobile app.",
+      "steps": ["Open App Clients from the sidebar.", "Search and tap a bride to see her details."]
+    },
+    {
+      "id": "calendar", "title": "Calendar (works scheduler)", "module": "Calendar", "route": "/calendar",
+      "menuPath": "Sidebar → Calendar (mobile bottom bar: Calendar)",
+      "keywords": ["schedule", "works", "date", "availability", "artist schedule", "booked dates", "assign artist"],
+      "summary": "Calendar of booked works; check dates and artist availability.",
+      "steps": ["Open Calendar from the sidebar.", "Pick the date or month.", "Tap a booking on a date to see or manage it."]
+    },
+    {
+      "id": "booking-add", "inPage": "Opens the booking form directly", "title": "Add a booking", "module": "Bookings", "route": "/booking/add",
+      "menuPath": "Sidebar → Booking → Add Booking",
+      "keywords": ["new booking", "create booking", "book", "confirm booking", "register booking", "advance", "booking confirmation"],
+      "summary": "Create a new booking for a customer.",
+      "steps": ["Open Booking in the sidebar and choose Add Booking.", "Enter the customer, event date, package/service and region.", "Record the advance payment if received.", "Save. The customer can receive a booking confirmation on WhatsApp (see the WhatsApp entry)."],
+      "tips": ["A booking from a lead is usually created from the lead's quote/invoice flow."]
+    },
+    {
+      "id": "booking-requests", "title": "Booking requests", "module": "Bookings", "route": "/booking/requests",
+      "menuPath": "Sidebar → Booking → Booking Requests",
+      "keywords": ["booking list", "pending bookings", "approve booking", "manage booking", "all bookings"],
+      "summary": "All booking requests; open one to manage it.",
+      "steps": ["Open Booking → Booking Requests.", "Search or filter the list.", "Tap a booking to open Manage Booking (edit, assign artist, update status)."]
+    },
+    {
+      "id": "trials", "title": "Trials", "module": "Trials", "route": "/trials",
+      "menuPath": "Sidebar → Trials",
+      "keywords": ["trial booking", "makeup trial", "studio trial", "trial calendar"],
+      "summary": "Trial calendar and studio trial bookings.",
+      "steps": ["Open Trials from the sidebar.", "Use the calendar to see trial slots, or the list view for all trials.", "Tap a trial to manage it."]
+    },
+    {
+      "id": "trial-packages", "title": "Trial packages", "module": "Trials", "route": "/trial-packages",
+      "menuPath": "Sidebar → Trials → Trial Packages",
+      "keywords": ["trial price", "trial package"],
+      "summary": "Manage packages offered for trials.",
+      "steps": ["Open Trials → Trial Packages.", "Add or edit a package and save."]
+    },
+    {
+      "id": "services", "title": "Services & packages", "module": "Services", "route": "/services",
+      "menuPath": "Sidebar → Services",
+      "keywords": ["package", "packages", "price", "rate", "district price", "add package", "edit package"],
+      "summary": "Packages and prices. Quotes and invoices take package prices from here.",
+      "steps": ["Open Services from the sidebar.", "Tap a package to view/edit, or add a new one.", "Set the base price and any district prices, then save."],
+      "tips": ["Changing a price here changes it for new quotes."]
+    },
+    {
+      "id": "geographics", "title": "Regions (Geographics)", "module": "Services", "route": "/services/regions",
+      "menuPath": "Sidebar → Services → Geographics",
+      "keywords": ["region", "district", "zone", "pincode", "location", "area"],
+      "summary": "Service regions, districts and zones.",
+      "steps": ["Open Geographics under Services.", "Add or edit regions/districts."]
+    },
+    {
+      "id": "addons", "title": "Add-on services", "module": "Services", "route": "/services/addons",
+      "menuPath": "Sidebar → Services → Add-ons",
+      "keywords": ["addon", "extra service", "additional service"],
+      "summary": "Extra services that can be added to a package.",
+      "steps": ["Open Services → Add-ons.", "Add or edit an add-on and save."]
+    },
+    {
+      "id": "sales-dashboard", "title": "Sales Dashboard", "module": "Sales", "route": "/sales/dashboard",
+      "menuPath": "Sidebar → Sales → Sales Dashboard",
+      "keywords": ["sales summary", "sales overview", "revenue", "sales numbers", "performance"],
+      "summary": "Overview of sales performance.",
+      "steps": ["Open Sales → Sales Dashboard.", "Change the period to see different dates.", "Tap a figure to drill into the detail."]
+    },
+    {
+      "id": "sales-home", "title": "My Sales Dashboard (sales team)", "module": "Sales", "route": "/sales/home",
+      "gate": "/sales/leads",
+      "menuPath": "Sales team: Home tab (first tab)",
+      "keywords": ["my dashboard", "my leads", "my targets", "sales home", "my performance"],
+      "summary": "A sales person's own home with their leads and targets.",
+      "steps": ["Tap Home (first tab) in the sales app.", "See your targets, follow-ups and recent leads."]
+    },
+    {
+      "id": "leads", "inPage": "After it opens: tap New to add a lead", "title": "Leads Data Entry", "module": "Sales", "route": "/sales/leads",
+      "menuPath": "Sidebar → Sales → Leads Data Entry (sales team: Leads tab)",
+      "keywords": ["lead", "enquiry", "inquiry", "new lead", "add lead", "enter lead", "follow up", "followup", "lost", "duplicate", "smart paste", "export leads", "lead list"],
+      "summary": "Enter, search and follow up leads.",
+      "steps": ["Open Sales → Leads Data Entry.", "Tap New to add a lead (or use Smart Paste to fill from a pasted message).", "Use the filters (for example Added By) and search to find leads.", "Open a lead to log activity, set follow-ups or move it forward.", "Export Leads downloads the list."],
+      "tips": ["Duplicates: the app warns if a lead for the same phone already exists; use Open existing lead.", "Marking a lead Lost may need approval — an approver sees Review Lost request."]
+    },
+    {
+      "id": "lead-activity", "inPage": "After it opens: tap a lead, then Add Activity Log", "title": "Log activity / follow-up on a lead", "module": "Sales", "route": "/sales/leads",
+      "menuPath": "Leads Data Entry → open a lead → Add Activity Log",
+      "keywords": ["call log", "follow up", "followup", "note", "activity", "remind", "status", "update lead"],
+      "summary": "Record what happened with a lead and when to follow up next.",
+      "steps": ["Open Sales → Leads Data Entry and tap the lead (Open Full Details for the whole page).", "Tap Add Activity Log.", "Write the outcome and choose the next follow-up.", "Save."]
+    },
+    {
+      "id": "quote", "inPage": "After it opens: tap a lead, then the Quote tab", "title": "Create a quote / quotation", "module": "Sales", "route": "/sales/leads",
+      "menuPath": "Leads Data Entry → open a lead → Quote tab",
+      "keywords": ["quotation", "quote builder", "estimate", "price list", "compare packages", "send quote", "package price", "custom service", "multi-day", "download pdf", "print quote"],
+      "summary": "Build a quotation for a lead from packages, add-ons and custom services.",
+      "steps": ["Open the lead in Sales → Leads Data Entry.", "Go to the quote builder (quote tab).", "Choose packages — use Compare packages to show several side by side.", "Add add-ons or Add custom service if needed; for multi-day events use Multi-day program.", "Download PDF or Print, or send it on WhatsApp (see the WhatsApp entry)."],
+      "tips": ["Package prices come from Services (district price when a district is chosen). A price changed in the quote applies on this device only. An empty price shows 'Price on request'."]
+    },
+    {
+      "id": "invoices-bookings", "inPage": "After it opens: use the Package filter at the top", "title": "Invoices & Bookings (sales)", "module": "Sales", "route": "/sales",
+      "menuPath": "Sidebar → Sales → Invoices & Bookings",
+      "keywords": ["invoice", "bookings list", "sales invoice", "package filter", "filter by package", "payment", "paid", "balance", "download invoice", "print invoice", "send invoice", "TN invoice", "invoice number"],
+      "summary": "List of confirmed bookings with their invoices and payment status; filter by period, status and package.",
+      "steps": ["Open Sales → Invoices & Bookings.", "Choose the period/date range at the top.", "Use the Package filter to show only bookings of a particular package.", "Tap a booking to see its invoice, payments and balance.", "Download, print or send the invoice on WhatsApp from there."],
+      "tips": ["Official invoice numbers (TN series) are given only to completed and fully paid bookings."]
+    },
+    {
+      "id": "monthly-bookings", "title": "Monthly Bookings", "module": "Sales", "route": "/sales/monthly",
+      "menuPath": "Sidebar → Sales → Monthly Bookings",
+      "keywords": ["month report", "bookings per month", "monthly sales", "month wise"],
+      "summary": "Bookings month by month.",
+      "steps": ["Open Sales → Monthly Bookings.", "Pick the month with the navigation arrows.", "Tap a day or row to see the bookings."]
+    },
+    {
+      "id": "quarterly", "title": "Quarterly Performance", "module": "Sales", "route": "/sales/quarterly",
+      "menuPath": "Sales → Quarterly (via Sales menu)",
+      "keywords": ["quarter", "q1", "q2", "q3", "q4", "quarterly report"],
+      "summary": "Sales performance by quarter.",
+      "steps": ["Open Quarterly Performance from the Sales menu.", "Pick the quarter."]
+    },
+    {
+      "id": "cancelled", "title": "Cancelled Works", "module": "Sales", "route": "/sales/cancelled",
+      "menuPath": "Sidebar → Sales → Cancelled Works",
+      "keywords": ["cancelled", "canceled", "cancellation", "refund", "cancelled booking"],
+      "summary": "Bookings that were cancelled.",
+      "steps": ["Open Sales → Cancelled Works.", "Filter by period; open an item for details."]
+    },
+    {
+      "id": "booking-map", "title": "Booking Map", "module": "Sales", "route": "/sales/booking-map",
+      "menuPath": "Sidebar → Sales → Booking Map",
+      "keywords": ["map", "location", "where are bookings", "area wise", "geography"],
+      "summary": "Bookings shown on a map.",
+      "steps": ["Open Sales → Booking Map.", "Zoom into an area and tap a marker for the booking."]
+    },
+    {
+      "id": "targets", "title": "Sales Targets", "module": "Sales", "route": "/sales/targets",
+      "menuPath": "Sidebar → Sales → Sales Targets",
+      "keywords": ["target", "set target", "monthly target", "sales person target", "copy last month", "quota"],
+      "summary": "Set monthly targets for each sales person (for people allowed to set targets).",
+      "steps": ["Open Sales → Sales Targets.", "Choose the month.", "Enter each person's target — Copy last month fills last month's values.", "Tap Save targets."],
+      "tips": ["Only certain roles can set targets; others do not see this entry."]
+    },
+    {
+      "id": "report-goals", "title": "Report & Goals", "module": "Sales", "route": "/sales/report",
+      "menuPath": "Sidebar → Sales → Report & Goals",
+      "keywords": ["goal report", "daily report", "weekly report", "mtd", "month to date", "achieved", "pro-rated", "day report", "company goal", "goals report"],
+      "summary": "Day / week / month report of achieved sales against the company goals.",
+      "steps": ["Open Sales → Report & Goals.", "Choose Day, Week or Month and use the arrows to move the period.", "Pick the basis (when bookings were added vs. event date) if offered.", "Compare Achieved against the Pro-rated goal / Month goal."]
+    },
+    {
+      "id": "set-goals", "inPage": "Opens the goals form directly", "title": "Set company goals", "module": "Sales", "route": "/sales/goals",
+      "menuPath": "Sidebar → Sales → Report & Goals → Set goals",
+      "keywords": ["goal", "goals", "set goals", "daily goal", "weekly goal", "monthly goal", "target for company"],
+      "summary": "Set the company day/week/month goals used in Report & Goals.",
+      "steps": ["Open Report & Goals and tap Set goals.", "Pick the period type and date.", "Enter the goal for each metric; clear a value to remove that goal.", "Tap Save goals."],
+      "tips": ["Only roles allowed to edit goals can save."]
+    },
+    {
+      "id": "sales-calendar", "title": "Sales Calendar", "module": "Sales", "route": "/sales/calendar",
+      "menuPath": "Sidebar → Sales → Sales Calendar",
+      "keywords": ["lead calendar", "follow up calendar", "events calendar", "campaign calendar"],
+      "summary": "Calendar view of sales activity and follow-ups.",
+      "steps": ["Open Sales → Sales Calendar.", "Pick a date to see items."]
+    },
+    {
+      "id": "whatsapp-sending", "inPage": "After it opens: tap a booking, then the WhatsApp button (for a quote: lead → Quote tab)", "title": "Send quotation / invoice on WhatsApp", "module": "Sales", "route": "/sales",
+      "menuPath": "Quote or Invoice screen → WhatsApp option",
+      "keywords": ["whatsapp", "send pdf", "teamn chat", "send to customer", "send quotation", "send invoice", "booking confirmation message", "handover", "wa", "whatsapp team"],
+      "summary": "Send a quotation or invoice PDF to the customer through TeamN Chat (WhatsApp).",
+      "steps": ["Open the quote (on a lead) or the invoice (Invoices & Bookings).", "Choose the WhatsApp send option.", "Pick 'Send to WhatsApp team' to leave it waiting in the customer's chat for staff, or 'Send to customer now' to deliver immediately.", "If it fails, the screen shows TeamN Chat's reason (for example template not approved)."],
+      "tips": ["The customer's phone number must be on the lead/booking."]
+    },
+    {
+      "id": "accounts-dashboard", "title": "Accounts Dashboard", "module": "Accounts", "route": "/accounts/dashboard",
+      "menuPath": "Sidebar → Accounts → Combined Dashboard",
+      "keywords": ["accounts summary", "payables dashboard", "accounts overview"],
+      "summary": "Overview of accounts activity.",
+      "steps": ["Open Accounts → Combined Dashboard."]
+    },
+    {
+      "id": "cash-in-out", "title": "Cash In / Out", "module": "Accounts", "route": "/accounts/transactions",
+      "menuPath": "Sidebar → Accounts → Cash In / Out",
+      "keywords": ["cash", "money in", "money out", "transaction", "bank transaction", "receipt", "payment entry", "cash book"],
+      "summary": "Record and review money received and paid.",
+      "steps": ["Open Accounts → Cash In / Out.", "Add an entry (in or out), choosing the account, amount, date and category.", "Save and check it in the list."]
+    },
+    {
+      "id": "acc-invoices", "title": "Invoices (accounts)", "module": "Accounts", "route": "/accounts/invoices",
+      "menuPath": "Sidebar → Accounts → Invoice",
+      "keywords": ["gst invoice", "invoice list accounts", "tax invoice"],
+      "summary": "Invoices as seen by Accounts.",
+      "steps": ["Open Accounts → Invoice.", "Search or filter, then open an invoice."]
+    },
+    {
+      "id": "bills", "title": "Bills & Payables", "module": "Accounts", "route": "/accounts/bills",
+      "menuPath": "Sidebar → Accounts → Bills & Payables",
+      "keywords": ["vendor bill", "supplier", "pay bill", "payable", "purchase bill", "due"],
+      "summary": "Vendor bills and what is due to be paid.",
+      "steps": ["Open Accounts → Bills & Payables.", "Add a bill or open an existing one.", "Record payment when paid."]
+    },
+    {
+      "id": "artist-collections", "title": "Artist Collections", "module": "Accounts", "route": "/accounts/artist-collections",
+      "menuPath": "Sidebar → Accounts → Operations → Artist Collection",
+      "keywords": ["collection", "artist collection", "balance collected", "artist cash"],
+      "summary": "Money artists collected from customers on the day.",
+      "steps": ["Open Accounts → Operations → Artist Collection.", "Review and verify collections."]
+    },
+    {
+      "id": "artist-payouts", "title": "Artist Payouts", "module": "Accounts", "route": "/accounts/artist-payouts",
+      "menuPath": "Sidebar → Accounts → Operations → Artist Payouts",
+      "keywords": ["artist payment", "pay artist", "payout", "artist salary"],
+      "summary": "Pay artists for completed works.",
+      "steps": ["Open Accounts → Operations → Artist Payouts.", "Select the artist/work and record the payout."]
+    },
+    {
+      "id": "fleet-expenses-acc", "title": "Fleet Expenses (accounts)", "module": "Accounts", "route": "/accounts/fleet-expenses",
+      "menuPath": "Sidebar → Accounts → Operations → Fleet Expenses",
+      "keywords": ["fuel bill", "vehicle expense", "driver expense"],
+      "summary": "Review and approve fleet expenses.",
+      "steps": ["Open Accounts → Operations → Fleet Expenses.", "Open an expense to approve or pay."]
+    },
+    {
+      "id": "staff-payouts", "title": "Staff / Operations payouts", "module": "Accounts", "route": "/accounts/operations-salaries",
+      "menuPath": "Sidebar → Accounts → Operations → Staff Payouts",
+      "keywords": ["operations salary", "staff payout", "artist salary"],
+      "summary": "Payouts to operations staff.",
+      "steps": ["Open Accounts → Operations → Staff Payouts.", "Pick the month and process the payouts."]
+    },
+    {
+      "id": "admin-expenses", "title": "Administrative Expenses", "module": "Accounts", "route": "/accounts/admin-expenses",
+      "menuPath": "Sidebar → Accounts → Administrative → Expenses (department heads: Department Expenses)",
+      "keywords": ["expense", "submit expense", "department expense", "office expense", "claim", "approve expense"],
+      "summary": "Submit and approve office / department expenses.",
+      "steps": ["Open Accounts → Administrative → Expenses (department heads use Department Expenses).", "Add an expense with amount, category and bill.", "Accounts reviews and approves the payment."]
+    },
+    {
+      "id": "subscriptions", "title": "Software & Subscriptions", "module": "Accounts", "route": "/accounts/subscriptions",
+      "menuPath": "Sidebar → Accounts → Administrative → Subscriptions",
+      "keywords": ["subscription", "software", "renewal", "recurring"],
+      "summary": "Recurring software and service subscriptions.",
+      "steps": ["Open Accounts → Administrative → Subscriptions.", "Add or edit a subscription."]
+    },
+    {
+      "id": "admin-salaries", "title": "Administrative Salaries", "module": "Accounts", "route": "/accounts/admin-salaries",
+      "menuPath": "Sidebar → Accounts → Administrative → Salaries",
+      "keywords": ["salary", "payroll", "pay salary", "monthly salary", "staff salary"],
+      "summary": "Monthly salaries for administrative staff.",
+      "steps": ["Open Accounts → Administrative → Salaries.", "Pick the month and process payment."]
+    },
+    {
+      "id": "attendance-payroll", "title": "Attendance Payroll", "module": "Accounts", "route": "/accounts/attendance-payroll",
+      "menuPath": "Sidebar → Accounts → Administrative → Attendance Payroll",
+      "keywords": ["attendance salary", "payroll attendance", "loss of pay", "lop"],
+      "summary": "Salary computed from attendance.",
+      "steps": ["Open Accounts → Administrative → Attendance Payroll.", "Pick the month and review."]
+    },
+    {
+      "id": "sales-returns", "title": "Sales Returns / Credit Notes", "module": "Accounts", "route": "/accounts/sales-returns",
+      "menuPath": "Sidebar → Accounts → Administrative → Sales Returns",
+      "keywords": ["credit note", "refund", "return", "sales return", "cancelled invoice"],
+      "summary": "Record refunds and credit notes against sales.",
+      "steps": ["Open Accounts → Administrative → Sales Returns.", "Add a credit note against the booking/invoice."]
+    },
+    {
+      "id": "hra", "title": "HRA (House Rent Allowance)", "module": "Accounts", "route": "/accounts/hra",
+      "menuPath": "Sidebar → Accounts → Administrative → HRA",
+      "keywords": ["house rent", "rent allowance"],
+      "summary": "House rent allowance records.",
+      "steps": ["Open Accounts → Administrative → HRA."]
+    },
+    {
+      "id": "budget", "title": "Budget", "module": "Accounts", "route": "/accounts/budget",
+      "menuPath": "Sidebar → Accounts → Budget",
+      "keywords": ["budget", "planned spend"],
+      "summary": "Budget planning.",
+      "steps": ["Open Accounts → Budget."]
+    },
+    {
+      "id": "uploaded-reports", "title": "Uploaded Reports (accounts)", "module": "Accounts", "route": "/accounts/reports",
+      "menuPath": "Sidebar → Accounts → Uploaded Reports",
+      "keywords": ["upload report", "documents", "report file"],
+      "summary": "Reports uploaded for Accounts.",
+      "steps": ["Open Accounts → Uploaded Reports."]
+    },
+    {
+      "id": "artist-finance", "title": "Artist Finance", "module": "Accounts", "route": "/finance",
+      "menuPath": "Sidebar → Accounts → Operations → Artist Finance (artists: Finance tab)",
+      "keywords": ["my earnings", "claims", "collections", "artist expense", "finance and claims", "my payout"],
+      "summary": "Artist collections and expense claims.",
+      "steps": ["Open Artist Finance (artists: the Finance tab).", "Add a collection or claim and submit."]
+    },
+    {
+      "id": "finance-dashboard", "title": "Company Finance dashboard", "module": "Finance", "route": "/company-finance",
+      "menuPath": "Sidebar → Finance → Dashboard",
+      "keywords": ["company finance", "financial dashboard", "ledger overview"],
+      "summary": "Top-level company finance overview.",
+      "steps": ["Open Finance → Dashboard."]
+    },
+    {
+      "id": "finance-reports", "inPage": "After it opens: pick the report tile you need", "title": "Finance Reports Center", "module": "Finance", "route": "/company-finance/reports",
+      "menuPath": "Sidebar → Finance → Reports",
+      "keywords": ["profit and loss", "p&l", "balance sheet", "trial balance", "ledger", "gst report", "report center", "financial statements"],
+      "summary": "Entry point to P&L, Balance Sheet, Trial Balance, Ledger, Receivables & Payables, GST and more.",
+      "steps": ["Open Finance → Reports.", "Choose the report and the period."]
+    },
+    {
+      "id": "finance-assets", "title": "Company Assets", "module": "Finance", "route": "/company-finance/assets",
+      "menuPath": "Sidebar → Finance → Assets",
+      "keywords": ["asset", "equipment", "depreciation", "fixed asset"],
+      "summary": "Company assets register.",
+      "steps": ["Open Finance → Assets.", "Add or review assets."]
+    },
+    {
+      "id": "bank-balance", "title": "Bank Balance", "module": "Finance", "route": "/company-finance/bank-balance",
+      "menuPath": "Sidebar → Finance → Bank Balance",
+      "keywords": ["bank", "balance", "bank account", "reconciliation"],
+      "summary": "Bank account balances.",
+      "steps": ["Open Finance → Bank Balance."]
+    },
+    {
+      "id": "financial-report", "title": "Financial Report (CEO)", "module": "Finance", "route": "/reports/analyst",
+      "menuPath": "Sidebar → Finance → Financial Report",
+      "keywords": ["ceo report", "daily report", "analytics", "management report"],
+      "summary": "CEO-level financial report and analytics.",
+      "steps": ["Open Finance → Financial Report."]
+    },
+    {
+      "id": "company-reports", "title": "Company Reports (document library)", "module": "Reports", "route": "/company-reports",
+      "menuPath": "Sidebar → Company Reports",
+      "keywords": ["department report", "upload report", "documents"],
+      "summary": "Per-department report documents.",
+      "steps": ["Open Company Reports from the sidebar.", "Pick the department and open or upload a report."]
+    },
+    {
+      "id": "staff", "title": "Staff Directory", "module": "HR", "route": "/staff",
+      "menuPath": "Sidebar → HRMS → People & Organization → Staff Directory",
+      "keywords": ["employee", "employees", "add staff", "new employee", "team", "staff list", "add user", "create login"],
+      "summary": "All employees; add or edit staff.",
+      "steps": ["Open HRMS → People & Organization → Staff Directory.", "Tap a person to view/edit or add a new employee."]
+    },
+    {
+      "id": "attendance", "title": "Attendance", "module": "HR", "route": "/hr/attendance",
+      "menuPath": "Sidebar → HRMS → Time & Attendance → Attendance",
+      "keywords": ["present", "absent", "punch", "check in", "timebox", "attendance report"],
+      "summary": "Staff attendance records.",
+      "steps": ["Open HRMS → Time & Attendance → Attendance.", "Pick the date or month."]
+    },
+    {
+      "id": "leave", "title": "Apply for / manage leave", "module": "HR", "route": "/hr/leave",
+      "menuPath": "Sidebar → Leave (HRMS → Time & Attendance → Leave Management)",
+      "keywords": ["leave", "holiday", "apply leave", "sick leave", "casual leave", "time off", "vacation", "leave balance"],
+      "summary": "Apply for leave and see your balance.",
+      "steps": ["Open Leave.", "Choose to apply, pick the type and dates, add a reason.", "Submit; your manager decides it in Approvals."]
+    },
+    {
+      "id": "approvals", "title": "Approvals", "module": "HR", "route": "/hr/approvals",
+      "menuPath": "Sidebar → Approvals",
+      "keywords": ["approve leave", "pending approvals", "reject", "team requests"],
+      "summary": "Review and decide leave and HR requests from your team.",
+      "steps": ["Open Approvals.", "Open a request and approve or reject with a comment."]
+    },
+    {
+      "id": "regularization", "title": "Attendance Regularization", "module": "HR", "route": "/hr/regularization",
+      "menuPath": "Sidebar → HRMS → Time & Attendance → Regularization",
+      "keywords": ["correct attendance", "missed punch", "forgot to punch", "attendance correction"],
+      "summary": "Request a correction to attendance.",
+      "steps": ["Open Regularization.", "Choose the day and the correct times with a reason.", "Submit for approval."]
+    },
+    {
+      "id": "shifts", "title": "Shifts & Roster", "module": "HR", "route": "/hr/shift",
+      "menuPath": "Sidebar → HRMS → Time & Attendance → Shifts & Roster",
+      "keywords": ["shift", "roster", "duty"],
+      "summary": "Work shifts and assignments.",
+      "steps": ["Open Shifts & Roster."]
+    },
+    {
+      "id": "timesheet", "title": "Time Tracker", "module": "HR", "route": "/hr/timesheet",
+      "menuPath": "Sidebar → HRMS → Time & Attendance → Time Tracker",
+      "keywords": ["timesheet", "hours", "weekly timesheet"],
+      "summary": "Weekly timesheets and approvals.",
+      "steps": ["Open Time Tracker.", "Fill the week's hours and submit."]
+    },
+    {
+      "id": "slots", "title": "Slot Management", "module": "HR", "route": "/hr/slots",
+      "menuPath": "Sidebar → HRMS → Time & Attendance → Slot Management",
+      "keywords": ["slot", "artist slots", "capacity", "availability slots"],
+      "summary": "Manage booking slots and artist availability.",
+      "steps": ["Open Slot Management.", "Use Slot Capacity (same menu) to set how many bookings a slot allows."]
+    },
+    {
+      "id": "salaries", "title": "Salaries & Payroll (HR)", "module": "HR", "route": "/hr/salaries",
+      "menuPath": "Sidebar → HRMS → Payroll & Compensation → Salaries & Payroll",
+      "keywords": ["payslip", "salary", "payroll", "pay run"],
+      "summary": "Salary and payroll processing.",
+      "steps": ["Open HRMS → Payroll & Compensation → Salaries & Payroll.", "Pick the month."]
+    },
+    {
+      "id": "reimbursements", "title": "Reimbursements", "module": "HR", "route": "/hr/reimbursements",
+      "menuPath": "Sidebar → HRMS → Payroll & Compensation → Reimbursements",
+      "keywords": ["expense claim", "reimbursement", "claim money back", "bill claim"],
+      "summary": "Employee expense claims.",
+      "steps": ["Open Reimbursements.", "Add a claim with amount and bill, and submit."]
+    },
+    {
+      "id": "travel", "title": "Travel requests", "module": "HR", "route": "/hr/travel",
+      "menuPath": "Sidebar → HRMS → Payroll & Compensation → Travel Expenses",
+      "keywords": ["travel", "advance", "trip"],
+      "summary": "Travel requests and advances.",
+      "steps": ["Open Travel Expenses.", "Create a request and submit."]
+    },
+    {
+      "id": "evaluation", "title": "5-Pillar Evaluation", "module": "HR", "route": "/hr/evaluation",
+      "menuPath": "Sidebar → HRMS → Growth & Performance → 5-Pillar Evaluation",
+      "keywords": ["performance review", "appraisal", "evaluation", "rating staff", "5 pillars"],
+      "summary": "Staff performance evaluation.",
+      "steps": ["Open 5-Pillar Evaluation.", "Pick the employee and period, score and save."]
+    },
+    {
+      "id": "recruitment", "title": "Recruitment", "module": "HR", "route": "/hr/recruitment",
+      "menuPath": "Sidebar → HRMS → Hiring & Lifecycle → Recruitment",
+      "keywords": ["hiring", "candidate", "job post", "interview", "offer"],
+      "summary": "Job posts, candidates and offers.",
+      "steps": ["Open Recruitment.", "Add a job post or candidate."]
+    },
+    {
+      "id": "grievance", "title": "Grievances", "module": "HR", "route": "/hr/grievance",
+      "menuPath": "Sidebar → HRMS → Workplace & Culture → Grievances",
+      "keywords": ["complaint", "grievance", "raise issue to hr"],
+      "summary": "Raise or work employee grievances.",
+      "steps": ["Open Grievances.", "Raise a case with details."]
+    },
+    {
+      "id": "hr-policies", "title": "Policies & Handbook", "module": "HR", "route": "/hr/policies",
+      "menuPath": "Sidebar → HRMS → Workplace & Culture → Policies & Handbook",
+      "keywords": ["policy", "rules", "code of conduct", "handbook"],
+      "summary": "Company policies and handbook.",
+      "steps": ["Open Policies & Handbook."]
+    },
+    {
+      "id": "inventory", "title": "Inventory Dashboard", "module": "Inventory", "route": "/inventory",
+      "menuPath": "Sidebar → Inventory → Dashboard",
+      "keywords": ["stock overview", "inventory summary"],
+      "summary": "Overview of studio stock.",
+      "steps": ["Open Inventory → Dashboard."]
+    },
+    {
+      "id": "inventory-stock", "title": "Stock List", "module": "Inventory", "route": "/inventory/stock",
+      "menuPath": "Sidebar → Inventory → Stock List",
+      "keywords": ["add stock", "product", "items", "stock in", "stock out", "quantity"],
+      "summary": "All stock items and quantities.",
+      "steps": ["Open Inventory → Stock List.", "Add or edit an item; adjust quantity."]
+    },
+    {
+      "id": "inventory-kits", "title": "Staff Kits", "module": "Inventory", "route": "/inventory/kits",
+      "menuPath": "Sidebar → Inventory → Staff Kits (artists: My Kits)",
+      "keywords": ["kit", "assign kit", "artist kit", "my kit"],
+      "summary": "Kits assigned to staff. Assigning a kit deducts studio stock.",
+      "steps": ["Open Inventory → Staff Kits.", "Pick a staff member and assign items."]
+    },
+    {
+      "id": "inventory-purchases", "title": "Purchases", "module": "Inventory", "route": "/inventory/purchases",
+      "menuPath": "Sidebar → Inventory → Purchases",
+      "keywords": ["buy stock", "purchase entry", "restock"],
+      "summary": "Record stock purchases.",
+      "steps": ["Open Inventory → Purchases and add a purchase."]
+    },
+    {
+      "id": "inventory-alerts", "title": "Restock Alerts", "module": "Inventory", "route": "/inventory/alerts",
+      "menuPath": "Sidebar → Inventory → Restock Alerts",
+      "keywords": ["low stock", "reorder"],
+      "summary": "Items running low.",
+      "steps": ["Open Inventory → Restock Alerts."]
+    },
+    {
+      "id": "inventory-expiry", "title": "Expiry Tracker", "module": "Inventory", "route": "/inventory/expiry",
+      "menuPath": "Sidebar → Inventory → Expiry Tracker",
+      "keywords": ["expiry", "expire", "expired products"],
+      "summary": "Products nearing expiry.",
+      "steps": ["Open Inventory → Expiry Tracker."]
+    },
+    {
+      "id": "fleet-vehicles", "title": "Fleet vehicles (cars)", "module": "Fleet", "route": "/fleet/vehicles",
+      "menuPath": "Sidebar → Fleet → Cars",
+      "keywords": ["car", "vehicle", "add vehicle", "insurance"],
+      "summary": "Vehicles in the fleet.",
+      "steps": ["Open Fleet → Cars.", "Add or edit a vehicle."]
+    },
+    {
+      "id": "fleet-drivers", "title": "Drivers", "module": "Fleet", "route": "/fleet/drivers",
+      "menuPath": "Sidebar → Fleet → Drivers",
+      "keywords": ["driver", "add driver"],
+      "summary": "Drivers.",
+      "steps": ["Open Fleet → Drivers."]
+    },
+    {
+      "id": "fleet-assignments", "title": "Fleet assignments", "module": "Fleet", "route": "/fleet/assignments",
+      "menuPath": "Sidebar → Fleet → Assignments",
+      "keywords": ["assign car", "assign driver", "trip", "duty"],
+      "summary": "Assign vehicles and drivers to works.",
+      "steps": ["Open Fleet → Assignments.", "Choose the work, then the vehicle and driver."]
+    },
+    {
+      "id": "fleet-fuel", "title": "Fuel & fleet expenses", "module": "Fleet", "route": "/fleet/fuel",
+      "menuPath": "Sidebar → Fleet → Expenses",
+      "keywords": ["fuel", "petrol", "diesel", "toll", "vehicle expense"],
+      "summary": "Fuel and fleet expenses.",
+      "steps": ["Open Fleet → Expenses.", "Add an expense with amount and bill."]
+    },
+    {
+      "id": "marketing", "title": "Marketing Dashboard", "module": "Marketing", "route": "/marketing/dashboard",
+      "menuPath": "Sidebar → Marketing → Dashboard",
+      "keywords": ["marketing", "competitor", "growth score", "campaign", "roi", "leads report"],
+      "summary": "Marketing overview; other marketing screens (Competitors, Weekly Score, Insights, Analytics, Campaigns, Leads Report) are in the same menu.",
+      "steps": ["Open Marketing → Dashboard.", "Use the Marketing menu items for the detailed screens."]
+    },
+    {
+      "id": "projects", "title": "Company Projects", "module": "Projects", "route": "/projects",
+      "menuPath": "Sidebar → Company Projects",
+      "keywords": ["project", "planning", "department project", "task"],
+      "summary": "Company-wide project planning by department.",
+      "steps": ["Open Company Projects.", "Open a project to see its tasks."]
+    },
+    {
+      "id": "helpdesk", "title": "Help Desk tickets", "module": "IT", "route": "/helpdesk",
+      "menuPath": "Sidebar → IT → Help Desk",
+      "keywords": ["ticket", "it support", "raise ticket", "computer problem", "software problem"],
+      "summary": "Raise and track support tickets.",
+      "steps": ["Open Help Desk.", "Create a ticket with details; track its status."]
+    },
+    {
+      "id": "backup", "title": "Backup Data", "module": "General", "route": "/backup",
+      "menuPath": "Sidebar → Backup Data",
+      "keywords": ["backup", "download data", "export data"],
+      "summary": "Backup/export of data you have access to.",
+      "steps": ["Open Backup Data from the bottom of the sidebar."]
+    },
+    {
+      "id": "settings", "title": "Settings (users & roles)", "module": "Admin", "route": "/settings",
+      "menuPath": "Sidebar → Settings",
+      "keywords": ["roles", "permissions", "user access", "who can see", "create user", "role editor", "departments", "menu access"],
+      "summary": "Users, roles and permissions (administrators only).",
+      "steps": ["Open Settings.", "Edit a role to switch features and sub-sections on or off for it."],
+      "tips": ["If a menu item is missing for someone, the role is missing that permission."]
+    },
+    {
+      "id": "missing-menu", "title": "I can't see a screen / menu item", "module": "General",
+      "menuPath": "Ask an administrator → Settings → Roles",
+      "keywords": ["missing", "not visible", "cannot see", "no access", "permission denied", "where is", "disappeared", "not showing"],
+      "summary": "Menu items depend on your role. If a screen is missing, your role does not include it.",
+      "steps": ["Check you are in the right workspace (workspace switcher at the top, if shown).", "Ask an administrator to add the feature to your role in Settings → Roles."]
+    }
+  ]
+}
