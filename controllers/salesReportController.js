@@ -4,6 +4,7 @@ import Lead from '../models/Lead.js';
 import User from '../models/User.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
 import { salesCountMatch } from '../utils/salesRules.js';
+import { istDayKey, istMonthKey, istWeekStart, rangeCondition } from '../utils/istDate.js';
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
 const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
@@ -15,15 +16,9 @@ const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const SALES_EXCLUDED = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
 const isSale = (b) => !SALES_EXCLUDED.includes(String(b.status || '').toLowerCase());
 
-const dateFilter = (field, from, to) => {
-  const q = {};
-  if (from || to) {
-    q[field] = {};
-    if (from) q[field].$gte = new Date(from);
-    if (to) q[field].$lte = new Date(to);
-  }
-  return q;
-};
+// from / to are IST calendar days (older app builds send local-midnight ISO
+// strings; the date part is used). `to` includes its whole day.
+const dateFilter = (field, from, to) => rangeCondition(field, from, to);
 
 // All revenue bookings in the window.
 const saleBookings = async (from, to, user) => {
@@ -151,21 +146,24 @@ export const salesBySalesperson = async (req, res) => {
   }
 };
 
-// @desc    Sales summary by day or month.
-// @route   GET /api/sales-reports/summary?from&to&groupBy=day|month
+// @desc    Sales summary by day, week (Monday start) or month — IST calendar.
+//          A week row is labelled with its Monday ('YYYY-MM-DD').
+// @route   GET /api/sales-reports/summary?from&to&groupBy=day|week|month
 export const salesSummary = async (req, res) => {
   if (!guard(req, res)) return;
   try {
     const { from, to } = req.query;
-    const groupBy = req.query.groupBy === 'month' ? 'month' : 'day';
+    const groupBy = ['month', 'week'].includes(req.query.groupBy) ? req.query.groupBy : 'day';
     const bookings = await saleBookings(from, to, req.user);
     const map = new Map();
     for (const b of bookings) {
       const d = new Date(b.bookingDate || Date.now());
       const key =
         groupBy === 'month'
-          ? `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-          : d.toISOString().slice(0, 10);
+          ? istMonthKey(d)
+          : groupBy === 'week'
+            ? istWeekStart(d)
+            : istDayKey(d);
       if (!map.has(key)) map.set(key, { label: key, sublabel: '', count: 0, amount: 0, received: 0 });
       const r = map.get(key);
       r.count += 1;

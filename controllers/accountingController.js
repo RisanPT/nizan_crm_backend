@@ -33,6 +33,7 @@ import {
   setLockDate,
   isLocked,
 } from '../services/posting.js';
+import { fromBound, rangeCondition } from '../utils/istDate.js';
 
 const SOURCE_MODELS = { Collection, AdminExpense, FuelExpense, Expense, CashTransaction, Salary, HraRecord, SalesReturn, Booking, BookingAdvance: Booking, ArtistPayout, Purchase, PurchasePayment: Purchase };
 
@@ -281,11 +282,7 @@ const getJournalEntries = async (req, res) => {
     const q = {};
     if (req.query.type && req.query.type !== 'all') q.voucherType = req.query.type;
     if (req.query.status && req.query.status !== 'all') q.status = req.query.status;
-    if (req.query.from || req.query.to) {
-      q.date = {};
-      if (req.query.from) q.date.$gte = new Date(req.query.from);
-      if (req.query.to) q.date.$lte = new Date(req.query.to);
-    }
+    Object.assign(q, rangeCondition('date', req.query.from, req.query.to));
     const entries = await JournalEntry.find(q)
       .populate('lines.account', 'code name nature')
       .populate('createdBy', 'name')
@@ -367,12 +364,7 @@ const getTrialBalance = async (req, res) => {
     return res.status(403).json({ message: 'No finance access' });
   }
   try {
-    const match = { status: 'posted' };
-    if (req.query.from || req.query.to) {
-      match.date = {};
-      if (req.query.from) match.date.$gte = new Date(req.query.from);
-      if (req.query.to) match.date.$lte = new Date(req.query.to);
-    }
+    const match = { status: 'posted', ...rangeCondition('date', req.query.from, req.query.to) };
 
     const accounts = await ChartOfAccount.find({}).sort({ code: 1 }).lean();
     const movements = await JournalEntry.aggregate([
@@ -424,14 +416,11 @@ const getTrialBalance = async (req, res) => {
   }
 };
 
-// Per-account posted movements, optionally bounded by a date window.
+// Per-account posted movements, optionally bounded by a date window. String
+// bounds are IST calendar days ('to' includes its whole day); Date bounds are
+// exact instants (month-end / tax-filing pass those).
 const accountMovements = async ({ from, to } = {}) => {
-  const match = { status: 'posted' };
-  if (from || to) {
-    match.date = {};
-    if (from) match.date.$gte = new Date(from);
-    if (to) match.date.$lte = new Date(to);
-  }
+  const match = { status: 'posted', ...rangeCondition('date', from, to) };
   const rows = await JournalEntry.aggregate([
     { $match: match },
     { $unwind: '$lines' },
@@ -1141,9 +1130,10 @@ const getAccountLedger = async (req, res) => {
     // movements dated before the window start.
     let running =
       account.openingType === 'cr' ? -(account.openingBalance || 0) : account.openingBalance || 0;
-    if (from) {
+    const fromStart = fromBound(from);
+    if (fromStart) {
       const before = await JournalEntry.aggregate([
-        { $match: { status: 'posted', 'lines.account': accId, date: { $lt: new Date(from) } } },
+        { $match: { status: 'posted', 'lines.account': accId, date: { $lt: fromStart } } },
         { $unwind: '$lines' },
         { $match: { 'lines.account': accId } },
         { $group: { _id: null, dr: { $sum: '$lines.debit' }, cr: { $sum: '$lines.credit' } } },
@@ -1152,12 +1142,7 @@ const getAccountLedger = async (req, res) => {
     }
     const openingBalance = round2(running);
 
-    const q = { status: 'posted', 'lines.account': accId };
-    if (from || to) {
-      q.date = {};
-      if (from) q.date.$gte = new Date(from);
-      if (to) q.date.$lte = new Date(to);
-    }
+    const q = { status: 'posted', 'lines.account': accId, ...rangeCondition('date', from, to) };
     const entries = await JournalEntry.find(q).sort({ date: 1, createdAt: 1 }).limit(20000).lean();
 
     const rows = [];
@@ -1314,12 +1299,7 @@ const getGstr1 = async (req, res) => {
   try {
     const gst = await ensureGstConfig();
     const { from, to } = req.query;
-    const q = {};
-    if (from || to) {
-      q.bookingDate = {};
-      if (from) q.bookingDate.$gte = new Date(from);
-      if (to) q.bookingDate.$lte = new Date(to);
-    }
+    const q = rangeCondition('bookingDate', from, to);
     const bookings = await Booking.find(q)
       .select('bookingNumber invoiceNumber customerName totalPrice bookingDate status')
       .limit(20000)
