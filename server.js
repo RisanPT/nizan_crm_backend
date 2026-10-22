@@ -49,6 +49,10 @@ import departmentRoutes from './routes/departmentRoutes.js';
 import adminExpenseRoutes from './routes/adminExpenseRoutes.js';
 import expenseCategoryRoutes from './routes/expenseCategoryRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
+import clientAuthRoutes from './routes/clientAuthRoutes.js';
+import clientRoutes from './routes/clientRoutes.js';
+import chatRoutes from './routes/chatRoutes.js';
+import staffClientRoutes from './routes/staffClientRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import salaryRoutes from './routes/salaryRoutes.js';
 import salesReturnRoutes from './routes/salesReturnRoutes.js';
@@ -277,6 +281,10 @@ app.use('/api/whatsapp', whatsappRoutes);           // TeamN Chat: send quotatio
 app.use('/api/geo', geoRoutes);                    // Road distance from HQ (OpenRouteService)
 app.use('/api/company-reports', companyReportRoutes); // Per-department report library
 app.use('/api/reviews', reviewRoutes);                // Post-service client review forms
+app.use('/api/client/auth', clientAuthRoutes);        // Client app: phone-OTP / magic-link login (public)
+app.use('/api/client', clientRoutes);                 // Client app: my-profile / my-bookings (protectClient)
+app.use('/api/chat', chatRoutes);                     // Concierge chat (client + staff)
+app.use('/api/app-clients', staffClientRoutes);       // Staff: view bridal app clients (brides)
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });
