@@ -19,7 +19,7 @@ const leadSchema = mongoose.Schema(
     },
     source: {
       type: String,
-      default: 'Walk-in',
+      default: 'WhatsApp (Organic)',
     },
     // Marketing campaign this lead is attributed to — drives campaign ROI
     // (revenue from this lead's bookings rolls up to the campaign).

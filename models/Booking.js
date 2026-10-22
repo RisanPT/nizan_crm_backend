@@ -247,6 +247,10 @@ const bookingSchema = mongoose.Schema(
     endKm: { type: Number, default: null, min: 0 },
     tripStartedAt: { type: Date, default: null },
     tripCompletedAt: { type: Date, default: null },
+    // 4-digit verification OTP shared with the artist/assistant, entered by the
+    // driver during pre-trip inspection to verify the artist is onboard.
+    artistTripOtp: { type: String, default: null },
+    artistOtpVerifiedAt: { type: Date, default: null },
     customerName: {
       type: String,
       required: true,

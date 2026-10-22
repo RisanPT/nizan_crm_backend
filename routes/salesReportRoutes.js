@@ -5,6 +5,7 @@ import {
   salesBySalesperson,
   salesSummary,
   paymentsByMode,
+  salesEodReport,
 } from '../controllers/salesReportController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -12,6 +13,7 @@ const router = express.Router();
 
 router.use(protect);
 
+router.get('/eod', salesEodReport);
 router.get('/by-customer', salesByCustomer);
 router.get('/by-package', salesByPackage);
 router.get('/by-salesperson', salesBySalesperson);

@@ -334,7 +334,17 @@ const startServer = async () => {
     );
   }
 
-  app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+  const server = app.listen(PORT, '0.0.0.0', () => console.log(`Server running on port ${PORT}`));
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`\n⚠️  [Port In Use] Port ${PORT} is already in use by another running instance.`);
+      console.error(`   The backend is already active on http://localhost:${PORT}`);
+      console.error(`   If you need to restart, terminate the existing process on port ${PORT} first.\n`);
+      process.exit(0);
+    }
+    throw err;
+  });
 };
 
 startServer();
+
