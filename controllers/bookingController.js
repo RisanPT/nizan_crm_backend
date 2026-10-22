@@ -26,6 +26,8 @@ import {
 
 const EXTRA_DATE_AMOUNT = 3000;
 
+export const generate4DigitOtp = () => String(Math.floor(1000 + Math.random() * 9000));
+
 const normalizeObjectId = (value) => {
   if (value == null || value == '') return null;
   return value;
@@ -835,6 +837,14 @@ export const getBookingById = async (req, res) => {
     if (!booking) {
       return res.status(404).json({ message: 'Booking not found' });
     }
+    // Auto-generate 4-digit verification OTP if driver and staff are assigned but OTP was not set
+    if (booking.driverId && booking.assignedStaff?.length > 0 && !booking.artistTripOtp) {
+      booking.artistTripOtp = generate4DigitOtp();
+      await Booking.collection.updateOne(
+        { _id: booking._id },
+        { $set: { artistTripOtp: booking.artistTripOtp } }
+      );
+    }
     const counts = await makeCountsTowardSales();
     res.json({ ...booking.toJSON(), countsTowardSales: counts(booking) });
   } catch (error) {
@@ -1440,6 +1450,7 @@ export const createBooking = async (req, res) => {
       districtId: normalizedDistrictId,
       driverId: normalizedDriverId,
       tripStatus: normalizedDriverId ? 'assigned' : 'unassigned',
+      artistTripOtp: (normalizedDriverId && summaryAssignedStaff?.length > 0) ? generate4DigitOtp() : null,
       vehicleId: normalizedVehicleId,
       customerName,
       email: normalizedEmail,
@@ -1760,6 +1771,10 @@ export const updateBooking = async (req, res) => {
     // A trip already in progress, completed or in an accident keeps its status.
     if (!booking.tripStatus || ['unassigned', 'assigned'].includes(booking.tripStatus)) {
       booking.tripStatus = booking.driverId ? 'assigned' : 'unassigned';
+    }
+    // Auto-generate 4-digit verification OTP if driver and staff are assigned and no OTP exists yet
+    if (booking.driverId && (finalAssignedStaff?.length > 0 || booking.assignedStaff?.length > 0) && !booking.artistTripOtp) {
+      booking.artistTripOtp = generate4DigitOtp();
     }
     booking.vehicleId = vehicleId != null ? normalizedVehicleId : booking.vehicleId;
     booking.service = finalService;
