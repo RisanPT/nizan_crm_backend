@@ -1,10 +1,13 @@
 import mongoose from 'mongoose';
 import Lead from '../models/Lead.js';
 import Booking from '../models/Booking.js';
+import Consultation from '../models/Consultation.js';
+import StylistClient from '../models/StylistClient.js';
 import { postDoc, safePost } from '../services/posting.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
 import { applyLeadGeography } from '../services/leadGeography.js';
 import { DERIVED_KEYS } from '../utils/leadGeography.js';
+import { notifyStylistLeadsOfNewLead } from '../utils/consultationNotify.js';
 import {
   notify,
   getUserIdsByRoles,
@@ -544,6 +547,8 @@ export const createLead = async (req, res) => {
       createdBy: req.user?._id ?? null,
       excludeUserId: req.user?._id ?? null,
     });
+    // Stylist leads (consultations module) also hear about new enquiries.
+    await notifyStylistLeadsOfNewLead(lead, req.user);
 
     res.status(201).json(lead);
   } catch (error) {
@@ -707,6 +712,21 @@ export const updateLead = async (req, res) => {
 
 export const deleteLead = async (req, res) => {
   try {
+    // A client with consultations (and their notes) is not deleted from under
+    // the stylists' calendars — retention rules for that data are still to be
+    // agreed, so it is kept until IT removes it deliberately.
+    const consultationCount = await Consultation.countDocuments({ leadId: req.params.id });
+    if (consultationCount > 0) {
+      return res.status(409).json({
+        message: `This enquiry has ${consultationCount} consultation record${consultationCount === 1 ? '' : 's'} and cannot be deleted. Cancel the consultations instead, or ask IT to remove the records.`,
+      });
+    }
+    // Nor while a stylist keeps a client file on them.
+    if (await StylistClient.exists({ leadId: req.params.id })) {
+      return res.status(409).json({
+        message: 'This enquiry has a stylist client file and cannot be deleted. Ask IT to remove the client file first.',
+      });
+    }
     const lead = await Lead.findByIdAndDelete(req.params.id);
     if (!lead) {
       return res.status(404).json({ message: 'Lead not found' });

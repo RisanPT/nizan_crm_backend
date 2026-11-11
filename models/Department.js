@@ -42,6 +42,10 @@ const departmentSchema = mongoose.Schema(
     stateIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'State' }],
     regionIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Region' }],
 
+    // Weekly days off for this department's staff (0 = Sunday … 6 = Saturday).
+    // Leave days skip these (see utils/leaveMath.js). Empty = no weekly off.
+    weeklyOffs: { type: [Number], default: [0] },
+
     active: { type: Boolean, default: true },
     // Seed departments cannot be deleted (only deactivated) so code keys stay valid.
     isSystem: { type: Boolean, default: false },

@@ -48,7 +48,13 @@ import fleetRoutes from './routes/fleetRoutes.js';
 import gpsKmRoutes from './routes/gpsKmRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
 import marketingRoutes from './routes/marketingRoutes.js';
+import marketingEodRoutes from './routes/marketingEodRoutes.js';
+import { seedMarketingMasterData } from './utils/seedMarketingMaster.js';
+import { startMarketingEodReminders } from './services/marketingEodReminders.js';
+import { startReviewAutoSend } from './services/reviewAutoSend.js';
 import trialRoutes from './routes/trialRoutes.js';
+import consultationRoutes from './routes/consultationRoutes.js';
+import stylistClientRoutes from './routes/stylistClientRoutes.js';
 import trialPackageRoutes from './routes/trialPackageRoutes.js';
 import roleRoutes from './routes/roleRoutes.js';
 import departmentRoutes from './routes/departmentRoutes.js';
@@ -74,6 +80,7 @@ import taxFilingRoutes from './routes/taxFilingRoutes.js';
 import salesReportRoutes from './routes/salesReportRoutes.js';
 import dashboardRoutes from './routes/dashboardRoutes.js';
 import salesTargetRoutes from './routes/salesTargetRoutes.js';
+import enquiryCountRoutes from './routes/enquiryCountRoutes.js';
 import goalRoutes from './routes/goalRoutes.js';
 import slotRoutes from './routes/slotRoutes.js';
 import ceoRoutes from './routes/ceoRoutes.js';
@@ -101,6 +108,8 @@ import regularizationRoutes from './routes/regularizationRoutes.js';
 import recruitmentRoutes from './routes/recruitmentRoutes.js';
 import onboardingRoutes from './routes/onboardingRoutes.js';
 import offboardingRoutes from './routes/offboardingRoutes.js';
+import employeeAssetRoutes from './routes/employeeAssetRoutes.js';
+import auditRoutes from './routes/auditRoutes.js';
 import reimbursementRoutes from './routes/reimbursementRoutes.js';
 import travelRoutes from './routes/travelRoutes.js';
 import compensationRoutes from './routes/compensationRoutes.js';
@@ -253,7 +262,10 @@ app.use('/api/budgets', budgetRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api/inventory', inventoryRoutes);
 app.use('/api/marketing', marketingRoutes);
+app.use('/api/marketing/eod', marketingEodRoutes);
 app.use('/api/trials', trialRoutes);
+app.use('/api/consultations', consultationRoutes);       // Stylist video consultations (SRS v1.2)
+app.use('/api/stylist-clients', stylistClientRoutes);    // Stylist client files (Team N + Nizan)
 app.use('/api/trial-packages', trialPackageRoutes);
 app.use('/api/admin-expenses', adminExpenseRoutes);
 app.use('/api/expense-categories', expenseCategoryRoutes); // Per-department expense categories (CRUD)
@@ -274,6 +286,8 @@ app.use('/api/regularizations', regularizationRoutes); // HR: attendance regular
 app.use('/api/recruitment', recruitmentRoutes);   // HR: job posts, candidates, offers
 app.use('/api/onboarding', onboardingRoutes);     // HR: new-hire onboarding checklists
 app.use('/api/offboarding', offboardingRoutes);   // HR: employee exit / clearance
+app.use('/api/employee-assets', employeeAssetRoutes); // HR: assets issued to employees (returned at exit)
+app.use('/api/audit', auditRoutes);               // HR: change history (salary / personal data)
 app.use('/api/reimbursements', reimbursementRoutes); // HR: expense claims (→ ledger on pay)
 app.use('/api/travel', travelRoutes);             // HR: travel requests
 app.use('/api/compensation', compensationRoutes); // HR: salary bands + revisions
@@ -289,6 +303,7 @@ app.use('/api/tax-filings', taxFilingRoutes);     // GST/TDS filing-status track
 app.use('/api/sales-reports', salesReportRoutes); // Sales analytics reports
 app.use('/api/dashboard', dashboardRoutes);         // Main dashboard analytics tabs
 app.use('/api/sales-targets', salesTargetRoutes); // Monthly salesperson targets
+app.use('/api/enquiry-counts', enquiryCountRoutes); // Manual daily enquiry counts (verification vs saved leads)
 app.use('/api/goals', goalRoutes); // Company day / week / month goals + day-wise report
 app.use('/api/slots', slotRoutes);                // Day-wise booking slot capacity
 app.use('/api/monthly-objectives', monthlyObjectiveRoutes); // Company Projects → Monthly objectives per department
@@ -335,6 +350,9 @@ const startServer = async () => {
     await ensureDefaultRoles(); // seed any new system roles (e.g. artist_head)
     await seedAdminUser();
     await migrateAndSyncAll();
+    await seedMarketingMasterData();
+    startMarketingEodReminders();
+    startReviewAutoSend(); // off unless REVIEW_AUTO_SEND_FROM is set
 
     // Auto-sync Timebox employees on server boot
     performTimeboxEmployeeSync()

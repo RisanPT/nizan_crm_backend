@@ -6,6 +6,10 @@ import Employee from '../models/Employee.js';
 const isAdmin = (u) => u?.role === 'admin' || u?.role === 'manager';
 const canRead = (u) => isAdmin(u) || u?.isDepartmentHead;
 
+// Weekly offs: 0 = Sunday … 6 = Saturday; anything else is dropped.
+const cleanWeeklyOffs = (v) =>
+  [...new Set((Array.isArray(v) ? v : []).map(Number).filter((n) => Number.isInteger(n) && n >= 0 && n <= 6))].sort();
+
 const slug = (s) => String(s || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_+|_+$/g, '');
 
 const populate = [{ path: 'head', select: 'name email role artistRole timeboxEmployeeId' }];
@@ -128,6 +132,7 @@ export const createDepartment = async (req, res) => {
       zoneIds: Array.isArray(req.body.zoneIds) ? req.body.zoneIds : [],
       stateIds: Array.isArray(req.body.stateIds) ? req.body.stateIds : [],
       regionIds: Array.isArray(req.body.regionIds) ? req.body.regionIds : [],
+      weeklyOffs: Array.isArray(req.body.weeklyOffs) ? cleanWeeklyOffs(req.body.weeklyOffs) : [0],
       active: req.body.active !== false,
       isSystem: false,
     });
@@ -156,6 +161,7 @@ export const updateDepartment = async (req, res) => {
     if (b.zoneIds !== undefined) doc.zoneIds = Array.isArray(b.zoneIds) ? b.zoneIds : [];
     if (b.stateIds !== undefined) doc.stateIds = Array.isArray(b.stateIds) ? b.stateIds : [];
     if (b.regionIds !== undefined) doc.regionIds = Array.isArray(b.regionIds) ? b.regionIds : [];
+    if (b.weeklyOffs !== undefined) doc.weeklyOffs = cleanWeeklyOffs(b.weeklyOffs);
     if (b.active !== undefined) doc.active = !!b.active;
     // `key` and `isSystem` are immutable once created.
 

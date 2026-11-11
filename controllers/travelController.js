@@ -4,6 +4,10 @@ import Employee from '../models/Employee.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import { createApproval } from '../services/approvals.js';
 import { buildEmployeeApprovalChain } from '../utils/approvalChain.js';
+import { scopeFilter, assertEmployeeInScope } from '../utils/hrDeptScope.js';
+
+// Dept heads only handle travel requests of their own department's staff.
+const KEYS = ['travel'];
 
 const empPopulate = { path: 'employeeId', select: 'name department profileImage' };
 
@@ -24,8 +28,9 @@ const getMine = asyncHandler(async (req, res) => {
 
 const getRequests = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
-  const filter = {};
+  let filter = {};
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+  filter = { ...filter, ...(await scopeFilter(req, KEYS)) };
   const rows = await TravelRequest.find(filter).populate(empPopulate).sort({ fromDate: -1, createdAt: -1 }).limit(300);
   res.json(rows);
 });
@@ -36,6 +41,7 @@ const applyTravel = asyncHandler(async (req, res) => {
   const onBehalf = req.body.employeeId && String(req.body.employeeId) !== String(employeeId || '');
   if (onBehalf) {
     if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed to file for others'); }
+    await assertEmployeeInScope(req, res, req.body.employeeId, KEYS);
     employeeId = req.body.employeeId;
   }
   if (!employeeId) { res.status(400); throw new Error('No employee record is linked to your account.'); }
@@ -91,6 +97,7 @@ const cancelTravel = asyncHandler(async (req, res) => {
   if (!trip) { res.status(404); throw new Error('Request not found'); }
   const owns = String(trip.employeeId) === String(req.user.employeeId || '');
   if (!owns && !canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  if (!owns) await assertEmployeeInScope(req, res, trip.employeeId, KEYS);
   if (trip.status !== 'pending') { res.status(409); throw new Error('Only a pending request can be cancelled'); }
   trip.status = 'cancelled';
   await trip.save();

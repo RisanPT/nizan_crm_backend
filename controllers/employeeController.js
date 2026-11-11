@@ -6,6 +6,18 @@ import SalaryIncrement from '../models/SalaryIncrement.js';
 import mongoose from 'mongoose';
 import { flatGeoMatch, isFullGeoAccess } from '../utils/geoScope.js';
 import { performTimeboxEmployeeSync } from './timeboxController.js';
+import { redactEmployee } from '../utils/hrAccess.js';
+import { getHrScope } from '../utils/hrDeptScope.js';
+import { logChange, snapshot } from '../utils/audit.js';
+
+// Employee fields tracked in the HR change log (pay, bank, IDs, job facts).
+const EMPLOYEE_AUDIT_FIELDS = [
+  'baseSalary', 'allowances', 'deductions', 'hra', 'hraDay', 'salaryType', 'overtimeRate',
+  'bankName', 'accountNumber', 'ifscCode', 'upiId', 'panNumber',
+  'statutoryApplicability.uan', 'statutoryApplicability.epf', 'statutoryApplicability.esi',
+  'currentGrade', 'department', 'departmentId', 'status', 'employmentStatus',
+  'role', 'designationId', 'reportingManagerId', 'dateOfJoining',
+];
 
 const normalizeWorks = (works, fallbackSpecialization = '') => {
   if (Array.isArray(works)) {
@@ -54,6 +66,8 @@ const handleEmployeeSaveError = (error, res) => {
 // @access  Public (for now)
 export const getEmployees = async (req, res) => {
   try {
+    // Who may see pay fields on which rows (dept heads: own department only).
+    const scope = await getHrScope(req, ['staff']);
     const page = Number.parseInt(req.query.page, 10);
     const limit = Number.parseInt(req.query.limit, 10);
 
@@ -171,7 +185,7 @@ export const getEmployees = async (req, res) => {
       ]);
 
       return res.json({
-        items,
+        items: items.map((e) => redactEmployee(e, req.user, scope)),
         page: currentPage,
         limit: currentLimit,
         totalItems,
@@ -186,7 +200,7 @@ export const getEmployees = async (req, res) => {
       .populate('districtId', 'name status')
       .populate('pincodeId', 'code status')
       .sort({ createdAt: -1 });
-    res.json(employees);
+    res.json(employees.map((e) => redactEmployee(e, req.user, scope)));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -206,7 +220,7 @@ export const getEmployee = async (req, res) => {
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
-    res.json(employee);
+    res.json(redactEmployee(employee, req.user, await getHrScope(req, ['staff'])));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -256,6 +270,7 @@ export const createEmployee = async (req, res) => {
   } = req.body;
 
   try {
+    const auditBefore = snapshot(employee, EMPLOYEE_AUDIT_FIELDS);
     const normalizedEmail = normalizeEmail(email);
     const normalizedRegionId = normalizeRegionId(regionId);
     const normalizedZoneId = normalizeRegionId(zoneId);
@@ -492,6 +507,10 @@ export const updateEmployee = async (req, res) => {
     }
 
     await employee.save();
+    await logChange({
+      req, entity: 'Employee', entityId: employee._id, employeeId: employee._id,
+      action: 'update', before: auditBefore, after: employee, fields: EMPLOYEE_AUDIT_FIELDS,
+    });
 
     // A driver set Inactive must not be able to sign in: the login follows the profile's
     // status (before this, "Inactive" only changed the profile and the login kept working).
@@ -729,6 +748,11 @@ export const addEmployeeIncrement = async (req, res) => {
 
     employee.baseSalary = newSalary;
     await employee.save();
+    await logChange({
+      req, entity: 'Employee', entityId: employee._id, employeeId: employee._id,
+      action: 'increment', before: { baseSalary: previousSalary }, after: employee,
+      fields: ['baseSalary'], always: true, note: reason ? `Increment: ${reason}` : 'Increment',
+    });
 
     res.status(201).json(increment);
   } catch (error) {

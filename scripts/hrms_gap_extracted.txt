@@ -1,0 +1,530 @@
+N I Z A N C R M · P R O D U C T M A N A G E M E N T
+HRMS v2
+Scope & Gap Analysis
+What the eight requested HR modules need, what the codebase already
+provides, and the four-phase plan to close the difference.
+W H E R E W E S T A N D T O D A Y
+2/8
+Modules substantially
+built
+1/8
+Partially built
+5/8
+Not started in any
+form
+14–18 wks
+Estimated delivery
+D AT E
+22 September 2026
+S C O P E
+Flutter client + Node / MongoDB API
+S TAT U S
+For review
+
+-- 1 of 16 --
+
+S U M M A R Y
+The eight modules at a glance
+Of the eight modules requested for HRMS v2, two are substantially built, one is partially built, and five do
+not exist in any form. The platform is a mature ERP — 68 Mongoose models, 56 route files, roughly 130
+Flutter routes — but its HR depth sits almost entirely in payroll and attendance. The employee lifecycle has
+never been modelled.
+M O D U L E 0 1
+Recruitment 	Not built
+0% — manual report metrics only
+HR plan, job posts, sourcing, CV shortlisting, three interview
+rounds and offer letters are all greenfield.
+M O D U L E 0 2
+Employee management 	Partial
+~60% — 5 of 9 requested fields
+Full staff CRUD exists and is richer than the ask. Missing DOB,
+emergency contact, employee code and probation status.
+M O D U L E 0 3
+Training & development 	Not built
+0% — a count field in the report
+No orientation, trainer, trainee or topic concept exists
+anywhere in the codebase.
+M O D U L E 0 4
+Work 	Partial
+~35% — leave is a mock screen
+Timebox attendance and the 5-pillar performance scorecard
+ship. Leave, overtime, ROE, task completion and ranking do
+not.
+M O D U L E 0 5
+Payroll & attendance 	Built
+~70% — EPF and ESI absent
+The strongest module: full salary workflow, separate HRA
+module, attendance-driven payroll. Statutory deductions are
+the gap.
+M O D U L E 0 6
+Employee engagement 	Not built
+0% — nothing exists
+No internal events, calendar or participation tracking. Entirely
+greenfield.
+M O D U L E 0 7
+Conflict management 	Not built
+0% — but a template exists
+Nothing models grievances, though the IT Ticket model is
+structurally very close to what is needed.
+M O D U L E 0 8
+Offboarding 	Not built
+0% — payslip dialog only
+No resignation, notice period, clearance or experience
+certificate concept. PDF tooling is already a dependency.
+Built — extend in v2 	Partial — complete in v2 	Not built — greenfield
+HRMS v2 · Scope & Gap Analysis of 16	2
+
+-- 2 of 16 --
+
+01 S E C T I O N O N E
+Executive summary
+Three findings drive the plan.
+1. Attendance and payroll are the strongest asset
+A live Timebox integration, a draft → approve → pay salary workflow, a separate HRA module and a 5-pillar performance
+scorecard all ship today. v2 should extend these, not rebuild them.
+2. Leave is a mock screen
+leave_request_screen.dart renders hard-coded rows and makes zero API calls. There is no Leave model, route or
+controller anywhere in the backend — though a leave permission key is already reserved in Role.PERMISSION_KEYS .
+W H Y T H I S M AT T E R S M O S T
+This is the single most visible gap, because it looks finished. The screen has a working “New Leave Request”
+bottom sheet, a leave-type dropdown and a history list — and it persists nothing. A user can file a request and
+watch it vanish.
+3. Five modules exist only as free text
+Recruitment, training, engagement, conflict and offboarding appear solely as manually-entered fields in the HR month-
+end report ( deptReportController.js ). Someone types “apps→interviews→offers→joins” into a box each month. There
+is no underlying data.
+R E C O M M E N D AT I O N
+Build v2 in four phases over roughly 14–18 weeks, starting with the employee master record and leave — the two
+things every other module depends on — before opening the recruitment and offboarding greenfield.
+HRMS v2 · Scope & Gap Analysis of 16	3
+
+-- 3 of 16 --
+
+02 S E C T I O N T W O
+What exists today
+The product is two repositories: a Flutter client ( Nizan_crm , 149 commits) and an Express/MongoDB API
+( nizan_crm_backend , 86 commits). Both are actively developed. Neither has an HR-specific module boundary — HR
+functionality is spread across features/hr , features/accounts and presentation/screens .
+Layer 	Stack 	HR-relevant surface
+Client 	Flutter 3.11, Riverpod 3,
+go_router 17, Dio
+features/hr (4 screens), staff_management_screen.dart
+(2,062 lines), 3 salary screens, HRA screen
+API 	Node ESM, Express 4, Mongoose
+8, JWT
+/api/employees , /api/attendances , /api/salaries ,
+/api/hra , /api/performance , /api/timebox , /api/hr
+Attendance source 	Timebox (external SaaS) 	services/timeboxClient.js — read-only pull of employees,
+daily punches and monthly summaries
+Legacy bridge 	PHP api_bridge.php 	/api/hr/staff , /api/hr/attendance , /api/hr/leaves ,
+/api/hr/holidays — proxy only, no local persistence
+The Timebox dependency is the key architectural fact
+Attendance is not owned by this system. timeboxController.js pulls punches and monthly summaries from Timebox,
+matches them to CRM employees via Employee.timeboxEmployeeId , and drives payroll from the result.
+POST /api/timebox/sync-employees writes Timebox IDs back onto employee records so renames never break payroll
+— a deliberate, well-made decision.
+C O N S E Q U E N C E F O R V 2
+Leave, overtime and LOP all depend on data Timebox holds. Any leave module must reconcile with Timebox’s day-
+status, or the two systems will disagree about whether 14 March was an absence or approved leave.
+RBAC and org structure are already solid
+Role carries a key , a permission array drawn from 21 PERMISSION_KEYS , and a homeRoute . Department models
+nine seed departments across two divisions, each with a head (an Employee , so Timebox-imported staff qualify), a
+delegation boundary ( allowedRoleKeys ) and geography scoping. User links to both Employee and Department .
+v2 needs no new access-control machinery — only new permission keys.
+HRMS v2 · Scope & Gap Analysis of 16	4
+
+-- 4 of 16 --
+
+03 S E C T I O N T H R E E
+Module-by-module gap analysis
+# Module 	Status 	Coverage What is actually there
+1 Recruitment 	Not built 	0% 	Manual text metrics in the HR month-end report
+2 Employee management 	Partial 	~60% 	Full staff CRUD; 5 of 9 requested fields present
+3 Training & development 	Not built 	0% 	A trainingSessions count field in the report
+4 Work 	Partial 	~35% 	Timebox attendance + 5-pillar performance; leave is a mock
+5 Payroll & attendance 	Built 	~70% 	Full salary workflow, HRA module, attendance-driven payroll
+6 Employee engagement 	Not built 	0% 	Nothing
+7 Conflict management 	Not built 	0% 	Nothing (the Ticket model is a usable template)
+8 Offboarding 	Not built 	0% 	An in-app payslip dialog
+1 · Recruitment — not built
+No model, route, controller or screen. The word “recruitment” appears three times in the codebase: twice as an expense
+head ( TRN-01 Training & Recruitment ) and once as a report metric label. deptReportController.js:114 defines
+recruitmentFunnel as a free-text field an HR user types into monthly, alongside openPositions , hires ,
+timeToHire and costPerHire . The numbers are typed, not derived.
+Every piece of the ask is greenfield: HR plan (JD, job analysis), job posts, sourcing, CV shortlisting, three interview rounds,
+offer letter.
+2 · Employee management — partial
+models/Employee.js is rich — far richer than the ask — but misses four of the nine requested fields.
+Requested field 	Present? 	Where
+Name 	Yes 	name
+Email 	Yes 	email
+Phone number 	Yes 	phone
+Designation 	Yes 	role — labelled “Designation / Job Title” in the UI
+Department 	Yes 	department string + departmentId ref
+HRMS v2 · Scope & Gap Analysis of 16	5
+
+-- 5 of 16 --
+
+Requested field 	Present? 	Where
+Employee ID 	No 	MongoDB _id only; no human-readable code
+Date of birth 	No 	—
+Emergency contact number 	No 	—
+Status (probation / confirmed) 	No 	status is active / inactive
+Also absent and needed downstream: date of joining, which time-to-hire, probation expiry, tenure and notice-period
+calculations all require.
+Beyond the ask, Employee already carries employment type, operations role, a five-level geography scope, salary
+scheme, base/allowances/deductions/HRA, full bank details, PAN, and the Timebox link. The v2 change is additive — five
+fields and one enum widening — not a rewrite.
+3 · Training & development — not built
+No orientation, trainer, trainee or topic concept anywhere. The only trace is trainingSessions (a count) and
+trainingCompletionPct (a KPI) in the HR report. The seven-day orientation plan, trainer/trainee assignment, topic list
+and per-topic completion status are all new.
+4 · Work — partial, and the leave gap is the risky one
+Sub-feature 	Status 	Detail
+Timebox data 	Built 	Seven endpoints under /api/timebox ; four Flutter screens
+Performance analysis 	Built 	PerformanceEvaluation — 5 pillars scored 0–5, monthly, one row
+per employee, composite auto-computed
+Leave 	Mock only 	leave_request_screen.dart has hard-coded rows and zero API
+calls
+Overtime 	Not built 	No field, no calculation, no rate
+ROE 	Not built 	A label in the report; no formula
+Task completion rate 	Not built 	ITTask has statuses but nothing aggregates them per employee
+Department ranking 	Not built 	Ranking code exists only for marketing competitors
+The backend has no Leave model, no leaveRoutes.js and no controller. The /api/hr/leaves endpoint proxies to
+the legacy PHP system read-only.
+HRMS v2 · Scope & Gap Analysis of 16	6
+
+-- 6 of 16 --
+
+5 · Payroll & attendance — built, minus statutory
+The strongest module. Salary models basic, incentives, room rent, HRA, allowances, bonus, deductions and net, with a
+draft → approved_by_hr → paid → cancelled workflow, approver and payer audit fields, a bank snapshot and a
+unique index per employee-month. HraRecord is a deliberate separate module — HRA is paid outside the salary run.
+Requested item 	Status 	Note
+Present days 	Built 	From Timebox days_present
+Monthly salary 	Built 	Full generate → approve → pay flow
+HRA 	Built 	Separate HraRecord module with its own screen
+Incentive 	Built 	incentives field
+Bonus 	Built 	bonus field
+Net salary 	Built 	netAmount
+LOP 	Partial 	Computed as absenceDeduction in timeboxController.js:409 ,
+folded into generic deductions — never named, shown or configured
+as LOP
+EPF & ESI 	Not built 	No field, no rate, no ceiling, no employer contribution anywhere
+C O M P L I A N C E E X P O S U R E
+EPF and ESI are the material gap: statutory, auditable, and currently absent from a payroll system that is otherwise
+production-grade.
+6 · Employee engagement — not built
+No internal events, no calendar, no participation tracking. Every celebration and birthday reference in the codebase
+belongs to the sales module (client event types). Entirely greenfield.
+7 · Conflict management — not built, but the pattern exists
+Nothing models grievances. grievances is one free-text field in the HR report.
+However models/Ticket.js is structurally almost exactly what is being asked for: a ticketNumber , raisedBy ,
+departmentId , assignedTo , a status workflow ( open → in-progress → resolved → closed → rejected ), an
+activity[] audit trail, resolvedBy / resolvedAt / resolution , and attachments. It is scoped to IT bugs and
+support.
+A Grievance model should be built on this shape — but not as a variant of Ticket , because HR grievances need
+confidentiality rules IT tickets do not.
+HRMS v2 · Scope & Gap Analysis of 16	7
+
+-- 7 of 16 --
+
+8 · Offboarding — not built
+No resignation, notice period, clearance, experience certificate or last-working-day concept exists. The only overlap is
+the payslip: administrative_salaries_screen.dart:225 and two sibling screens render an in-app payslip dialog. The
+pdf and printing Flutter packages and pdfkit on the backend are already dependencies, so document generation
+has a foundation — but no offboarding document is produced today.
+HRMS v2 · Scope & Gap Analysis of 16	8
+
+-- 8 of 16 --
+
+04 S E C T I O N F O U R
+Data model for v2
+Thirteen new collections and one widened schema.
+Every new model follows the conventions already in the codebase: ESM default export, timestamps: true , and
+ObjectId refs with a denormalised display name beside them — the employeeId + employeeName pattern used by
+Salary , HraRecord and PerformanceEvaluation .
+Employee — fields to add
+Field 	Type 	Why
+employeeCode 	String, unique, sparse 	Human-readable ID for certificates, payslips and offer
+letters
+dateOfBirth 	Date 	Requested; also drives birthday events in engagement
+dateOfJoining 	Date 	Blocks probation expiry, tenure, notice period and time-
+to-hire without it
+emergencyContact 	{ name, relation, phone } Requested
+employmentStatus 	Enum: probation ,
+confirmed , notice_period ,
+exited
+The lifecycle state; distinct from the existing
+active/inactive flag
+probationEndDate 	Date 	Drives the confirmation reminder
+reportingManagerId 	ObjectId → Employee 	Needed for leave approval routing
+D E S I G N N O T E
+Keep status ( active / inactive ) as the access flag and add employmentStatus as the lifecycle state.
+Overloading one field to mean both breaks the existing staff filters.
+New collections
+Module 	Collection 	Key fields
+Recruitment 	JobRequisition 	title , departmentId , jobDescription , jobAnalysis , openings ,
+status , raisedBy , approvedBy
+Recruitment 	JobPosting 	requisitionId , channel , postedAt , closesAt , externalUrl ,
+status
+Recruitment 	Candidate 	name , email , phone , requisitionId , source , resumeUrl , stage ,
+stageHistory[] , rating
+HRMS v2 · Scope & Gap Analysis of 16	9
+
+-- 9 of 16 --
+
+Module 	Collection 	Key fields
+Recruitment 	InterviewRound 	candidateId , roundNumber (1–3), scheduledAt , panel[] , mode ,
+feedback , score , outcome
+Recruitment 	OfferLetter 	candidateId , ctc , designation , joiningDate , status ,
+documentUrl , issuedBy
+Training 	OrientationPlan 	name , durationDays (default 7), topics[] , departmentId ,
+isTemplate
+Training 	OrientationAssignment 	planId , traineeId , trainerId , startDate , topicProgress[] ,
+status
+Work 	LeaveType 	name , annualQuota , carryForward , paid , requiresDocument
+Work 	LeaveRequest 	employeeId , leaveTypeId , fromDate , toDate , days , reason ,
+status , approverId , decisionNote
+Work 	LeaveBalance 	employeeId , leaveTypeId , year , entitled , used , carriedForward
+Engagement 	EngagementEvent 	title , type , date , departmentIds[] , participants[] , budget ,
+status , photos[]
+Conflict 	Grievance 	grievanceNumber , raisedBy , againstEmployeeId , departmentId ,
+category , description , confidential , status , activity[] ,
+decision , decidedBy , decidedAt
+Offboarding 	Offboarding 	employeeId , type , resignationDate , noticePeriodDays ,
+lastWorkingDay , clearanceItems[] , finalSettlement ,
+experienceCertificateUrl , status
+Payroll — fields to add to Salary
+Field 	Type 	Note
+lopDays 	Number 	Name what absenceDeduction already computes
+lopAmount 	Number 	Move out of the generic deductions bucket
+overtimeHours / overtimeAmount 	Number 	New; needs an overtime rate on Employee or Department
+epfEmployee / epfEmployer 	Number 	12% of basic, subject to the ₹15,000 wage ceiling
+esiEmployee / esiEmployer 	Number 	0.75% / 3.25%, applicable below the ₹21,000 gross threshold
+grossEarnings 	Number 	Currently implicit; needed for the ESI threshold test and for payslips
+Add a PayrollSetting singleton for the statutory rates and ceilings rather than hard-coding them — they change by
+notification, and AccountingSetting / GstSetting already establish this pattern in the codebase.
+HRMS v2 · Scope & Gap Analysis of 16	10
+
+-- 10 of 16 --
+
+05 S E C T I O N F I V E
+Architecture decisions
+The employee lifecycle is the spine
+Today the eight requested modules would be eight disconnected screens. They are one flow, and
+Employee.employmentStatus is the state machine that joins them.
+Candidate 	Interviewing 	Offered 	Probation
+Shortlisted 	Round 3 cleared 	Offer accepted
+R E Q U I S I T I O N A P P R O V E D
+Orientation done + review passed
+Confirmed 	Notice period 	Exited
+Resignation 	Clearance done
+Recruitment Employment 	Exit
+The employee lifecycle state machine, driven by Employee.employmentStatus
+T H E J O I N T H AT M A K E S R E C R U I T M E N T W O R T H B U I L D I N G
+Accepting an offer should create the Employee record from the Candidate record — name, email, phone,
+designation, department and joining date all carry across. Without that link, recruitment is a data-entry exercise
+that HR redoes by hand.
+Draw the Timebox boundary explicitly
+Approved leave must be visible to the payroll calculation, or LOP will be wrong. There are two options:
+1. Push — on leave approval, write the day status back to Timebox. Cleanest, but depends on Timebox exposing a write
+API. This needs to be confirmed before Phase 2 starts.
+2. Overlay — keep leave local and have timeboxController subtract approved leave days from the absence count
+before computing absenceDeduction . Works with a read-only Timebox, but risks the two systems disagreeing on
+screen.
+Default to the overlay unless Timebox write access is confirmed. Either way, the reconciliation belongs in one place — a
+services/attendanceReconciler.js — not spread across controllers.
+Make the payroll engine explicit
+Payroll logic currently lives inside timeboxController.js alongside HTTP handling. Adding EPF, ESI, LOP and overtime
+to that file will make it unmaintainable. Extract a services/payrollEngine.js that takes an employee, a period and an
+attendance summary and returns a fully itemised salary — pure, testable, and the single place statutory rules live.
+HRMS v2 · Scope & Gap Analysis of 16	11
+
+-- 11 of 16 --
+
+This is the one piece of v2 that warrants unit tests before anything else, because statutory errors are expensive and
+silent.
+Reuse the Ticket pattern for grievances, but not the Ticket model
+Ticket already proves the shape: numbered record, department routing, assignment, status workflow, activity[]
+audit trail, resolution fields. Grievance should copy that shape and add what HR needs and IT does not — a
+confidential flag that restricts visibility to HR and the CEO, and an againstEmployeeId that must never be visible to
+the accused party’s own manager by default.
+New permission keys
+PERMISSION_KEYS in models/Role.js must stay in sync with lib/core/auth/app_permissions.dart . Add
+recruitment , training , engagement , grievance and offboarding . The leave key is already reserved and
+unused — wire it up in Phase 1.
+Employee self-service is a v2 question, not a v2 assumption
+Every module in the ask is written from HR’s point of view. But leave requests, grievances and payslip access are things
+employees do for themselves. The User ↔ Employee link already exists, so the plumbing is there. Whether v2 ships an
+employee-facing portal changes the effort materially — see the open questions.
+HRMS v2 · Scope & Gap Analysis of 16	12
+
+-- 12 of 16 --
+
+06 S E C T I O N S I X
+Delivery roadmap
+Four phases, 14–18 weeks. Estimates assume the current team shape (one Flutter developer, one Node developer) and
+include API, screens and testing. They exclude data migration of historical records.
+0 	2 	4 	6 	8 	10 	12 	14 	16 	18
+W E E K S F R O M K I C K - O F F
+1 · Foundation 	4–5 wks
+2 · Statutory payroll 	3–4 wks
+3 · Lifecycle 	5–6 wks
+4 · People operations 	3–4 wks
+Employee schema · Leave · Payroll engine extraction
+Then: EPF/ESI · LOP · Overtime → Recruitment · Training · Offboarding → Grievances · Engagement · Analytics
+Phases run sequentially; each depends on the data the previous one creates
+Phase 	Scope 	Weeks Why here
+1 · Foundation 	Employee schema extension, Leave
+(types, requests, balances, approval
+routing), payroll engine extraction, new
+permission keys
+4–5 	Everything else depends on the employee
+record and on leave being real. Replacing the
+mock leave screen is also the fastest visible
+win.
+2 · Statutory payroll EPF, ESI, named LOP, overtime,
+PayrollSetting , payslip PDF
+3–4 	Compliance risk, and it completes the module
+that is already 70% done. Payslip PDF is a
+prerequisite for offboarding.
+3 · Lifecycle 	Recruitment funnel (requisition →
+posting → candidate → 3 rounds →
+offer), training and orientation,
+offboarding
+5–6 	The largest greenfield block. Sequenced after
+the employee record exists so offer-to-
+employee conversion works on day one.
+4 · People
+operations
+Grievances, engagement events, ROE,
+task completion rate, department
+ranking
+3–4 	Lowest compliance risk; the analytics in this
+phase need several months of Phase 1–3 data
+before they mean anything.
+Phase 1 detail — the critical path
+1. Add the seven Employee fields; backfill dateOfJoining from Timebox created_at where available, else leave null
+and flag for HR to complete.
+2. Build LeaveType , LeaveRequest , LeaveBalance + leaveRoutes.js + leaveController.js .
+3. Rewrite leave_request_screen.dart against the real API; add an approver inbox for managers.
+4. Resolve the Timebox leave reconciliation (overlay or push — see open questions).
+5. Extract services/payrollEngine.js with tests, behaviour unchanged.
+HRMS v2 · Scope & Gap Analysis of 16	13
+
+-- 13 of 16 --
+
+Step 5 is deliberately a no-op refactor. Doing it before Phase 2 means the statutory work lands in a tested unit rather
+than in an HTTP controller.
+What is explicitly out of scope
+Biometric or geo-fenced attendance capture (Timebox owns this), multi-company or multi-entity payroll, appraisal cycles
+beyond the existing 5-pillar scorecard, and learning-management content hosting. Orientation tracks whether a topic
+was covered, not the material itself.
+HRMS v2 · Scope & Gap Analysis of 16	14
+
+-- 14 of 16 --
+
+07 S E C T I O N S E V E N
+Risks & open questions
+Risks
+Risk 	Impact 	Mitigation
+Timebox has no write API 	Leave and attendance disagree on
+screen; LOP computed from stale
+absence counts
+Build the overlay reconciler in Phase 1
+regardless; treat push as an optimisation
+Statutory rules wrong 	Legal exposure, employee trust,
+retrospective correction across months
+payrollEngine.js extracted and unit-tested
+before EPF/ESI are added; rates in
+PayrollSetting , not code
+Two parallel HR data sources 	The legacy PHP bridge and Timebox
+both claim to serve staff and leave data
+Decide the PHP bridge’s fate before Phase 1
+— see open questions
+Grievance confidentiality 	A badly-scoped query exposes a
+complaint to the person complained
+about
+Confidentiality enforced in the controller
+query, not the UI; reviewed as a security item,
+not a feature
+Scope creep into an LMS or ATS 	Phase 3 doubles in size 	Orientation tracks completion only;
+recruitment stops at offer acceptance
+staff_management_screen.dart
+is 2,062 lines
+Adding seven fields to an already-large
+screen raises regression risk
+Refactor into sections as part of Phase 1 rather
+than appending
+Open questions — need a decision before Phase 1
+Does Timebox expose a write API for day status? Determines the leave reconciliation design. Blocks Phase 1 step 4.
+What happens to the legacy PHP HR bridge? /api/hr/staff , /api/hr/attendance , /api/hr/leaves and
+/api/hr/holidays proxy to a PHP system that also holds leave data. Is it being retired, or does v2 have to keep it
+in sync? This materially changes Phase 1.
+Is there an employee self-service portal in v2? If employees file their own leave and grievances and download their
+own payslips, add roughly three weeks and a mobile-first UX pass. If HR does everything on their behalf, the
+estimates above hold.
+Which entity is the EPF/ESI registered employer, and do outsourced and contract staff ( Employee.type ) fall inside
+or outside statutory coverage? Affects who the payroll engine calculates contributions for.
+Who approves leave — the department head from Department.head , the new reportingManagerId , or HR
+centrally? Determines the approval routing built in Phase 1.
+Is the experience certificate a generated PDF or an uploaded scan? Generation needs a template and an
+authorised signatory; upload needs only storage.
+Is seven days the fixed orientation length, or a default that varies by department and role?
+HRMS v2 · Scope & Gap Analysis of 16	15
+
+-- 15 of 16 --
+
+08 S E C T I O N E I G H T
+Definition of done
+A module is done when its data is created in the system, not typed into the month-end report.
+The HR report metrics in deptReportController.js are the acceptance test: each one that becomes auto-derived is a
+module genuinely delivered.
+Module 	Done when 	Report metric it should auto-fill
+Recruitment 	A requisition can go from raised to an accepted offer that
+creates the Employee record, without leaving the system
+recruitmentFunnel , openPositions ,
+hires , timeToHire , costPerHire
+Employee
+management
+All nine requested fields are captured, and
+employmentStatus drives probation-expiry reminders
+headcount
+Training 	A seven-day orientation can be assigned to a new joiner
+and tracked topic-by-topic to completion
+trainingSessions ,
+trainingCompletionPct
+Work 	An employee files leave, a manager approves it, and the
+approved days are correctly excluded from LOP in that
+month’s payroll
+attendancePct , absenteeismPct ,
+roe
+Payroll 	A payslip PDF shows gross, LOP days and amount, EPF and
+ESI employee and employer shares, and net — and
+reconciles to the accounting ledger
+salaryProcessedCount ,
+salaryProcessedAmount ,
+statutoryCompliance
+Engagement 	Events are scheduled with participants and attendance
+recorded
+—
+Conflict 	A grievance can be raised, routed, decided and closed with
+a full audit trail, visible only to authorised roles
+grievances
+Offboarding 	A resignation produces a notice-period countdown, a
+clearance checklist, a final payslip and an experience
+certificate
+attrition , attritionRatePct
+Leading indicators
+Watch these in the first quarter after each phase ships.
+Leave requests filed in-system per month — if this stays near zero after Phase 1, people are still using WhatsApp
+and the module has not landed.
+Payroll corrections after approval — should trend to zero once the payroll engine is tested; a rise signals a statutory
+rule modelled wrong.
+HR report fields still typed manually — the count should fall every phase. It is the clearest single measure of
+whether v2 is working.
+HRMS v2 · Scope & Gap Analysis of 16	16
+
+-- 16 of 16 --
+

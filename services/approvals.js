@@ -19,7 +19,9 @@ import TravelRequest from '../models/TravelRequest.js';
 import CompensationRevision from '../models/CompensationRevision.js';
 import Employee from '../models/Employee.js';
 import SalaryIncrement from '../models/SalaryIncrement.js';
+import { logChange } from '../utils/audit.js';
 import { notify } from '../utils/notify.js';
+import { dispatchLeaveCallback } from './leaveCallbackService.js';
 
 // A plain {module→Model} map for request types whose only resolution is "set the
 // source doc's status + decision metadata". Richer side effects (leave comp-off,
@@ -120,10 +122,23 @@ export async function createApproval({
 }
 
 /// Whether `user` may act on the live step of a (pending) approval.
+/// True when the request was raised by, or is about, `user`.
+export function isOwnApproval(approval, user) {
+  if (!approval || !user) return false;
+  const uid = idStr(user._id);
+  const eid = user.employeeId ? idStr(user.employeeId) : '';
+  if (uid && idStr(approval.requesterUserId) === uid) return true;
+  if (eid && (idStr(approval.requesterEmployeeId) === eid || idStr(approval.subjectEmployeeId) === eid)) return true;
+  return false;
+}
+
 export function canActOnApproval(approval, user) {
   if (!approval || approval.status !== 'pending') return false;
   const step = approval.chain[approval.currentLevel];
   if (!step) return false;
+  // Nobody approves their own leave / claim / raise. Only the owner account
+  // (admin) is exempt, since nobody sits above it.
+  if (String(user.role || '') !== 'admin' && isOwnApproval(approval, user)) return false;
   if (step.approverUserId && idStr(step.approverUserId) === idStr(user._id)) return true;
   if (step.approverRole && String(user.role || '') === step.approverRole) return true;
   // Admin / manager can always unblock a stuck request.
@@ -200,6 +215,18 @@ export async function onApprovalResolved(approval) {
             { $set: { status: 'used', usedInLeaveId: lr._id } }
           );
         }
+
+        // Dispatch outbound webhook callback to external app if linked
+        if (lr.callbackUrl && lr.externalRequestId != null) {
+          let approverName = 'Approver';
+          if (lr.decidedBy) {
+            const u = await User.findById(lr.decidedBy).select('name').lean();
+            if (u?.name) approverName = u.name;
+          }
+          dispatchLeaveCallback(lr, { approver: approverName, note: lr.decisionNote }).catch((err) =>
+            console.error('[Approvals] Error dispatching leave callback:', err?.message || err)
+          );
+        }
       }
     }
     // Request types that just carry a status + decision metadata.
@@ -232,6 +259,17 @@ export async function onApprovalResolved(approval) {
             emp.baseSalary = rev.proposedSalary;
             await emp.save();
             rev.appliedAt = new Date();
+            let byName = '';
+            if (lastDecided?.decidedBy) {
+              const u = await User.findById(lastDecided.decidedBy).select('name').lean().catch(() => null);
+              byName = u?.name || '';
+            }
+            await logChange({
+              entity: 'CompensationRevision', entityId: rev._id, employeeId: emp._id,
+              action: 'apply', before: { baseSalary: previous }, after: emp, fields: ['baseSalary'],
+              always: true, by: lastDecided?.decidedBy || null, byName,
+              note: rev.reason ? `Compensation revision approved: ${rev.reason}` : 'Compensation revision approved',
+            });
             try {
               await SalaryIncrement.create({
                 employeeId: emp._id,

@@ -3,6 +3,37 @@ import Onboarding, { DEFAULT_ONBOARDING_TASKS } from '../models/Onboarding.js';
 import Employee from '../models/Employee.js';
 import Candidate from '../models/Candidate.js';
 import { linkHiredCandidateToOnboarding } from './recruitmentController.js';
+import { getHrScope, assertEmployeeInScope } from '../utils/hrDeptScope.js';
+
+// Dept heads only manage onboarding for their own department; these keys
+// (plus admin/manager/staff/HR head) grant company-wide access.
+const KEYS = ['onboarding', 'recruitment'];
+const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+// Mongo filter for the caller's onboarding scope. Rows auto-created from a
+// hired candidate may have no employeeId yet, so fall back to the free-text
+// department on the row.
+const onboardingScopeFilter = async (req) => {
+  const s = await getHrScope(req, KEYS);
+  if (s.wide) return {};
+  const or = [{ employeeId: { $in: s.employeeIds } }];
+  for (const n of s.deptNames) {
+    or.push({ employeeId: null, department: new RegExp(`^${escRe(n)}$`, 'i') });
+  }
+  return { $or: or };
+};
+
+// 403 unless the onboarding row belongs to the caller's department.
+const assertOnboardingInScope = async (req, res, row) => {
+  const s = await getHrScope(req, KEYS);
+  if (s.wide) return;
+  if (row.employeeId) return assertEmployeeInScope(req, res, row.employeeId, KEYS);
+  const dept = String(row.department || '').trim().toLowerCase();
+  if (!dept || !s.deptNames.some((n) => String(n).trim().toLowerCase() === dept)) {
+    res.status(403);
+    throw new Error('This employee is not in your department');
+  }
+};
 
 const empPopulate = { path: 'employeeId', select: 'name department profileImage role designationId' };
 
@@ -43,6 +74,7 @@ const cleanDocuments = (docs) =>
     }));
 
 const getOnboardings = asyncHandler(async (req, res) => {
+  guard(req, res);
   // Auto-sync: ensure any candidate marked 'hired' is linked to an onboarding record
   try {
     const hiredCandidates = await Candidate.find({ stage: 'hired' });
@@ -58,8 +90,10 @@ const getOnboardings = asyncHandler(async (req, res) => {
     console.error('Error auto-syncing hired candidates to onboarding:', err);
   }
 
-  const filter = {};
+  let filter = {};
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+  // The sync above stays company-wide; only what's returned is scoped.
+  filter = { ...filter, ...(await onboardingScopeFilter(req)) };
   const rows = await Onboarding.find(filter).populate(empPopulate).sort({ createdAt: -1 }).limit(300);
   res.json(rows);
 });
@@ -70,6 +104,7 @@ const createOnboarding = asyncHandler(async (req, res) => {
   if (!employeeId) { res.status(400); throw new Error('An employee is required'); }
   const employee = await Employee.findById(employeeId).select('name department role');
   if (!employee) { res.status(404); throw new Error('Employee not found'); }
+  await assertEmployeeInScope(req, res, employee._id, KEYS);
 
   const tasks = Array.isArray(req.body.tasks) && req.body.tasks.length
     ? cleanTasks(req.body.tasks)
@@ -103,6 +138,7 @@ const updateOnboarding = asyncHandler(async (req, res) => {
   guard(req, res);
   const row = await Onboarding.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Onboarding not found'); }
+  await assertOnboardingInScope(req, res, row);
   if (Array.isArray(req.body.tasks)) row.tasks = cleanTasks(req.body.tasks);
   if (Array.isArray(req.body.documents)) row.documents = cleanDocuments(req.body.documents);
   if (req.body.role !== undefined) row.role = String(req.body.role).trim();
@@ -126,6 +162,7 @@ const deleteOnboarding = asyncHandler(async (req, res) => {
   guard(req, res);
   const row = await Onboarding.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Onboarding not found'); }
+  await assertOnboardingInScope(req, res, row);
   if (row.candidateId) {
     await Candidate.findByIdAndUpdate(row.candidateId, { stage: 'archived' });
   }

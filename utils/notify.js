@@ -47,6 +47,11 @@ export const NOTIFICATION_TYPES = {
   MANPOWER_REQUEST: 'manpower_request',
   MANPOWER_UPDATE: 'manpower_update',
   MANPOWER_RELEASE: 'manpower_release',
+  CONSULTATION_ASSIGNED: 'consultation_assigned',
+  CONSULTATION_CHANGED: 'consultation_changed',
+  CONSULTATION_REMINDER: 'consultation_reminder',
+  MARKETING_EOD_REMINDER: 'marketing_eod_reminder',
+  MARKETING_EOD_MISSED_SUMMARY: 'marketing_eod_missed_summary',
 };
 
 // Stakeholders (admin accounts) are not part of the day-to-day operational

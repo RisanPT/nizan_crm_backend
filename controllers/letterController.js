@@ -3,6 +3,19 @@ import LetterTemplate from '../models/LetterTemplate.js';
 import GeneratedLetter from '../models/GeneratedLetter.js';
 import Employee from '../models/Employee.js';
 import Designation from '../models/Designation.js';
+import { scopeFilter, assertEmployeeInScope, isHrWide } from '../utils/hrDeptScope.js';
+
+// Dept heads issue letters only for their own department; templates are
+// company master data, so editing them stays HR-wide only.
+const KEYS = ['hr_letters'];
+
+const guardHrWide = async (req, res) => {
+  guard(req, res);
+  if (!(await isHrWide(req, KEYS))) {
+    res.status(403);
+    throw new Error('Only HR can manage letter templates');
+  }
+};
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
@@ -37,7 +50,7 @@ const getTemplates = asyncHandler(async (_req, res) => {
 });
 
 const seedLetterTemplates = asyncHandler(async (req, res) => {
-  guard(req, res);
+  await guardHrWide(req, res);
   const defaults = [
     {
       name: 'Standard Offer of Employment',
@@ -117,7 +130,7 @@ All other terms and conditions of your employment contract remain unchanged. We 
 });
 
 const createTemplate = asyncHandler(async (req, res) => {
-  guard(req, res);
+  await guardHrWide(req, res);
   const name = String(req.body.name || '').trim();
   if (!name) { res.status(400); throw new Error('Please add a template name'); }
   const bodyText = String(req.body.body || req.body.content || '');
@@ -133,7 +146,7 @@ const createTemplate = asyncHandler(async (req, res) => {
 });
 
 const updateTemplate = asyncHandler(async (req, res) => {
-  guard(req, res);
+  await guardHrWide(req, res);
   const row = await LetterTemplate.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Template not found'); }
   const b = req.body;
@@ -152,7 +165,7 @@ const updateTemplate = asyncHandler(async (req, res) => {
 });
 
 const deleteTemplate = asyncHandler(async (req, res) => {
-  guard(req, res);
+  await guardHrWide(req, res);
   const row = await LetterTemplate.findByIdAndDelete(req.params.id);
   if (!row) { res.status(404); throw new Error('Template not found'); }
   res.json({ message: 'Template removed', id: req.params.id });
@@ -160,9 +173,13 @@ const deleteTemplate = asyncHandler(async (req, res) => {
 
 // ── Generated letters ────────────────────────────────────────────────────────
 const getGenerated = asyncHandler(async (req, res) => {
+  guard(req, res);
   const filter = {};
   if (req.query.employeeId) filter.employeeId = req.query.employeeId;
-  const rows = await GeneratedLetter.find(filter)
+  // $and so an employeeId query can't widen a dept head past their scope.
+  const scope = await scopeFilter(req, KEYS);
+  const query = Object.keys(scope).length ? { $and: [filter, scope] } : filter;
+  const rows = await GeneratedLetter.find(query)
     .populate('employeeId', 'name department')
     .sort({ createdAt: -1 })
     .limit(300);
@@ -176,6 +193,7 @@ const generateLetter = asyncHandler(async (req, res) => {
   if (!employeeId) { res.status(400); throw new Error('An employee is required'); }
   const employee = await Employee.findById(employeeId);
   if (!employee) { res.status(404); throw new Error('Employee not found'); }
+  await assertEmployeeInScope(req, res, employee._id, KEYS);
 
   let templateBody = String(req.body.body || req.body.content || '');
   let type = req.body.type || 'other';
@@ -230,8 +248,11 @@ const generateLetter = asyncHandler(async (req, res) => {
 
 const deleteGenerated = asyncHandler(async (req, res) => {
   guard(req, res);
-  const row = await GeneratedLetter.findByIdAndDelete(req.params.id);
+  // Load first so the scope check runs before anything is deleted.
+  const row = await GeneratedLetter.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Letter not found'); }
+  await assertEmployeeInScope(req, res, row.employeeId, KEYS);
+  await row.deleteOne();
   res.json({ message: 'Letter removed', id: req.params.id });
 });
 

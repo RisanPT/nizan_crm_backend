@@ -8,6 +8,54 @@ import JobRole from '../models/JobRole.js';
 import HiringPlan from '../models/HiringPlan.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
+import { getHrScope, deptNameFilter, isHrWide } from '../utils/hrDeptScope.js';
+
+// Department-head scoping (owner decision 2026-11-06): HR-wide callers see and
+// manage everything; a department head only their own department's job posts,
+// hiring plans, offers and the candidates on those job posts.
+const HR_KEYS = ['recruitment'];
+const escRx = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const sameDept = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+
+const deptInScope = async (req, dept) => {
+  const s = await getHrScope(req, HR_KEYS);
+  if (s.wide) return true;
+  const d = String(dept || '').trim();
+  return !!d && s.deptNames.some((n) => sameDept(n, d));
+};
+
+const assertDeptInScope = async (req, res, dept) => {
+  if (!(await deptInScope(req, dept))) {
+    res.status(403);
+    throw new Error('This department is not in your scope');
+  }
+};
+
+// null = HR-wide (no restriction); otherwise the job post ids in the caller's departments.
+const scopedJobPostIds = async (req) => {
+  const s = await getHrScope(req, HR_KEYS);
+  if (s.wide) return null;
+  const rows = await JobPost.find(await deptNameFilter(req, HR_KEYS)).select('_id').lean();
+  return rows.map((r) => String(r._id));
+};
+
+// Candidates belong to a department through their job post.
+const assertJobPostInScope = async (req, res, jobPostId) => {
+  const ids = await scopedJobPostIds(req);
+  if (ids === null) return;
+  if (!jobPostId || !ids.includes(String(jobPostId))) {
+    res.status(403);
+    throw new Error('This job post is not in your department');
+  }
+};
+
+// Company master data / secrets — HR-wide callers only.
+const assertHrWide = async (req, res) => {
+  if (!(await isHrWide(req, HR_KEYS))) {
+    res.status(403);
+    throw new Error('Only HR can manage this');
+  }
+};
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
@@ -28,6 +76,8 @@ const guard = (req, res) => {
 const getJobPosts = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+  // Department heads see only their department's posts; everyone else unchanged.
+  if (canManage(req.user)) Object.assign(filter, await deptNameFilter(req, HR_KEYS));
   const posts = await JobPost.find(filter)
     .populate('designationId', 'name')
     .sort({ createdAt: -1 })
@@ -45,9 +95,14 @@ const createJobPost = asyncHandler(async (req, res) => {
   guard(req, res);
   const title = String(req.body.title || '').trim();
   if (!title) { res.status(400); throw new Error('Please provide a job title'); }
+  let department = String(req.body.department || '').trim();
+  // A department head may only post for their own department (defaulted when blank).
+  const scope = await getHrScope(req, HR_KEYS);
+  if (!scope.wide && !department && scope.deptNames.length) department = scope.deptNames[0];
+  await assertDeptInScope(req, res, department);
   const post = await JobPost.create({
     title,
-    department: String(req.body.department || '').trim(),
+    department,
     designationId: req.body.designationId || null,
     location: String(req.body.location || '').trim(),
     type: req.body.type || 'full-time',
@@ -64,6 +119,9 @@ const updateJobPost = asyncHandler(async (req, res) => {
   const post = await JobPost.findById(req.params.id);
   if (!post) { res.status(404); throw new Error('Job post not found'); }
   const b = req.body;
+  // Both the current and any new department must be in the caller's scope.
+  await assertDeptInScope(req, res, post.department);
+  if (b.department !== undefined) await assertDeptInScope(req, res, b.department);
   if (b.title !== undefined && String(b.title).trim()) post.title = String(b.title).trim();
   if (b.department !== undefined) post.department = String(b.department).trim();
   if (b.designationId !== undefined) post.designationId = b.designationId || null;
@@ -81,6 +139,8 @@ const updateJobPost = asyncHandler(async (req, res) => {
 
 const deleteJobPost = asyncHandler(async (req, res) => {
   guard(req, res);
+  const existing = await JobPost.findById(req.params.id).select('department').lean();
+  if (existing) await assertDeptInScope(req, res, existing.department);
   const inUse = await Candidate.countDocuments({ jobPostId: req.params.id });
   if (inUse > 0) {
     res.status(409);
@@ -93,9 +153,17 @@ const deleteJobPost = asyncHandler(async (req, res) => {
 
 // ── Candidates ───────────────────────────────────────────────────────────────
 const getCandidates = asyncHandler(async (req, res) => {
+  guard(req, res);
   const filter = {};
   if (req.query.jobPostId) filter.jobPostId = req.query.jobPostId;
   if (req.query.stage && req.query.stage !== 'all') filter.stage = req.query.stage;
+  // Department heads: only candidates on their department's job posts.
+  const allowedPosts = await scopedJobPostIds(req);
+  if (allowedPosts !== null) {
+    filter.jobPostId = req.query.jobPostId
+      ? (allowedPosts.includes(String(req.query.jobPostId)) ? req.query.jobPostId : { $in: [] })
+      : { $in: allowedPosts };
+  }
   const rows = await Candidate.find(filter).sort({ createdAt: -1 }).limit(500).lean();
   res.json(rows);
 });
@@ -104,6 +172,7 @@ const createCandidate = asyncHandler(async (req, res) => {
   guard(req, res);
   const name = String(req.body.name || '').trim();
   if (!name) { res.status(400); throw new Error('Please provide the candidate name'); }
+  await assertJobPostInScope(req, res, req.body.jobPostId);
   let jobTitle = String(req.body.jobTitle || '').trim();
   if (req.body.jobPostId) {
     const post = await JobPost.findById(req.body.jobPostId).select('title').lean();
@@ -133,6 +202,7 @@ const bulkImportCandidates = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('Please provide a non-empty list of candidates to import');
   }
+  await assertJobPostInScope(req, res, req.body.jobPostId);
 
   let jobPost = null;
   if (req.body.jobPostId) {
@@ -252,11 +322,11 @@ export const linkHiredCandidateToOnboarding = async (candidate, userId = null) =
   if (offer?.employeeId) {
     employee = await Employee.findById(offer.employeeId);
   }
-  if (!employee && candidate.email) {
-    employee = await Employee.findOne({ email: candidate.email.toLowerCase().trim() });
-  }
-  if (!employee) {
-    employee = await Employee.findOne({ name: candidate.name.trim() });
+  // Link an existing employee by email only (case-insensitive). The old
+  // name-only fallback could attach a hire to an unrelated namesake.
+  const candEmail = String(candidate.email || '').trim();
+  if (!employee && candEmail) {
+    employee = await Employee.findOne({ email: new RegExp(`^${escRx(candEmail)}$`, 'i') });
   }
 
   if (!employee) {
@@ -323,6 +393,9 @@ const updateCandidate = asyncHandler(async (req, res) => {
   const cand = await Candidate.findById(req.params.id);
   if (!cand) { res.status(404); throw new Error('Candidate not found'); }
   const b = req.body;
+  // Covers the hire flow (stage → hired) too: candidate's job post must be in scope.
+  await assertJobPostInScope(req, res, cand.jobPostId);
+  if (b.jobPostId !== undefined) await assertJobPostInScope(req, res, b.jobPostId);
   if (b.name !== undefined && String(b.name).trim()) cand.name = String(b.name).trim();
   if (b.email !== undefined) cand.email = String(b.email).trim();
   if (b.phone !== undefined) cand.phone = String(b.phone).trim();
@@ -353,24 +426,26 @@ const deleteCandidate = asyncHandler(async (req, res) => {
   guard(req, res);
   const cand = await Candidate.findById(req.params.id);
   if (!cand) { res.status(404); throw new Error('Candidate not found'); }
+  await assertJobPostInScope(req, res, cand.jobPostId);
 
   const deleteLinked = req.query.deleteLinkedEmployee === 'true' || req.body?.deleteLinkedEmployee === true;
 
   // Clean up offers for this candidate
   const offers = await Offer.find({ candidateId: cand._id });
+  const linkedEmployeeIds = [];
   for (const offer of offers) {
     if (deleteLinked && offer.employeeId) {
+      linkedEmployeeIds.push(offer.employeeId);
       await Employee.findByIdAndDelete(offer.employeeId);
     }
   }
 
   if (deleteLinked) {
-    await Onboarding.deleteMany({
-      $or: [
-        { candidateId: cand._id },
-        { employeeName: cand.name },
-      ],
-    });
+    // Only this candidate's own onboardings (by candidateId / linked employee),
+    // never by name — a name match could wipe another person's onboarding.
+    const or = [{ candidateId: cand._id }];
+    if (linkedEmployeeIds.length) or.push({ employeeId: { $in: linkedEmployeeIds } });
+    await Onboarding.deleteMany({ $or: or });
   }
 
   await Offer.deleteMany({ candidateId: cand._id });
@@ -383,6 +458,7 @@ const deleteOffer = asyncHandler(async (req, res) => {
   guard(req, res);
   const offer = await Offer.findById(req.params.id);
   if (!offer) { res.status(404); throw new Error('Offer not found'); }
+  await assertDeptInScope(req, res, offer.department);
 
   const deleteLinked = req.query.deleteLinkedEmployee === 'true' || req.body?.deleteLinkedEmployee === true;
   if (deleteLinked && offer.employeeId) {
@@ -410,9 +486,11 @@ const deleteOffer = asyncHandler(async (req, res) => {
 
 // ── Offers ───────────────────────────────────────────────────────────────────
 const getOffers = asyncHandler(async (req, res) => {
+  guard(req, res);
   const filter = {};
   if (req.query.candidateId) filter.candidateId = req.query.candidateId;
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+  Object.assign(filter, await deptNameFilter(req, HR_KEYS)); // dept heads: own department only
   const rows = await Offer.find(filter).sort({ createdAt: -1 }).limit(300).lean();
   res.json(rows);
 });
@@ -423,6 +501,7 @@ const createOffer = asyncHandler(async (req, res) => {
   if (!candidateId) { res.status(400); throw new Error('A candidate is required'); }
   const cand = await Candidate.findById(candidateId);
   if (!cand) { res.status(404); throw new Error('Candidate not found'); }
+  await assertJobPostInScope(req, res, cand.jobPostId);
 
   let department = String(req.body.department || '').trim();
   if (!department && cand.jobPostId) {
@@ -434,6 +513,8 @@ const createOffer = asyncHandler(async (req, res) => {
     const role = await JobRole.findOne({ designation: { $regex: new RegExp(`^${roleTitle}$`, 'i') } }).select('dept').lean();
     if (role?.dept) department = role.dept;
   }
+  // A department head may only raise offers for their own department.
+  await assertDeptInScope(req, res, department);
 
   const offer = await Offer.create({
     candidateId: cand._id,
@@ -473,6 +554,8 @@ const updateOffer = asyncHandler(async (req, res) => {
     throw new Error('A decided offer can no longer be edited');
   }
   const b = req.body;
+  await assertDeptInScope(req, res, offer.department);
+  if (b.department !== undefined) await assertDeptInScope(req, res, b.department);
   if (b.designation !== undefined) offer.designation = String(b.designation).trim();
   if (b.designationId !== undefined) offer.designationId = b.designationId || null;
   if (b.department !== undefined) offer.department = String(b.department).trim();
@@ -503,8 +586,11 @@ const acceptOffer = asyncHandler(async (req, res) => {
     res.status(409);
     throw new Error('This offer is already accepted');
   }
+  await assertDeptInScope(req, res, offer.department);
 
   const cand = await Candidate.findById(offer.candidateId);
+  // Hire flow: the candidate's job post must be in the caller's scope.
+  await assertJobPostInScope(req, res, cand?.jobPostId || offer.jobPostId);
   if (cand) {
     cand.stage = 'hired';
     await cand.save();
@@ -528,6 +614,7 @@ const declineOffer = asyncHandler(async (req, res) => {
   guard(req, res);
   const offer = await Offer.findById(req.params.id);
   if (!offer) { res.status(404); throw new Error('Offer not found'); }
+  await assertDeptInScope(req, res, offer.department);
   offer.status = 'declined';
   offer.decidedAt = new Date();
   await offer.save();
@@ -820,6 +907,7 @@ const getJobRoles = asyncHandler(async (req, res) => {
 
 const createJobRole = asyncHandler(async (req, res) => {
   guard(req, res);
+  await assertHrWide(req, res); // job roles are company master data
   const designation = String(req.body.designation || '').trim();
   if (!designation) { res.status(400); throw new Error('Please provide a designation title'); }
   const role = await JobRole.create({
@@ -847,6 +935,7 @@ const createJobRole = asyncHandler(async (req, res) => {
 
 const updateJobRole = asyncHandler(async (req, res) => {
   guard(req, res);
+  await assertHrWide(req, res); // job roles are company master data
   const role = await JobRole.findById(req.params.id);
   if (!role) { res.status(404); throw new Error('Job role not found'); }
   const b = req.body;
@@ -872,6 +961,7 @@ const updateJobRole = asyncHandler(async (req, res) => {
 
 const deleteJobRole = asyncHandler(async (req, res) => {
   guard(req, res);
+  await assertHrWide(req, res); // job roles are company master data
   const role = await JobRole.findById(req.params.id);
   if (!role) { res.status(404); throw new Error('Job role not found'); }
   role.active = false;
@@ -880,8 +970,10 @@ const deleteJobRole = asyncHandler(async (req, res) => {
 });
 
 const getHiringPlans = asyncHandler(async (req, res) => {
+  guard(req, res);
   const filter = {};
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+  Object.assign(filter, await deptNameFilter(req, HR_KEYS)); // dept heads: own department only
   const plans = await HiringPlan.find(filter).sort({ createdAt: -1 }).lean();
   res.json(plans);
 });
@@ -894,6 +986,7 @@ const createHiringPlan = asyncHandler(async (req, res) => {
     res.status(400);
     throw new Error('Please provide designation and department');
   }
+  await assertDeptInScope(req, res, department);
   const plan = await HiringPlan.create({
     roleId: req.body.roleId || null,
     designation,
@@ -917,6 +1010,8 @@ const updateHiringPlan = asyncHandler(async (req, res) => {
   const plan = await HiringPlan.findById(req.params.id);
   if (!plan) { res.status(404); throw new Error('Hiring plan not found'); }
   const b = req.body;
+  await assertDeptInScope(req, res, plan.department);
+  if (b.department !== undefined) await assertDeptInScope(req, res, b.department);
   if (b.designation !== undefined) plan.designation = String(b.designation).trim();
   if (b.department !== undefined) plan.department = String(b.department).trim();
   if (b.openings !== undefined) plan.openings = Number(b.openings) || 1;
@@ -936,6 +1031,7 @@ const raiseHiringPlan = asyncHandler(async (req, res) => {
   guard(req, res);
   const plan = await HiringPlan.findById(req.params.id);
   if (!plan) { res.status(404); throw new Error('Hiring plan not found'); }
+  await assertDeptInScope(req, res, plan.department);
   plan.status = 'raised';
   plan.raisedAt = new Date();
   await plan.save();
@@ -946,6 +1042,13 @@ const approveHiringPlan = asyncHandler(async (req, res) => {
   guard(req, res);
   const plan = await HiringPlan.findById(req.params.id);
   if (!plan) { res.status(404); throw new Error('Hiring plan not found'); }
+  await assertDeptInScope(req, res, plan.department);
+  // Maker-checker: whoever raised the plan cannot approve it (admin excepted).
+  const isAdmin = String(req.user?.role || '').toLowerCase() === 'admin';
+  if (!isAdmin && plan.createdBy && req.user?._id && String(plan.createdBy) === String(req.user._id)) {
+    res.status(403);
+    throw new Error('You cannot approve a hiring plan you raised');
+  }
   plan.status = 'approved';
   plan.approvedAt = new Date();
   plan.approvedBy = req.user?._id || null;
@@ -957,6 +1060,7 @@ const rejectHiringPlan = asyncHandler(async (req, res) => {
   guard(req, res);
   const plan = await HiringPlan.findById(req.params.id);
   if (!plan) { res.status(404); throw new Error('Hiring plan not found'); }
+  await assertDeptInScope(req, res, plan.department);
   plan.status = 'rejected';
   plan.rejectionReason = String(req.body.reason || 'Rejected during review').trim();
   await plan.save();
@@ -965,6 +1069,8 @@ const rejectHiringPlan = asyncHandler(async (req, res) => {
 
 const deleteHiringPlan = asyncHandler(async (req, res) => {
   guard(req, res);
+  const existingPlan = await HiringPlan.findById(req.params.id).select('department').lean();
+  if (existingPlan) await assertDeptInScope(req, res, existingPlan.department);
   const plan = await HiringPlan.findByIdAndDelete(req.params.id);
   if (!plan) { res.status(404); throw new Error('Hiring plan not found'); }
   res.json({ message: 'Hiring plan removed', id: req.params.id });
@@ -998,9 +1104,14 @@ const notifyRecruitmentTeam = async ({ title, body, link }) => {
 };
 
 const incomingApplicantWebhook = asyncHandler(async (req, res) => {
-  const configuredSecret = process.env.RECRUITMENT_WEBHOOK_SECRET || 'nizan_recruitment_webhook_secret_2026';
+  const configuredSecret = process.env.RECRUITMENT_WEBHOOK_SECRET || '';
   const providedSecret = req.headers['x-webhook-secret'] || req.query.secret;
-  if (configuredSecret && providedSecret && providedSecret !== configuredSecret) {
+  if (!configuredSecret) {
+    res.status(503);
+    throw new Error('Applicant webhook is not configured (RECRUITMENT_WEBHOOK_SECRET missing)');
+  }
+  // A missing secret is rejected too — previously only a WRONG one was.
+  if (!providedSecret || providedSecret !== configuredSecret) {
     res.status(401);
     throw new Error('Invalid webhook secret');
   }
@@ -1072,9 +1183,9 @@ const metaWebhookVerify = (req, res) => {
   const mode = req.query['hub.mode'];
   const token = req.query['hub.verify_token'];
   const challenge = req.query['hub.challenge'];
-  const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN || 'nizan_meta_verify_2026';
+  const verifyToken = process.env.META_WEBHOOK_VERIFY_TOKEN || '';
 
-  if (mode === 'subscribe' && token === verifyToken) {
+  if (verifyToken && mode === 'subscribe' && token === verifyToken) {
     console.log('[Meta Webhook] Verification challenge passed successfully');
     return res.status(200).send(challenge);
   }
@@ -1161,15 +1272,16 @@ Tag someone who would be perfect for this role! 👇
 
 const getRecruitmentWebhookConfig = asyncHandler(async (req, res) => {
   guard(req, res);
+  await assertHrWide(req, res); // response reveals the webhook secret
   const host = req.get('host');
   const protocol = req.protocol;
   const baseUrl = `${protocol}://${host}`;
-  const secret = process.env.RECRUITMENT_WEBHOOK_SECRET || 'nizan_recruitment_webhook_secret_2026';
+  const secret = process.env.RECRUITMENT_WEBHOOK_SECRET || '';
 
   res.json({
     webhookUrl: `${baseUrl}/api/recruitment/webhooks/incoming-applicant`,
     metaWebhookUrl: `${baseUrl}/api/recruitment/webhooks/meta`,
-    metaVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN || 'nizan_meta_verify_2026',
+    metaVerifyToken: process.env.META_WEBHOOK_VERIFY_TOKEN || '',
     secretHeader: 'x-webhook-secret',
     secret,
     samplePayload: {

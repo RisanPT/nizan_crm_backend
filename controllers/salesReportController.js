@@ -4,6 +4,8 @@ import Lead from '../models/Lead.js';
 import LeadActivity from '../models/LeadActivity.js';
 import User from '../models/User.js';
 import SalesTarget from '../models/SalesTarget.js';
+import { manualCountsByDay, salesLeadsSaved } from './enquiryCountController.js';
+import { monthTargetLookup } from './salesTargetController.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
 import { salesCountMatch } from '../utils/salesRules.js';
 import {
@@ -355,7 +357,9 @@ export const salesEodReport = async (req, res) => {
       if (s.includes('whatsapp') || s === 'wa') return 'whatsapp';
       if (s.includes('kerala')) return 'ig_kerala';
       if (s.includes('trial')) return 'trial_campaign';
-      if (s.includes('paid') || s.includes('ad')) return 'paid_ads';
+      // Whole word "ad"/"ads" only — a bare includes('ad') matched "le-AD-s",
+      // so every "IG Leads — Main Page" lead was counted as Paid Ads.
+      if (s.includes('paid') || /\bads?\b/.test(s)) return 'paid_ads';
       if (s.includes('main') || s === 'instagram' || s === 'ig') return 'ig_main';
       return 'other';
     };
@@ -406,44 +410,40 @@ export const salesEodReport = async (req, res) => {
       status: { $nin: SALES_EXCLUDED },
     };
 
+    // Credit — ONE owner per booking, the same rule as the Sales Dashboard and
+    // Sales Targets: booking.salesPersonId, else the converted lead's
+    // assignedTo. (Crediting the creator as well used to count a booking
+    // entered by one salesperson for another under BOTH of them.)
     if (targetUserId) {
       const targetLeadIds = (await Lead.find({ assignedTo: targetUserId }).select('_id').lean()).map((l) => l._id);
       const orCondition = [
         { salesPersonId: targetUserId },
-        { createdBy: targetUserId },
-        { leadId: { $in: targetLeadIds } },
+        { salesPersonId: null, leadId: { $in: targetLeadIds } },
       ];
       bookingQueryToday.$or = orCondition;
       bookingQueryMtd.$or = orCondition;
     }
+    // Bookings entered by users switched out of sales totals never count
+    // (Settings → Users → "Count in sales totals") — as on every sales screen.
+    const countsMatch = await salesCountMatch();
 
-    const bookingsToday = await Booking.find(bookingQueryToday)
-      .populate('leadId', 'source')
+    const bookingsToday = await Booking.find({ $and: [bookingQueryToday, countsMatch] })
+      .populate('leadId', 'source assignedTo')
       .select('bookingNumber customerName phone service totalPrice discountAmount advanceAmount collectedAmount status bookingDate createdAt salesPersonId createdBy leadId')
       .sort({ createdAt: -1 })
       .lean();
 
-    const bookingsMtd = await Booking.find(bookingQueryMtd)
-      .populate('leadId', 'source')
+    const bookingsMtd = await Booking.find({ $and: [bookingQueryMtd, countsMatch] })
+      .populate('leadId', 'source assignedTo')
       .select('bookingNumber customerName phone service totalPrice discountAmount advanceAmount collectedAmount status bookingDate createdAt salesPersonId createdBy leadId')
       .lean();
 
     // 5. Fetch Targets
-    let monthlyTargetBookings = 0;
-    let monthlyTargetValue = 0;
-    if (targetUserId) {
-      const targetDoc = await SalesTarget.findOne({
-        userId: targetUserId,
-        month,
-        year,
-      }).lean();
-      monthlyTargetBookings = targetDoc?.bookingsTarget || 0;
-      monthlyTargetValue = targetDoc?.salesTarget || 0;
-    } else {
-      const allTargets = await SalesTarget.find({ month, year }).lean();
-      monthlyTargetBookings = allTargets.reduce((sum, t) => sum + (t.bookingsTarget || 0), 0);
-      monthlyTargetValue = allTargets.reduce((sum, t) => sum + (t.salesTarget || 0), 0);
-    }
+    // Same figures as the Sales Targets screens (a sales manager's target is
+    // the team total; old targets stored against managers are ignored).
+    const monthTarget = (await monthTargetLookup({ month, year }))(targetUserId);
+    const monthlyTargetBookings = monthTarget.bookingsTarget || 0;
+    const monthlyTargetValue = monthTarget.salesTarget || 0;
 
     const dailyTargetBookings = workingDaysInMonth > 0 ? (monthlyTargetBookings / workingDaysInMonth) : 0;
     const dailyTargetValue = workingDaysInMonth > 0 ? (monthlyTargetValue / workingDaysInMonth) : 0;
@@ -456,22 +456,91 @@ export const salesEodReport = async (req, res) => {
     const mtdTargetValue = round2(dailyTargetValue * workingDaysMtd);
 
     // 6. Compute Leads & Follow-ups Logged (Table 4)
-    const countBySource = (leadsList, cat) => leadsList.filter((l) => classifySource(l.source) === cat).length;
+    //
+    // Lead counts come from the TEAM'S MANUAL COUNT (typed in each morning on
+    // My Dashboard — one shared number for the whole team) on every day that
+    // has one. Days with no manual count fall back to the leads saved in the
+    // form, as before. Because the manual count is a team number, a single
+    // salesperson's EOD shows the same team count as everyone else's.
+    const dayList = (from, to) => {
+      const out = [];
+      for (let d = from; d <= to && out.length <= 366; d = addDays(d, 1)) out.push(d);
+      return out;
+    };
+    const mtdDays = dayList(mtdStartStr, toDateStr);
+    const manualFrom = fromDateStr < mtdStartStr ? fromDateStr : mtdStartStr;
+    const manualByDay = await manualCountsByDay(manualFrom, toDateStr);
+    const CHANNEL_CAT = {
+      'WhatsApp (Organic)': 'whatsapp',
+      'IG Leads — Main Page': 'ig_main',
+      'IG Leads — Kerala Page': 'ig_kerala',
+      'Paid Ads Leads': 'paid_ads',
+      'Trial Campaign Leads': 'trial_campaign',
+    };
+    const manualCat = (day, cat) => {
+      const counts = manualByDay.get(day);
+      if (!counts) return 0;
+      return Object.entries(counts).reduce(
+        (s, [ch, n]) => s + ((CHANNEL_CAT[ch] || 'other') === cat ? n : 0),
+        0
+      );
+    };
+    // Form leads bucketed by IST day + category.
+    const bucketForm = (list) => {
+      const m = new Map();
+      for (const l of list) {
+        const k = `${istDayKey(l.createdAt)}|${classifySource(l.source)}`;
+        m.set(k, (m.get(k) ?? 0) + 1);
+      }
+      return m;
+    };
+    const formToday = bucketForm(leadsCreatedToday);
+    const formMtd = bucketForm(leadsCreatedMtd);
+    const blended = (days, form, cat) =>
+      days.reduce(
+        (s, d) => s + (manualByDay.has(d) ? manualCat(d, cat) : form.get(`${d}|${cat}`) ?? 0),
+        0
+      );
 
-    const whatsappLeadsToday = countBySource(leadsCreatedToday, 'whatsapp');
-    const whatsappLeadsMtd = countBySource(leadsCreatedMtd, 'whatsapp');
+    const whatsappLeadsToday = blended(daysInRange, formToday, 'whatsapp');
+    const whatsappLeadsMtd = blended(mtdDays, formMtd, 'whatsapp');
 
-    const igMainLeadsToday = countBySource(leadsCreatedToday, 'ig_main');
-    const igMainLeadsMtd = countBySource(leadsCreatedMtd, 'ig_main');
+    const igMainLeadsToday = blended(daysInRange, formToday, 'ig_main');
+    const igMainLeadsMtd = blended(mtdDays, formMtd, 'ig_main');
 
-    const igKeralaLeadsToday = countBySource(leadsCreatedToday, 'ig_kerala');
-    const igKeralaLeadsMtd = countBySource(leadsCreatedMtd, 'ig_kerala');
+    const igKeralaLeadsToday = blended(daysInRange, formToday, 'ig_kerala');
+    const igKeralaLeadsMtd = blended(mtdDays, formMtd, 'ig_kerala');
 
-    const paidAdsLeadsToday = countBySource(leadsCreatedToday, 'paid_ads');
-    const paidAdsLeadsMtd = countBySource(leadsCreatedMtd, 'paid_ads');
+    const paidAdsLeadsToday = blended(daysInRange, formToday, 'paid_ads');
+    const paidAdsLeadsMtd = blended(mtdDays, formMtd, 'paid_ads');
 
-    const trialCampaignLeadsToday = countBySource(leadsCreatedToday, 'trial_campaign');
-    const trialCampaignLeadsMtd = countBySource(leadsCreatedMtd, 'trial_campaign');
+    const trialCampaignLeadsToday = blended(daysInRange, formToday, 'trial_campaign');
+    const trialCampaignLeadsMtd = blended(mtdDays, formMtd, 'trial_campaign');
+
+    // YouTube / Reference / Walk-in / Other.
+    const otherLeadsToday = blended(daysInRange, formToday, 'other');
+    const otherLeadsMtd = blended(mtdDays, formMtd, 'other');
+
+    // Cross-check: manual team count vs leads the sales team saved in the CRM
+    // on the SAME days (team-wide — the manual count is a team number).
+    const savedLeads = await salesLeadsSaved(manualFrom, toDateStr);
+    const crossCheck = (days) => {
+      const manualDays = days.filter((d) => manualByDay.has(d));
+      const set = new Set(manualDays);
+      const manual = manualDays.reduce(
+        (s, d) => s + Object.values(manualByDay.get(d)).reduce((a, n) => a + n, 0),
+        0
+      );
+      const saved = savedLeads.filter((l) => set.has(l.day)).length;
+      return {
+        manualDays: manualDays.length,
+        formDays: days.length - manualDays.length,
+        source: manualDays.length === 0 ? 'form' : manualDays.length === days.length ? 'manual' : 'mixed',
+        manualCount: manual,
+        savedInCrm: saved,
+        notLogged: manual - saved,
+      };
+    };
 
     // Leads Contacted: Distinct leads with call or connected outcome, or total connected calls
     let leadsContactedToday = 0;
@@ -534,8 +603,10 @@ export const salesEodReport = async (req, res) => {
       else if (cat === 'paid_ads') todayPaidAdsBookings++;
       else if (cat === 'trial') todayTrialBookings++;
 
-      const net = (b.totalPrice || 0) - (b.discountAmount || 0);
-      todayOrderValue += net > 0 ? net : (b.totalPrice || 0);
+      // EOD sales value = package + add-ons (totalPrice already includes
+      // add-ons). Discount and advance are NOT deducted: the EOD measures the
+      // total sales a salesperson closed.
+      todayOrderValue += (b.totalPrice || 0);
       todayAdvancePaid += (b.advanceAmount || b.collectedAmount || 0);
     }
     const totalBookingsToday = bookingsToday.length;
@@ -552,8 +623,7 @@ export const salesEodReport = async (req, res) => {
       else if (cat === 'paid_ads') mtdPaidAdsBookings++;
       else if (cat === 'trial') mtdTrialBookings++;
 
-      const net = (b.totalPrice || 0) - (b.discountAmount || 0);
-      mtdOrderValue += net > 0 ? net : (b.totalPrice || 0);
+      mtdOrderValue += (b.totalPrice || 0); // package + add-ons, no discount deducted
       mtdAdvancePaid += (b.advanceAmount || b.collectedAmount || 0);
     }
     const totalBookingsMtd = bookingsMtd.length;
@@ -585,6 +655,7 @@ export const salesEodReport = async (req, res) => {
       igKeralaLeads: 0,
       paidAdsLeads: 0,
       trialCampaignLeads: 0,
+      otherLeads: 0,
       leadsContacted: 0,
       followUpsDone: 0,
       organicBookings: 0,
@@ -608,16 +679,54 @@ export const salesEodReport = async (req, res) => {
       const dayActs = activitiesToday.filter((a) => istDayKey(a.createdAt) === curDay);
       const dayBookings = bookingsToday.filter((b) => istDayKey(b.createdAt) === curDay);
 
+      // A day with a manual team count: its lead numbers go on ONE team row
+      // (not split per salesperson, and not repeated), and the salesperson
+      // rows keep calls, follow-ups and bookings only.
+      const manualDay = manualByDay.has(curDay);
+      if (manualDay) {
+        const teamRow = {
+          userId: 'team',
+          isTeamCount: true,
+          date: curDayFormatted,
+          salesPersonName: 'Team — manual lead count',
+          role: 'team',
+          whatsappLeads: manualCat(curDay, 'whatsapp'),
+          igMainLeads: manualCat(curDay, 'ig_main'),
+          igKeralaLeads: manualCat(curDay, 'ig_kerala'),
+          paidAdsLeads: manualCat(curDay, 'paid_ads'),
+          trialCampaignLeads: manualCat(curDay, 'trial_campaign'),
+          otherLeads: manualCat(curDay, 'other'),
+          leadsContacted: 0,
+          followUpsDone: 0,
+          organicBookings: 0,
+          paidAdsBookings: 0,
+          trialBookings: 0,
+          totalOrderValue: 0,
+          advancePaid: 0,
+          comment: 'Manual count entered by sales',
+        };
+        ledgerRows.push(teamRow);
+        ledgerTotals.whatsappLeads += teamRow.whatsappLeads;
+        ledgerTotals.igMainLeads += teamRow.igMainLeads;
+        ledgerTotals.igKeralaLeads += teamRow.igKeralaLeads;
+        ledgerTotals.paidAdsLeads += teamRow.paidAdsLeads;
+        ledgerTotals.trialCampaignLeads += teamRow.trialCampaignLeads;
+        ledgerTotals.otherLeads += teamRow.otherLeads;
+      }
+
       for (const rep of repsForLedger) {
         const repIdStr = String(rep._id);
 
-        // Rep's leads on curDay
+        // Rep's leads on curDay (form leads — only used on days with no
+        // manual team count).
         const repLeads = dayLeads.filter((l) => String(l.assignedTo || '') === repIdStr);
-        const repWa = repLeads.filter((l) => classifySource(l.source) === 'whatsapp').length;
-        const repIgMain = repLeads.filter((l) => classifySource(l.source) === 'ig_main').length;
-        const repIgKerala = repLeads.filter((l) => classifySource(l.source) === 'ig_kerala').length;
-        const repPaid = repLeads.filter((l) => classifySource(l.source) === 'paid_ads').length;
-        const repTrial = repLeads.filter((l) => classifySource(l.source) === 'trial_campaign').length;
+        const repCat = (cat) =>
+          manualDay ? 0 : repLeads.filter((l) => classifySource(l.source) === cat).length;
+        const repWa = repCat('whatsapp');
+        const repIgMain = repCat('ig_main');
+        const repIgKerala = repCat('ig_kerala');
+        const repPaid = repCat('paid_ads');
+        const repTrial = repCat('trial_campaign');
 
         // Rep's activities on curDay
         const repActs = dayActs.filter((a) => String(a.createdBy?._id || a.createdBy || '') === repIdStr);
@@ -629,8 +738,9 @@ export const salesEodReport = async (req, res) => {
         }
 
         // Rep's bookings on curDay
-        const repBookings = dayBookings.filter((b) =>
-          String(b.salesPersonId || '') === repIdStr || String(b.createdBy || '') === repIdStr
+        // One credit per booking: salesPersonId, else the lead's owner.
+        const repBookings = dayBookings.filter(
+          (b) => String(b.salesPersonId || b.leadId?.assignedTo || '') === repIdStr
         );
         let repOrganicB = 0;
         let repPaidB = 0;
@@ -644,8 +754,7 @@ export const salesEodReport = async (req, res) => {
           else if (cat === 'paid_ads') repPaidB++;
           else if (cat === 'trial') repTrialB++;
 
-          const net = (b.totalPrice || 0) - (b.discountAmount || 0);
-          repOrderVal += net > 0 ? net : (b.totalPrice || 0);
+          repOrderVal += (b.totalPrice || 0); // package + add-ons, no discount deducted
           repAdvPaid += (b.advanceAmount || b.collectedAmount || 0);
         }
 
@@ -698,7 +807,8 @@ export const salesEodReport = async (req, res) => {
 
     // If individual salesperson is chosen, ensure that individual row is reflected
     if (!isTeam && salesPersonInfo) {
-      ledgerRows = ledgerRows.filter((r) => r.userId === targetUserId);
+      // Keep the shared team-count row too: it is the same for everyone.
+      ledgerRows = ledgerRows.filter((r) => r.userId === targetUserId || r.isTeamCount);
     }
 
     // Default primary lead-count task: WhatsApp or Instagram
@@ -799,10 +909,18 @@ export const salesEodReport = async (req, res) => {
         igKeralaLeads: { label: 'IG Leads — Kerala Page', today: igKeralaLeadsToday, mtd: igKeralaLeadsMtd },
         paidAdsLeads: { label: 'Paid Ads Leads', today: paidAdsLeadsToday, mtd: paidAdsLeadsMtd },
         trialCampaignLeads: { label: 'Trial Campaign Leads', today: trialCampaignLeadsToday, mtd: trialCampaignLeadsMtd },
+        otherLeads: { label: 'Other Leads (YouTube, Reference, Walk-in…)', today: otherLeadsToday, mtd: otherLeadsMtd },
         leadsContacted: { label: 'Leads Contacted', today: leadsContactedToday, mtd: leadsContactedMtd },
         followUpsDone: { label: 'Follow-ups Done', today: followUpsDoneToday, mtd: followUpsDoneMtd },
         contactedToBookingPct: { label: 'Contacted → Booking %', today: contactedToBookingPctToday, mtd: contactedToBookingPctMtd },
         teamMissedLeads: { label: 'Team Missed Leads (IG – WhatsApp)', today: teamMissedLeadsToday, mtd: teamMissedLeadsMtd },
+      },
+
+      // Where the lead counts above came from, and the team cross-check:
+      // manual count vs leads actually saved in the CRM on those days.
+      leadCountCheck: {
+        today: crossCheck(daysInRange),
+        mtd: crossCheck(mtdDays),
       },
 
       // Screenshot 3 Table 5: TRIAL BOOKING CAMPAIGN
@@ -844,7 +962,7 @@ export const salesEodReport = async (req, res) => {
         customerName: b.customerName || 'Unknown',
         phone: b.phone || '',
         service: b.service || 'Service',
-        totalPrice: round2((b.totalPrice || 0) - (b.discountAmount || 0)),
+        totalPrice: round2(b.totalPrice || 0),
         advanceAmount: round2(b.advanceAmount || b.collectedAmount || 0),
         status: b.status || 'confirmed',
         source: b.leadId?.source || 'WhatsApp (Organic)',
@@ -880,7 +998,7 @@ export const salesEodReport = async (req, res) => {
         followUpDate: l.followUpDate ? new Date(l.followUpDate).toISOString().slice(0, 10) : '',
         notes: l.notes || '',
       })),
-      teamBreakdown: ledgerRows.map((r) => ({
+      teamBreakdown: ledgerRows.filter((r) => !r.isTeamCount).map((r) => ({
         id: r.userId,
         name: r.salesPersonName,
         role: r.role,

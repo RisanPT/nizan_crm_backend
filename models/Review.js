@@ -84,6 +84,28 @@ const reviewSchema = mongoose.Schema(
     sentAt: { type: Date, default: Date.now },
     submittedAt: { type: Date, default: null },
 
+    // A staff member pressed "Send Review" (WhatsApp click-to-chat). The
+    // automatic next-day send skips a review once this is set.
+    manualSentAt: { type: Date, default: null },
+
+    // Automatic next-day send through TeamN Chat (services/reviewAutoSend.js).
+    //   ''       not attempted yet
+    //   sending  claimed by a run (guards against two runs sending at once)
+    //   retry    a temporary problem; tried again on the next daily run
+    //   sent     delivered to TeamN Chat (autoMessageId set)
+    //   skipped  not sent on purpose (opted out, no phone, booking no longer completed…)
+    //   failed   gave up (bad data or too many attempts) — autoSendError says why
+    autoSendStatus: {
+      type: String,
+      enum: ['', 'sending', 'retry', 'sent', 'skipped', 'failed'],
+      default: '',
+      index: true,
+    },
+    autoSendAttempts: { type: Number, default: 0 },
+    autoSentAt: { type: Date, default: null },
+    autoMessageId: { type: String, default: '' },
+    autoSendError: { type: String, default: '' },
+
     // ── Bride answers (ratings 1-5; 0 = N/A or unanswered) ──
     overall: { type: Number, default: 0 },
     makeup: { type: Number, default: 0 },

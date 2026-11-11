@@ -8,6 +8,7 @@ import { sweepSalesTargetMidMonth } from '../utils/salesTargetAlerts.js';
 import { loadCeoInbox, digestText } from '../services/ceoInbox.js';
 import { runMonthlyObjectiveReminders } from '../services/monthlyObjectiveReminders.js';
 import { istStart, todayIst } from '../utils/istDate.js';
+import { sweepConsultationReminders } from '../utils/consultationNotify.js';
 import {
   notify,
   getUserIdsByRoles,
@@ -228,6 +229,7 @@ export const getNotifications = async (req, res) => {
     await sweepCeoDigest();
     await sweepMonthlyObjectives();
     await sweepSalesTargetMidMonth();
+    await sweepConsultationReminders();
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 30;

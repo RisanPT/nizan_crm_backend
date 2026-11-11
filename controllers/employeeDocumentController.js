@@ -2,18 +2,21 @@ import asyncHandler from 'express-async-handler';
 import { Readable } from 'stream';
 import EmployeeDocument from '../models/EmployeeDocument.js';
 import { cloudinary } from '../config/cloudinary.js';
+import { getHrScope, isHrWide } from '../utils/hrDeptScope.js';
 
-// Full access (admin/manager) or the `staff`/`hr_files` permission → manage every
-// employee's documents. An employee (ESS) may view/upload their OWN documents,
-// matched via their linked User.employeeId.
-const isHrManager = (user) => {
-  const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
-  const perms = user?.permissions || [];
-  return perms.includes('staff') || perms.includes('hr_files');
-};
+// HR-wide callers (admin/manager, `staff`/`hr_files` permission, head of HR)
+// manage every employee's documents. Other department heads manage only the
+// documents of their own department's employees. An employee (ESS) may
+// view/upload their OWN documents, matched via their linked User.employeeId.
+const KEYS = ['hr_files'];
 
 const ownEmployeeId = (user) => (user?.employeeId ? String(user.employeeId) : '');
+
+// True when the caller may manage documents belonging to `employeeId`.
+// Personal documents (Aadhaar, PAN, certificates…) stay with HR-wide users
+// only — department heads never had access to other people's files, and the
+// department-scoping decision doesn't change that.
+const canManageDocsOf = async (req, _employeeId) => isHrWide(req, KEYS);
 
 const fileTypeOf = (name = '') => {
   const ext = String(name).split('.').pop().toLowerCase();
@@ -52,11 +55,12 @@ async function destroyRaw(fileUrl) {
 // HR managers may list any employee's docs (or all with no filter). An employee
 // only ever sees their own, regardless of the query.
 const getDocuments = asyncHandler(async (req, res) => {
-  const filter = {};
-  if (isHrManager(req.user)) {
+  let filter = {};
+  const scope = await getHrScope(req, KEYS);
+  const me = ownEmployeeId(req.user);
+  if (scope.wide) {
     if (req.query.employeeId) filter.employeeId = req.query.employeeId;
   } else {
-    const me = ownEmployeeId(req.user);
     if (!me) return res.json([]);
     filter.employeeId = me;
   }
@@ -79,7 +83,7 @@ const uploadDocument = asyncHandler(async (req, res) => {
   if (!title) { res.status(400); throw new Error('Please provide a title'); }
 
   // Employees may only upload against their own record.
-  if (!isHrManager(req.user) && employeeId !== ownEmployeeId(req.user)) {
+  if (employeeId !== ownEmployeeId(req.user) && !(await canManageDocsOf(req, employeeId))) {
     res.status(403);
     throw new Error('You can only upload your own documents');
   }
@@ -101,14 +105,14 @@ const uploadDocument = asyncHandler(async (req, res) => {
   res.status(201).json(doc);
 });
 
-const canModify = (doc, user) =>
-  isHrManager(user) || String(doc.uploadedBy || '') === String(user._id);
+const canModify = async (doc, req) =>
+  String(doc.uploadedBy || '') === String(req.user._id) || canManageDocsOf(req, doc.employeeId);
 
 // @route PUT /api/employee-documents/:id
 const updateDocument = asyncHandler(async (req, res) => {
   const doc = await EmployeeDocument.findById(req.params.id);
   if (!doc) { res.status(404); throw new Error('Document not found'); }
-  if (!canModify(doc, req.user)) { res.status(403); throw new Error('Not authorized to modify this document'); }
+  if (!(await canModify(doc, req))) { res.status(403); throw new Error('Not authorized to modify this document'); }
 
   const b = req.body;
   if (b.title !== undefined && String(b.title).trim()) doc.title = String(b.title).trim();
@@ -140,14 +144,15 @@ const MIME_BY_TYPE = {
 };
 const extByType = { pdf: 'pdf', excel: 'xlsx', csv: 'csv', word: 'docx', image: 'jpg' };
 
-const canView = (doc, user) =>
-  isHrManager(user) || String(doc.employeeId?._id ?? doc.employeeId) === ownEmployeeId(user);
+const canView = async (doc, req) =>
+  String(doc.employeeId?._id ?? doc.employeeId) === ownEmployeeId(req.user) ||
+  canManageDocsOf(req, doc.employeeId);
 
 // @route GET /api/employee-documents/:id/download  (?inline=1 to render)
 const downloadDocument = asyncHandler(async (req, res) => {
   const doc = await EmployeeDocument.findById(req.params.id);
   if (!doc || !doc.fileUrl) { res.status(404); throw new Error('Document not found'); }
-  if (!canView(doc, req.user)) { res.status(403); throw new Error('You do not have access to this document'); }
+  if (!(await canView(doc, req))) { res.status(403); throw new Error('You do not have access to this document'); }
 
   const upstream = await fetch(doc.fileUrl);
   if (!upstream.ok) {
@@ -172,7 +177,7 @@ const downloadDocument = asyncHandler(async (req, res) => {
 const deleteDocument = asyncHandler(async (req, res) => {
   const doc = await EmployeeDocument.findById(req.params.id);
   if (!doc) { res.status(404); throw new Error('Document not found'); }
-  if (!canModify(doc, req.user)) { res.status(403); throw new Error('Not authorized to delete this document'); }
+  if (!(await canModify(doc, req))) { res.status(403); throw new Error('Not authorized to delete this document'); }
   await destroyRaw(doc.fileUrl);
   await doc.deleteOne();
   res.json({ message: 'Document removed', id: req.params.id });

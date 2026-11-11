@@ -362,6 +362,11 @@ export const grantDriverLogin = async (req, res) => {
     if (reuse.error) return res.status(409).json({ message: reuse.error });
 
     let created = false;
+    // Refreshing is only for existing DRIVER logins — otherwise this would
+    // reset the password of (and demote) any staff account sharing the email.
+    if (user && String(user.role || '') !== 'driver') {
+      return res.status(409).json({ message: 'This email already belongs to a staff login that is not a driver.' });
+    }
     if (user) {
       if (name) user.name = name;
       user.password = password; // hashed by the pre-save hook
@@ -638,8 +643,21 @@ export const provisionEmployeeLogin = async (req, res) => {
       return res.status(400).json({ message: 'This employee has no email on file. Add an email first.' });
     }
 
+    // A login for someone who has left would undo their exit.
+    if (employee.status === 'inactive' || employee.employmentStatus === 'exited') {
+      return res.status(400).json({ message: 'This employee has exited; a login cannot be issued.' });
+    }
+
     await ensureDefaultRoles();
     const role = String(req.body.role || 'employee').trim().toLowerCase() || 'employee';
+    // Who may hand out which role: admin → any; manager → any but admin;
+    // department head → only the self-service 'employee' role.
+    if (role !== 'employee') {
+      const allowedRole = requesterRole === 'admin' || (requesterRole === 'manager' && role !== 'admin');
+      if (!allowedRole) {
+        return res.status(403).json({ message: `You are not allowed to grant the "${role}" role.` });
+      }
+    }
     const roleDoc = await Role.findOne({ key: role });
     if (!roleDoc) return res.status(400).json({ message: `Unknown role "${role}".` });
     if (!mayGiveRole(req.user, role)) {
@@ -652,8 +670,16 @@ export const provisionEmployeeLogin = async (req, res) => {
     }
     let created = false;
     if (user) {
+      // Never hijack an account that belongs to someone else.
+      if (user.employeeId && String(user.employeeId) !== String(employee._id)) {
+        return res.status(409).json({ message: 'This email already belongs to another employee\'s login.' });
+      }
+      // An existing login keeps its role here (change roles in Users &
+      // Roles). Only an admin may re-issue a password link for a non-ESS login.
+      if (String(user.role || '') !== 'employee' && requesterRole !== 'admin') {
+        return res.status(403).json({ message: 'This email already has a staff login. Ask an admin to manage it.' });
+      }
       user.employeeId = employee._id;
-      if (req.body.role) user.role = role;
       user.active = true;
       if (!user.name && employee.name) user.name = employee.name;
     } else {

@@ -12,7 +12,8 @@ import { teamMealCheck } from '../utils/foodAllowance.js';
 
 const expensePopulate = [
   // travelDistanceKm: the work's distance, shown to Accounts beside the food bill
-  { path: 'bookingId', select: 'bookingNumber customerName service travelDistanceKm bookingItems.travelDistanceKm' },
+  // serviceStart/serviceEnd = the event dates, shown on the bill card.
+  { path: 'bookingId', select: 'bookingNumber customerName service travelDistanceKm bookingItems.travelDistanceKm serviceStart serviceEnd' },
   { path: 'employeeId', select: 'name phone artistRole status' },
   { path: 'verifiedBy', select: 'name role' },
 ];
@@ -94,7 +95,7 @@ export const getExpenses = async (req, res) => {
 };
 
 export const createExpense = async (req, res) => {
-  const { employeeId, bookingId, category, amount, date, notes, receiptImage, workType, meal, meals } = req.body;
+  const { employeeId, bookingId, category, amount, date, eventDate, notes, receiptImage, workType, meal, meals } = req.body;
 
   try {
     let finalEmployeeId = employeeId;
@@ -114,6 +115,7 @@ export const createExpense = async (req, res) => {
       workType: workType === 'model_shoot' ? 'model_shoot' : 'bridal',
       amount: amountNum,
       date: date ?? new Date(),
+      eventDate: eventDate || null,
       notes: notes ?? '',
       receiptImage: receiptImage ?? '',
     });
@@ -170,8 +172,9 @@ export const updateExpense = async (req, res) => {
       }
     }
 
-    const { bookingId, category, amount, date, notes, receiptImage, workType, meal, meals } =
+    const { bookingId, category, amount, date, eventDate, notes, receiptImage, workType, meal, meals } =
       req.body;
+    if (eventDate !== undefined) expense.eventDate = eventDate || null;
     if (workType !== undefined) {
       expense.workType = workType === 'model_shoot' ? 'model_shoot' : 'bridal';
     }

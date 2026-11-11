@@ -4,7 +4,9 @@ import { salesCountMatch } from './salesRules.js';
 // How much each salesperson sold in a month — the "achieved" side of sales
 // targets. One rule, used by every target screen:
 //  • Month  = when the booking was MADE (createdAt), as an IST calendar month.
-//  • Value  = totalPrice − discountAmount (net), like the Sales Dashboard.
+//  • Value  = totalPrice: complete order value (package + add-ons), no
+//    discount deducted — same rule as the Sales EOD and Sales Dashboard
+//    (owner decision 2026-11-10).
 //  • Credit = booking.salesPersonId, else the converted lead's assignedTo.
 //  • Not counted: non-sale statuses (same list as the sales reports) and
 //    bookings entered by users excluded from sales totals.
@@ -34,7 +36,7 @@ export const tallyAchievement = (bookings, daysInMonth) => {
     if (NOT_A_SALE.includes(String(b.status ?? '').toLowerCase())) continue;
     const userId = idOf(b.salesPersonId) ?? idOf(b.leadId?.assignedTo);
     if (!userId) continue; // unattributed sales count toward no one's target
-    const value = Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.discountAmount) || 0));
+    const value = Math.max(0, Number(b.totalPrice) || 0);
     let row = byUser.get(userId);
     if (!row) {
       row = { salesValue: 0, bookings: 0, daily: Array(daysInMonth).fill(0) };
@@ -112,7 +114,7 @@ export const rangeAchievement = async (start, end, { service = '', serviceTypeOf
     const userId = idOf(b.salesPersonId) ?? idOf(b.leadId?.assignedTo);
     if (!userId) continue;
     const row = byUser.get(userId) ?? { salesValue: 0, bookings: 0 };
-    row.salesValue += Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.discountAmount) || 0));
+    row.salesValue += Math.max(0, Number(b.totalPrice) || 0);
     row.bookings += 1;
     byUser.set(userId, row);
   }

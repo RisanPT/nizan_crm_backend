@@ -12,6 +12,7 @@ import { slotAvailability } from './slotController.js';
 import { ensureReviewForBooking, reviewFormUrl } from './reviewController.js';
 import { ensureInvoiceNumber } from '../utils/invoiceNumber.js';
 import { istStart, istEnd, istMonthBounds, rangeCondition } from '../utils/istDate.js';
+import { secondLookCondition } from '../utils/secondLook.js';
 import {
   sendAdvanceInvoiceEmail,
   sendCompletionInvoiceEmail,
@@ -991,6 +992,11 @@ export const getPaginatedBookings = async (req, res) => {
       packageLineCond = { $or: lineConds };
       baseMatch.$and = [...(baseMatch.$and || []), { $or: anyLine }];
     }
+    // "Second look" filter — bookings with a Hindu extra look / Christian
+    // Manthrakodi look add-on (booking-level or inside a package line).
+    if (String(req.query.secondLook ?? '').trim().toLowerCase() === 'yes') {
+      baseMatch.$and = [...(baseMatch.$and || []), secondLookCondition()];
+    }
     // (Optional) salesperson-credit filter, kept for report use.
     const salesPersonId = String(req.query.salesPersonId ?? '').trim();
     if (salesPersonId && mongoose.Types.ObjectId.isValid(salesPersonId)) {
@@ -1718,7 +1724,15 @@ export const updateBooking = async (req, res) => {
     const finalTotalPrice =
       bookingItems != null && finalBookingItems.length > 0
         ? finalBookingItems.reduce(
-            (sum, item) => sum + (Number(item.totalPrice) || 0),
+            (sum, item) =>
+              sum +
+              (Number(item.totalPrice) || 0) +
+              // Same rule as createBooking: a MULTI-package booking carries its
+              // add-ons per item; a single-package booking keeps them at the
+              // booking level (addonsTotal), so don't double-count those.
+              (finalBookingItems.length > 1
+                ? computeAddonsTotal(item.addons || [])
+                : 0),
             0
           ) +
           addonsTotal

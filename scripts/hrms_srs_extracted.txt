@@ -1,0 +1,400 @@
+3.1 Recruitment
+Nothing in this module exists today. The recruitment funnel is currently a free-text field an HR user types into the month-end
+report. The module terminates at offer acceptance, which must create the employee record (FR-1.11) — without that join,
+recruitment is data entry that HR repeats by hand.
+ID 	Requirement 	Priority 	Status
+FR-1.1 Create a job requisition specifying department, designation, number of openings, employment
+type and business justification.
+Must 	New
+FR-1.2 Capture an HR plan against each requisition: job description, job analysis, required skills,
+qualifications and experience band.
+Must 	New
+FR-1.3 Route a requisition through an approval workflow ( draft → raised → approved | rejected ),
+recording approver and timestamp.
+Must 	New
+FR-1.4 Publish one or more job posts per approved requisition, each with channel, post date, closing
+date and external URL.
+Must 	New
+FR-1.5 Record sourcing channel per candidate (referral, job portal, walk-in, agency, social) to support
+cost-per-hire analysis.
+Must 	New
+FR-1.6 Create a candidate against a requisition with name, email, phone and an uploaded CV. 	Must 	New
+FR-1.7 Shortlist or reject a candidate with a reason, retaining full stage history with actor and timestamp. Must 	New
+FR-1.8 Schedule up to three interview rounds per candidate, each with panel members, date, mode (in-
+person, phone, video) and location or link.
+Must 	New
+SRS · HRMS v2 of 18	6
+
+-- 6 of 18 --
+
+ID 	Requirement 	Priority 	Status
+FR-1.9 Record per-round feedback, a numeric score and an outcome ( pass , fail , hold ). A
+candidate advances only when the prior round is passed.
+Must 	New
+FR-1.10 Generate an offer letter with CTC breakdown, designation, department and joining date, and
+track its state ( issued → accepted | declined | lapsed ).
+Must 	New
+FR-1.11 On offer acceptance, create an Employee record pre-filled from the candidate — name, email,
+phone, designation, department and joining date — with employmentStatus = probation .
+Must 	New
+FR-1.12 Derive funnel metrics without manual entry: applications, shortlisted, interviewed, offered, joined,
+time-to-hire and cost-per-hire.
+Should 	New
+3.2 Employee management
+The existing Employee model is richer than the ask — it already carries employment type, a five-level geography scope,
+salary scheme, bank details, PAN and the Timebox link. Four of the nine requested fields are missing, plus date of joining,
+which several other modules depend on.
+ID 	Requirement 	Priority Status
+FR-2.1 Assign every employee a unique, human-readable employee code, generated on creation and used
+on payslips, offer letters and certificates.
+Must 	New
+FR-2.2 Capture name, date of birth, email, designation, department and phone number. 	Must 	Extend
+FR-2.3 Capture an emergency contact as name, relationship and phone number. 	Must 	New
+FR-2.4 Maintain an employment lifecycle status of probation , confirmed , notice_period or
+exited , separate from the existing active/inactive access flag.
+Must 	Extend
+FR-2.5 Record date of joining and probation end date, and surface a reminder to HR before probation
+expires.
+Must 	New
+FR-2.6 Record a reporting manager per employee, used to route leave approvals and performance
+evaluation.
+Must 	New
+FR-2.7 Preserve all existing employee attributes — geography scope, salary configuration, bank details
+and the Timebox identifier — unchanged.
+Must 	Built
+FR-2.8 Search and filter the employee directory by department, designation, employment status, grade
+and joining-date range.
+Must 	Extend
+FR-2.9 Retain an audit trail of every change to employment status, grade, reporting manager and salary
+configuration, with actor and timestamp.
+Must 	New
+FR-2.10 Never hard-delete an employee with payroll, leave or grievance history; deactivate instead. 	Must 	Extend
+3.3 Training and development
+Orientation tracks whether a topic was covered, not the material itself. Content hosting is out of scope.
+ID 	Requirement 	Priority 	Status
+FR-3.1 Define reusable orientation plan templates with a name, a duration in days (default 7) and an
+ordered list of topics.
+Must 	New
+FR-3.2 Mark individual topics as mandatory or optional, and scope a plan to a department where
+orientation differs by function.
+Should 	New
+FR-3.3 Assign a plan to a trainee, naming a trainer and a start date; derive the expected end date from the
+plan duration.
+Must 	New
+SRS · HRMS v2 of 18	7
+
+-- 7 of 18 --
+
+ID 	Requirement 	Priority 	Status
+FR-3.4 Record per-topic status ( pending , covered , not covered ) with the date covered and the
+trainer who signed it off.
+Must 	New
+FR-3.5 Set an assignment to completed only when every mandatory topic is marked covered. 	Must 	New
+FR-3.6 Auto-assign the default orientation plan when an employee is created from an accepted offer (FR-
+1.11).
+Should 	New
+FR-3.7 Show HR a view of in-progress orientations with days elapsed and topics outstanding. 	Must 	New
+FR-3.8 Derive the training completion rate for a period without manual entry. 	Should 	New
+3.4 Work
+The largest module and the one with the widest spread of maturity. Timebox attendance and the 5-pillar performance
+scorecard are built and working. Leave exists only as a non-functional mock screen. Overtime, grading, ROE, task completion
+rate and department ranking have no implementation.
+3.4.1 Leave
+ID 	Requirement 	Priority 	Status
+FR-4.1 Configure leave types with an annual quota, paid or unpaid flag, carry-forward rule and whether
+supporting documents are required.
+Must 	New
+FR-4.2 Submit a leave request with type, from-date, to-date, computed day count, reason and optional
+attachment.
+Must 	New
+FR-4.3 Route requests for approval to the reporting manager or department head, allowing approve or
+reject with a decision note.
+Must 	New
+FR-4.4 Maintain a leave balance per employee, per type, per year — entitled, used and carried forward —
+decremented on approval.
+Must 	New
+FR-4.5 Reject a request that exceeds the available balance, unless explicitly overridden by HR with a
+recorded reason.
+Must 	New
+FR-4.6 Exclude approved paid leave from LOP when payroll is computed for that month (see FR-5.5). 	Must 	New
+FR-4.7 Show a team leave calendar to department heads so overlapping absence is visible before
+approval.
+Should 	New
+3.4.2 Attendance and overtime
+ID 	Requirement 	Priority Status
+FR-4.8 Display Timebox attendance per employee per month: expected days, days present, hours worked
+and attendance percentage.
+Must 	Built
+FR-4.9 Reconcile approved leave against Timebox day-status in a single component, so leave and
+attendance never disagree on screen.
+Must 	New
+FR-4.10 Derive overtime hours from attendance beyond the standard working day, and require approval
+before they are payable.
+Must 	New
+FR-4.11 Hold the overtime rate as configuration at employee or department level, never as a literal in code. 	Must 	New
+3.4.3 Performance and employment grading
+The existing 5-pillar evaluation — learnability, responsibility, punctuality, commitment and leadership, each scored 0–5 — is
+retained. Layered above it is a new employment level grade of A, B, C or D, assessed per review period.
+SRS · HRMS v2 of 18	8
+
+-- 8 of 18 --
+
+The grade is determined by two dimensions, skill and role ownership, with a behavioural override that places an otherwise-
+skilled employee in Grade C.
+C Grade C
+Skill + cancer + negative momentum
+Skilled, but damaging the team
+Written justification required
+A Grade A
+Skill + role ownership
+Retain and stretch
+Eligible for increment review
+D Grade D
+Low skill + no ownership
+Performance plan, then review
+Escalate if unchanged next period
+B Grade B
+Low skill + role ownership
+Train — the gap is closable
+Assign a mentor for the period
+High
+Low
+S K I L L
+Low 	High
+R O L E O W N E R S H I P
+The A–D employment grading rubric. Grade C is the behavioural exception — skill is present, but conduct and trajectory place the employee below Grade B.
+ID 	Requirement 	Priority 	Status
+FR-4.12 Retain the existing 5-pillar monthly performance evaluation, one record per employee per month,
+with an auto-computed composite score.
+Must 	Built
+FR-4.13 Assess and store two grading dimensions per review period: skill level (high or low) and role
+ownership (present or absent).
+Must 	New
+FR-4.14 Record a behavioural flag per review period covering culture damage (“cancer”) and negative
+momentum, each with supporting notes.
+Must 	New
+FR-4.15 Derive the employment level grade from the rubric: A = skill + role ownership; B = low skill + role
+ownership; C = skill + cancer + negative momentum; D = low skill + no ownership.
+Must 	New
+FR-4.16 Allow the evaluator to override the derived grade, requiring a written reason that is stored with
+the record.
+Must 	New
+FR-4.17 Require mandatory written justification for a Grade C award, and notify HR when one is recorded. 	Must 	New
+FR-4.18 Retain grade history per employee and display grade movement across review periods, so
+trajectory is visible.
+Must 	New
+FR-4.19 Restrict grade visibility to HR, the employee’s own department head, and management. A grade
+shall not be visible to peers.
+Must 	New
+FR-4.20 Treat the grade as advisory to increment and promotion decisions. The system shall never adjust
+pay automatically from a grade.
+Must 	New
+FR-4.21 Report grade distribution by department and period, so grading inflation across evaluators is
+detectable.
+Should 	New
+D E S I G N N OT E O N G R A D E C
+Grade C is a serious designation with employment consequences, and it is the only grade driven by conduct rather than
+capability. FR-4.17 makes justification mandatory and FR-4.19 restricts who can see it, so the grade cannot circulate
+informally. FR-4.20 keeps it out of the payroll path entirely — a grade informs a human decision about pay, it never
+makes one.
+SRS · HRMS v2 of 18	9
+
+-- 9 of 18 --
+
+3.4.4 Work analytics
+ID 	Requirement 	Priority 	Status
+FR-4.22 Compute a task completion rate per employee and per department from assigned tasks closed
+within their due period.
+Must 	New
+FR-4.23 Compute Return on Employee (ROE) for a period as net contribution divided by average
+headcount, with the contribution basis stated on screen.
+Should 	New
+FR-4.24 Rank departments on a composite of attendance, task completion, performance composite and
+grade distribution, with the weighting configurable.
+Should 	New
+FR-4.25 Show the timebox data, leave, performance, grade and analytics for one employee on a single
+consolidated profile view.
+Should 	New
+3.5 Payroll and attendance
+The strongest existing module. Salary already models basic, incentives, room rent, HRA, allowances, bonus, deductions and
+net, with a draft → approved_by_hr → paid → cancelled workflow and a unique index per employee-month. The gaps are
+statutory.
+ID 	Requirement 	Priority Status
+FR-5.1 Take present days for a payroll period from the Timebox monthly summary, matched by
+timeboxEmployeeId .
+Must 	Built
+FR-5.2 Generate monthly salary records per employee and progress them through
+draft → approved_by_hr → paid , recording approver, payer and timestamps.
+Must 	Built
+FR-5.3 Record HRA as a separate payment outside the salary run, with its own date, method and status. 	Must 	Built
+FR-5.4 Include incentive and bonus as distinct earnings lines on the salary record. 	Must 	Built
+FR-5.5 Compute LOP as an explicit, named line — both days and amount — rather than folding absence
+into a generic deduction.
+Must 	Extend
+FR-5.6 Compute gross earnings explicitly, as the sum of all earnings lines before deductions. 	Must 	New
+FR-5.7 Compute EPF employee and employer contributions as a configurable percentage of basic wages,
+subject to a configurable wage ceiling.
+Must 	New
+FR-5.8 Compute ESI employee and employer contributions as configurable percentages of gross, applied
+only below the configurable gross threshold.
+Must 	New
+FR-5.9 Determine EPF and ESI applicability per employee, so categories outside statutory coverage are
+excluded from the computation.
+Must 	New
+FR-5.10 Compute overtime pay from approved overtime hours and the configured rate (FR-4.10, FR-4.11). 	Must 	New
+FR-5.11 Compute net salary as gross earnings less LOP, employee EPF, employee ESI and other deductions. 	Must 	Extend
+FR-5.12 Generate a payslip PDF itemising every earning and deduction line, employer contributions,
+present and LOP days, and net pay.
+Must 	Extend
+FR-5.13 Hold all statutory rates, ceilings and thresholds as editable configuration with an effective date,
+never as literals in code.
+Must 	New
+FR-5.14 Post approved payroll to the accounting ledger so payroll and finance reconcile. 	Must 	Built
+SRS · HRMS v2 of 18	10
+
+-- 10 of 18 --
+
+3.6 Employee engagement
+ID 	Requirement 	Priority 	Status
+FR-6.1 Create an engagement event with title, type, date or date range, description and department
+scope.
+Must 	New
+FR-6.2 Record invited participants and mark actual attendance per event. 	Must 	New
+FR-6.3 Record a planned and actual budget per event, so engagement spend is visible to finance. 	Should 	New
+FR-6.4 Present events on a calendar with an event status of planned , completed or cancelled . 	Must 	New
+FR-6.5 Surface upcoming birthdays and work anniversaries derived from date of birth and date of joining
+(FR-2.2, FR-2.5).
+Should 	New
+FR-6.6 Attach photographs and documents to a completed event. 	Should 	New
+FR-6.7 Report participation rate by department and period. 	Should 	New
+3.7 Conflict management
+Structurally close to the existing IT Ticket model — numbered record, department routing, status workflow, activity trail and
+resolution fields — but grievances carry confidentiality obligations that IT tickets do not, so they are a separate collection.
+ID 	Requirement 	Priority 	Status
+FR-7.1 Raise a grievance capturing date, department, the employee raising it, category and description. 	Must 	New
+FR-7.2 Assign a unique, human-readable grievance number on creation. 	Must 	New
+FR-7.3 Optionally name the employee the grievance is raised against, without notifying them. 	Must 	New
+FR-7.4 Support a confidential flag that restricts visibility to HR and management, enforced in the data
+query and not in the interface.
+Must 	New
+FR-7.5 Progress a grievance through raised → under review → decision recorded → closed , with
+escalated and withdrawn as alternate outcomes.
+Must 	New
+FR-7.6 Assign a grievance to a handler and allow reassignment, recording every change. 	Must 	New
+FR-7.7 Record the decision, the decision-maker and the decision date, with supporting notes and
+attachments.
+Must 	New
+FR-7.8 Maintain an immutable activity trail of every comment, status change and assignment. 	Must 	New
+FR-7.9 Exclude the named party and their reporting line from access to a grievance raised against them,
+by default.
+Must 	New
+FR-7.10 Report grievances raised and resolved per period and average time to resolution. 	Should 	New
+3.8 Offboarding
+ID 	Requirement 	Priority 	Status
+FR-8.1 Initiate offboarding with a type of resignation , termination , end of contract or
+retirement , and a recorded reason.
+Must 	New
+FR-8.2 Record the resignation date and notice period in days, and compute the last working day from
+them.
+Must 	New
+SRS · HRMS v2 of 18	11
+
+-- 11 of 18 --
+
+ID 	Requirement 	Priority 	Status
+FR-8.3 Allow HR to waive or shorten the notice period, recording who approved the change. 	Must 	New
+FR-8.4 Set employmentStatus = notice_period on initiation, and show a countdown to the last
+working day.
+Must 	New
+FR-8.5 Present a clearance checklist with an owning department per item — IT assets, inventory and staff
+kit, finance dues, HR documents — each independently signed off.
+Must 	New
+FR-8.6 Block completion of offboarding until every mandatory clearance item is signed off. 	Must 	New
+FR-8.7 Produce a final payslip covering the last working month, including settlement of dues and
+recoveries.
+Must 	Extend
+FR-8.8 Generate an experience certificate stating employee code, name, designation, department and
+tenure from joining to last working day.
+Must 	New
+FR-8.9 On completion, set employmentStatus = exited , deactivate the employee and revoke the
+associated login.
+Must 	New
+FR-8.10 Derive attrition count and attrition rate per period from completed offboardings. 	Should 	New
+4 Data requirements
+Fifteen new collections and three extended schemas. Every new model follows existing conventions: ESM default export,
+timestamps: true , and ObjectId references paired with a denormalised display name — the employeeId +
+employeeName pattern used by Salary , HraRecord and PerformanceEvaluation .
+4.1 Extensions to Employee
+Field 	Type 	Satisfies
+employeeCode 	String, unique, sparse 	FR-2.1
+dateOfBirth 	Date 	FR-2.2, FR-6.5
+dateOfJoining 	Date 	FR-2.5, FR-6.5, FR-8.8
+emergencyContact 	{ name, relation, phone } 	FR-2.3
+employmentStatus 	Enum: probation , confirmed ,
+notice_period , exited
+FR-2.4, FR-8.4, FR-8.9
+probationEndDate 	Date 	FR-2.5
+reportingManagerId 	ObjectId → Employee 	FR-2.6, FR-4.3
+currentGrade 	Enum: A , B , C , D 	FR-2.8, FR-4.18
+overtimeRate 	Number 	FR-4.11
+statutoryApplicability { epf: Boolean, esi: Boolean } FR-5.9
+D E S I G N N OT E
+Retain status ( active / inactive ) as the access flag and add employmentStatus as the lifecycle state. Overloading
+one field to carry both meanings would break the existing staff filters, which query on status today.
+SRS · HRMS v2 of 18	12
+
+-- 12 of 18 --
+
+4.2 Extensions to Salary
+Field 	Type 	Satisfies
+lopDays , lopAmount 	Number 	FR-5.5 — names what absenceDeduction already computes
+grossEarnings 	Number 	FR-5.6 — required for the ESI threshold test
+epfEmployee ,
+epfEmployer
+Number 	FR-5.7
+esiEmployee ,
+esiEmployer
+Number 	FR-5.8
+overtimeHours ,
+overtimeAmount
+Number 	FR-5.10
+payrollSettingVersion 	String 	FR-5.13 — records which rate set produced this slip
+4.3 New collections
+Module 	Collection 	Key fields
+Recruitment 	JobRequisition 	title , departmentId , designation , openings , jobDescription ,
+jobAnalysis , status , raisedBy , approvedBy
+Recruitment 	JobPosting 	requisitionId , channel , postedAt , closesAt , externalUrl , status
+Recruitment 	Candidate 	name , email , phone , requisitionId , source , resumeUrl , stage ,
+stageHistory[]
+Recruitment 	InterviewRound 	candidateId , roundNumber , scheduledAt , panel[] , mode , feedback , score ,
+outcome
+Recruitment 	OfferLetter 	candidateId , ctc , designation , joiningDate , status , documentUrl ,
+issuedBy
+Training 	OrientationPlan 	name , durationDays , topics[] , departmentId , isTemplate
+Training 	OrientationAssignment planId , traineeId , trainerId , startDate , topicProgress[] , status
+Work 	LeaveType 	name , annualQuota , paid , carryForward , requiresDocument
+Work 	LeaveRequest 	employeeId , leaveTypeId , fromDate , toDate , days , reason , status ,
+approverId , decisionNote
+Work 	LeaveBalance 	employeeId , leaveTypeId , year , entitled , used , carriedForward
+Work 	EmploymentGrade 	employeeId , period , skillLevel , roleOwnership , cultureFlag , momentum ,
+derivedGrade , finalGrade , justification , evaluatedBy
+Work 	OvertimeRecord 	employeeId , date , hours , rate , status , approvedBy
+Payroll 	PayrollSetting 	effectiveFrom , epfRate , epfCeiling , esiEmployeeRate , esiEmployerRate ,
+esiThreshold , version
+Engagement 	EngagementEvent 	title , type , startDate , endDate , departmentIds[] , participants[] ,
+budget , status , photos[]
+Conflict 	Grievance 	grievanceNumber , raisedBy , againstEmployeeId , departmentId , category ,
+description , confidential , status , activity[] , decision , decidedBy
+Offboarding 	Offboarding 	employeeId , type , resignationDate , noticePeriodDays , lastWorkingDay ,
+clearanceItems[] , finalSettlement , experienceCertificateUrl , status
+SRS · HRMS v2 of 18	13
+
+-- 13 of 18 --
+
+4.4 Data integrity rules
+DR-1 — One EmploymentGrade per employee per review period, enforced by a unique compound index.
+DR-2 — One LeaveBalance per employee, leave type and year, enforced by a unique compound index.
+DR-3 — The existing unique index on Salary by employee, month and year is retained.
+DR-4 — A paid salary record is immutable. Corrections are made by cancelling and reissuing, never by editing in place.
+DR-5 — All schema changes are additive with defaults, so existing production documents remain valid without migration
+(constraint C-4).

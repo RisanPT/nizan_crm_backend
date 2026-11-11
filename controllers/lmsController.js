@@ -2,6 +2,15 @@ import asyncHandler from 'express-async-handler';
 import Course from '../models/Course.js';
 import Enrollment from '../models/Enrollment.js';
 import Employee from '../models/Employee.js';
+import { getHrScope, scopeFilter, canManageEmployee, assertEmployeeInScope, isHrWide } from '../utils/hrDeptScope.js';
+
+// Department-head scoping (owner decision 2026-11-06): course and orientation
+// PLAN catalogues are company master data (HR-wide only); enrolments and
+// orientation assignments are scoped to the department head's own staff.
+const HR_KEYS = ['lms'];
+const assertHrWide = async (req, res) => {
+  if (!(await isHrWide(req, HR_KEYS))) { res.status(403); throw new Error('Only HR can manage this'); }
+};
 
 const empPopulate = { path: 'employeeId', select: 'name department' };
 
@@ -23,6 +32,7 @@ const getCourses = asyncHandler(async (req, res) => {
 
 const createCourse = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed to manage courses'); }
+  await assertHrWide(req, res); // course catalogue is company master data
   const title = String(req.body.title || '').trim();
   if (!title) { res.status(400); throw new Error('Please add a course title'); }
   const row = await Course.create({
@@ -41,6 +51,7 @@ const createCourse = asyncHandler(async (req, res) => {
 
 const updateCourse = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed to manage courses'); }
+  await assertHrWide(req, res); // course catalogue is company master data
   const row = await Course.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Course not found'); }
   const b = req.body;
@@ -58,6 +69,7 @@ const updateCourse = asyncHandler(async (req, res) => {
 
 const deleteCourse = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed to manage courses'); }
+  await assertHrWide(req, res); // course catalogue is company master data
   const inUse = await Enrollment.countDocuments({ courseId: req.params.id });
   if (inUse > 0) { res.status(409); throw new Error(`Cannot delete: ${inUse} enrolment(s) exist`); }
   const row = await Course.findByIdAndDelete(req.params.id);
@@ -80,6 +92,7 @@ const getEnrollments = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.courseId) filter.courseId = req.query.courseId;
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+  Object.assign(filter, await scopeFilter(req, HR_KEYS)); // dept heads: own department's staff
   const rows = await Enrollment.find(filter).populate(empPopulate).sort({ createdAt: -1 }).limit(500);
   res.json(rows);
 });
@@ -90,6 +103,7 @@ const enroll = asyncHandler(async (req, res) => {
   const onBehalf = req.body.employeeId && String(req.body.employeeId) !== String(employeeId || '');
   if (onBehalf) {
     if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed to enrol others'); }
+    await assertEmployeeInScope(req, res, req.body.employeeId, HR_KEYS);
     employeeId = req.body.employeeId;
   }
   if (!employeeId) { res.status(400); throw new Error('No employee record is linked to your account.'); }
@@ -117,7 +131,12 @@ const updateEnrollment = asyncHandler(async (req, res) => {
   const row = await Enrollment.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Enrolment not found'); }
   const owns = String(row.employeeId) === String(req.user.employeeId || '');
-  if (!owns && !canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  const managesIt = canManage(req.user) && (await canManageEmployee(req, row.employeeId, HR_KEYS));
+  if (!owns && !managesIt) { res.status(403); throw new Error('Not allowed'); }
+  // Only a manager in scope may mark an enrolment completed — never the
+  // employee on their own record (HR-wide callers excepted).
+  const mayComplete = managesIt && (!owns || (await isHrWide(req, HR_KEYS)));
+  const wasCompleted = row.status === 'completed';
 
   if (req.body.progress !== undefined) {
     row.progress = Math.max(0, Math.min(100, Number(req.body.progress) || 0));
@@ -127,6 +146,10 @@ const updateEnrollment = asyncHandler(async (req, res) => {
   if (req.body.status === undefined) {
     if (row.progress >= 100) row.status = 'completed';
     else if (row.progress > 0) row.status = 'in_progress';
+  }
+  if (row.status === 'completed' && !wasCompleted && !mayComplete) {
+    res.status(403);
+    throw new Error('Completion must be confirmed by your manager or HR');
   }
   if (row.status === 'completed') {
     row.progress = 100;
@@ -142,7 +165,9 @@ const deleteEnrollment = asyncHandler(async (req, res) => {
   const row = await Enrollment.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Enrolment not found'); }
   const owns = String(row.employeeId) === String(req.user.employeeId || '');
-  if (!owns && !canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  if (!owns && !(canManage(req.user) && (await canManageEmployee(req, row.employeeId, HR_KEYS)))) {
+    res.status(403); throw new Error('Not allowed');
+  }
   await row.deleteOne();
   res.json({ message: 'Enrolment removed', id: req.params.id });
 });
@@ -823,12 +848,12 @@ const SEED_COURSES = [
 ];
 
 const getOrientationPlans = asyncHandler(async (req, res) => {
-  // Ensure all seeded plans exist in the database with up-to-date 7-day syllabi
+  // Make sure the standard plans exist — inserted once, HR's edits are kept.
   for (const seed of SEED_ORIENTATION_PLANS) {
     await OrientationPlan.updateOne(
       { roleTitle: seed.roleTitle },
       {
-        $set: {
+        $setOnInsert: {
           department: seed.department,
           trainerName: seed.trainerName,
           overview: seed.overview,
@@ -847,6 +872,7 @@ const getOrientationPlans = asyncHandler(async (req, res) => {
 
 const createOrientationPlan = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  await assertHrWide(req, res); // orientation plans are company master data
   const roleTitle = String(req.body.roleTitle || '').trim();
   const department = String(req.body.department || '').trim();
   if (!roleTitle || !department) { res.status(400); throw new Error('Role title and department required'); }
@@ -867,6 +893,7 @@ const createOrientationPlan = asyncHandler(async (req, res) => {
 
 const updateOrientationPlan = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  await assertHrWide(req, res); // orientation plans are company master data
   const plan = await OrientationPlan.findById(req.params.id);
   if (!plan) { res.status(404); throw new Error('Plan not found'); }
   const b = req.body;
@@ -883,82 +910,18 @@ const updateOrientationPlan = asyncHandler(async (req, res) => {
 });
 
 const getActiveOrientations = asyncHandler(async (req, res) => {
-  let list = await OrientationAssignment.find({}).sort({ createdAt: -1 });
-
-  // Auto-seed active orientation for Lionel Messi if none exists
-  if (list.length === 0) {
-    const messi = await Employee.findOne({ name: 'Lionel Messi' });
-    if (messi) {
-      const plan = await OrientationPlan.findOne({ roleTitle: { $regex: /dev-ops/i } });
-      const days = (plan?.days || SEED_ORIENTATION_PLANS[0].days).map((d) => ({
-        dayNumber: d.dayNumber,
-        title: d.title,
-        topics: d.topics,
-        signedOff: d.dayNumber <= 3,
-        signedOffBy: d.dayNumber <= 3 ? 'Infra Lead' : '',
-        signedOffAt: d.dayNumber <= 3 ? new Date() : null,
-        status: d.dayNumber <= 3 ? 'Signed' : (d.dayNumber === 4 ? 'In progress' : 'Upcoming'),
-      }));
-      await OrientationAssignment.create({
-        employeeId: messi._id,
-        employeeName: messi.name,
-        roleTitle: messi.role || 'Senior Dev-ops engineer',
-        department: messi.department || 'Technology & Systems (IT)',
-        trainerName: 'Infrastructure Lead',
-        planId: plan?._id || null,
-        currentDay: 4,
-        totalDays: 7,
-        status: 'On track',
-        days,
-      });
-      list = await OrientationAssignment.find({}).sort({ createdAt: -1 });
-    }
+  // HR sees every orientation; anyone else only their own. (The old demo
+  // seeding of sample trainees on every load has been removed.)
+  // Department heads see their own department's (plus their own).
+  if (canManage(req.user)) {
+    const scope = await getHrScope(req, HR_KEYS);
+    if (scope.wide) return res.json(await OrientationAssignment.find({}).sort({ createdAt: -1 }));
+    const or = [await scopeFilter(req, HR_KEYS)];
+    if (req.user?.employeeId) or.push({ employeeId: req.user.employeeId });
+    return res.json(await OrientationAssignment.find({ $or: or }).sort({ createdAt: -1 }));
   }
-
-  // Ensure Lionel Messi's active progress is calibrated (Days 1-3 signed, Day 4 in progress)
-  const messiAsgn = list.find((a) => a.employeeName === 'Lionel Messi');
-  if (messiAsgn && messiAsgn.days.every((d) => d.signedOff)) {
-    messiAsgn.currentDay = 4;
-    messiAsgn.days.forEach((d) => {
-      d.signedOff = d.dayNumber <= 3;
-      d.signedOffBy = d.dayNumber <= 3 ? 'Infra Lead' : '';
-      d.signedOffAt = d.dayNumber <= 3 ? (d.signedOffAt || new Date()) : null;
-      d.status = d.dayNumber <= 3 ? 'Signed' : (d.dayNumber === 4 ? 'In progress' : 'Upcoming');
-    });
-    await messiAsgn.save();
-  }
-
-  // Seed Kavya S. Nair for Bridal Styling if not already present
-  const kavyaAsgn = list.find((a) => a.employeeName?.includes('Kavya'));
-  if (!kavyaAsgn) {
-    const kavyaEmp = await Employee.findOne({ name: { $regex: /Kavya/i } });
-    const bridalPlan = await OrientationPlan.findOne({ roleTitle: { $regex: /bridal stylist/i } });
-    if (kavyaEmp && bridalPlan) {
-      const days = bridalPlan.days.map((d) => ({
-        dayNumber: d.dayNumber,
-        title: d.title,
-        topics: d.topics,
-        signedOff: d.dayNumber <= 2,
-        signedOffBy: d.dayNumber <= 2 ? 'Farhana M.' : '',
-        signedOffAt: d.dayNumber <= 2 ? new Date() : null,
-        status: d.dayNumber <= 2 ? 'Signed' : (d.dayNumber === 3 ? 'In progress' : 'Upcoming'),
-      }));
-      await OrientationAssignment.create({
-        employeeId: kavyaEmp._id,
-        employeeName: kavyaEmp.name,
-        roleTitle: kavyaEmp.role || 'Senior Bridal Stylist',
-        department: 'Bridal Styling',
-        trainerName: 'Farhana M.',
-        planId: bridalPlan._id,
-        currentDay: 3,
-        totalDays: 7,
-        status: 'On track',
-        days,
-      });
-      list = await OrientationAssignment.find({}).sort({ createdAt: -1 });
-    }
-  }
-
+  if (!req.user?.employeeId) return res.json([]);
+  const list = await OrientationAssignment.find({ employeeId: req.user.employeeId }).sort({ createdAt: -1 });
   res.json(list);
 });
 
@@ -966,6 +929,7 @@ const assignOrientation = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
   const { employeeId, planId } = req.body;
   if (!employeeId) { res.status(400); throw new Error('Employee required'); }
+  await assertEmployeeInScope(req, res, employeeId, HR_KEYS);
 
   const employee = await Employee.findById(employeeId);
   if (!employee) { res.status(404); throw new Error('Employee not found'); }
@@ -991,7 +955,8 @@ const assignOrientation = asyncHandler(async (req, res) => {
     employeeName: employee.name,
     roleTitle: plan?.roleTitle || employee.role || 'Staff',
     department: plan?.department || employee.department || 'General',
-    trainerName: plan?.trainerName || req.body.trainerName || 'Department Lead',
+    // HR's chosen trainer wins; the plan's default trainer is the fallback.
+    trainerName: String(req.body.trainerName || '').trim() || plan?.trainerName || 'Department Lead',
     planId: plan?._id || null,
     currentDay: 1,
     totalDays: days.length,
@@ -1007,6 +972,7 @@ const updateOrientationProgress = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
   const assignment = await OrientationAssignment.findById(req.params.id);
   if (!assignment) { res.status(404); throw new Error('Orientation not found'); }
+  await assertEmployeeInScope(req, res, assignment.employeeId, HR_KEYS);
 
   const b = req.body;
   if (b.currentDay !== undefined) assignment.currentDay = Number(b.currentDay);
@@ -1032,12 +998,15 @@ const updateOrientationProgress = asyncHandler(async (req, res) => {
 // Auto-seed / sync courses across departments
 const originalGetCourses = getCourses;
 const ensureCoursesSeeded = asyncHandler(async (req, res, next) => {
-  for (const c of SEED_COURSES) {
+  // Starter courses are added only to an empty catalogue, so HR can rename,
+  // edit or delete them without them coming back on the next load.
+  const seedNeeded = (await Course.estimatedDocumentCount()) === 0;
+  for (const c of seedNeeded ? SEED_COURSES : []) {
     try {
       await Course.updateOne(
         { title: c.title },
         {
-          $set: {
+          $setOnInsert: {
             title: c.title,
             department: c.department,
             targetRole: c.targetRole,

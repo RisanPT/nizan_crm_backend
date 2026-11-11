@@ -1,5 +1,6 @@
 import express from 'express';
-import { protect } from '../middleware/authMiddleware.js';
+import { protect, attachRolePermissions } from '../middleware/authMiddleware.js';
+import { canManageHra, requireAccess } from '../utils/hrAccess.js';
 import {
   getHraRecords,
   getHraStats,
@@ -10,7 +11,7 @@ import {
 
 const router = express.Router();
 
-router.use(protect);
+router.use(protect, attachRolePermissions, requireAccess(canManageHra, 'You are not allowed to access HRA'));
 
 router.get('/', getHraRecords);
 router.get('/stats', getHraStats);
