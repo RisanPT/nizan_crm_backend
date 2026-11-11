@@ -1,5 +1,6 @@
 import ITTask from '../models/ITTask.js';
 import Project from '../models/Project.js';
+import Employee from '../models/Employee.js';
 import {
   buildProjectScope,
   canViewProject,
@@ -84,11 +85,25 @@ export const getITTasks = async (req, res) => {
       query.title = { $regex: escapeRegex(search), $options: 'i' };
     }
 
-    // `mine=true` scopes to the caller's own tasks (User → linked Employee id).
+    // `mine=true` scopes to the caller's own tasks (User → linked Employee id or User id).
     // Tasks are assigned to them, so they are always within their access.
     if (mine === 'true') {
-      if (!req.user?.employeeId) return res.json([]);
-      query.assignedTo = req.user.employeeId;
+      const matchIds = [];
+      if (req.user?.employeeId) matchIds.push(req.user.employeeId);
+      if (req.user?._id) matchIds.push(req.user._id);
+
+      // If user has no employeeId directly linked, try finding linked Employee by email
+      if (!req.user?.employeeId && req.user?.email) {
+        try {
+          const emp = await Employee.findOne({ email: req.user.email }).select('_id');
+          if (emp && !matchIds.some((id) => String(id) === String(emp._id))) {
+            matchIds.push(emp._id);
+          }
+        } catch (_) {}
+      }
+
+      if (matchIds.length === 0) return res.json([]);
+      query.assignedTo = { $in: matchIds };
     } else if (assignedTo) {
       query.assignedTo = assignedTo;
     }
