@@ -19,7 +19,7 @@ const WRITE_ALLOW = [
   // approve / reject a project proposal
   { methods: ['POST'], re: /^\/api\/projects\/[^/]+\/(approve|reject)$/ },
   // the CEO Decisions log (add, update, defer, mark done, delete)
-  { methods: ['POST', 'PUT', 'PATCH', 'DELETE'], re: /^\/api\/reports\/decisions(\/[^/]+)?$/ },
+  { methods: ['POST', 'PUT', 'PATCH', 'DELETE'], re: /^\/api\/(reports|ceo)\/decisions(\/[^/]+)?$/ },
   // read / clear their own notifications
   { methods: ['PATCH'], re: /^\/api\/notifications\/(read-all|clear-all|[^/]+\/(read|clear))$/ },
 ];

@@ -1,7 +1,12 @@
 import CeoDecision, { DECISION_TYPES, DECISION_STATUSES } from '../models/CeoDecision.js';
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo']; // + 'ceo': read-only, enforced in middleware/ceoGuard.js
-const canView = (u) => FINANCE_ROLES.includes(u?.role);
+const canView = (u) => {
+  const role = String(u?.role ?? '').trim().toLowerCase();
+  if (FINANCE_ROLES.includes(role)) return true;
+  const perms = Array.isArray(u?.permissions) ? u.permissions : [];
+  return perms.some((p) => p === 'company_finance.month_end' || p === 'company_finance' || p === 'ceo');
+};
 
 // @route  GET /api/reports/decisions?month=&year=&status=&scope=open
 // scope=open ignores month/year and returns every unresolved decision (the
@@ -57,6 +62,8 @@ export const updateDecision = async (req, res) => {
     if (!doc) return res.status(404).json({ message: 'Decision not found' });
 
     const b = req.body;
+    if (b.month !== undefined) doc.month = Number(b.month) || doc.month;
+    if (b.year !== undefined) doc.year = Number(b.year) || doc.year;
     if (b.type !== undefined && DECISION_TYPES.includes(b.type)) doc.type = b.type;
     if (b.title !== undefined) doc.title = String(b.title).trim();
     if (b.description !== undefined) doc.description = b.description;
@@ -65,10 +72,13 @@ export const updateDecision = async (req, res) => {
     if (b.dueDate !== undefined) doc.dueDate = b.dueDate ? new Date(b.dueDate) : null;
     if (b.status !== undefined && DECISION_STATUSES.includes(b.status)) {
       doc.status = b.status;
-      // Record who resolved it once it leaves the pending pile.
+      // Record who resolved it once it leaves the pending pile; clear if reopened.
       if (['approved', 'rejected', 'done'].includes(b.status)) {
         doc.decidedBy = req.user?._id || null;
         doc.decidedAt = new Date();
+      } else {
+        doc.decidedBy = null;
+        doc.decidedAt = null;
       }
     }
     await doc.save();
