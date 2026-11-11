@@ -3,6 +3,17 @@ import Employee from '../models/Employee.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 import { applyMoneyAccount } from '../utils/moneyAccount.js';
 import { SALARY_PAYMENT_METHODS } from '../models/Salary.js';
+import PayrollLock, { isPayrollLocked } from '../models/PayrollLock.js';
+import { logChange, snapshot, maskTail } from '../utils/audit.js';
+
+// Slip fields tracked in the HR change log.
+const SALARY_AUDIT_FIELDS = [
+  'baseSalary', 'incentives', 'roomRent', 'allowances', 'bonus', 'deductions',
+  'attendanceDeduction', 'netAmount', 'salaryType', 'status', 'notes', 'department', 'role',
+  'paymentDate', 'paymentMethod', 'transactionRef',
+];
+
+const lockedMsg = (m, y) => `Payroll for ${m}/${y} is locked. Ask an admin to unlock it first.`;
 
 // Treat user search text literally — an unescaped "(" or "*" would otherwise
 // throw "Invalid regular expression" and fail the whole request with a 500.
@@ -41,7 +52,11 @@ export const getSalaries = async (req, res) => {
     }
 
     const salaries = await Salary.find(query)
-      .populate('employeeId', 'name email phone profileImage artistRole type category department')
+      .populate({
+        path: 'employeeId',
+        select: 'name email phone profileImage artistRole type category department employeeCode designationId',
+        populate: { path: 'designationId', select: 'name' },
+      })
       .populate('approvedBy', 'name email')
       .populate('paidBy', 'name email')
       .sort({ createdAt: -1 });
@@ -107,6 +122,37 @@ export const getSalaries = async (req, res) => {
   }
 };
 
+// @desc    The logged-in employee's own payslips (ESS)
+// @route   GET /api/salaries/mine
+// @access  Any logged-in user linked to an employee (own slips only)
+export const getMySalaries = async (req, res) => {
+  try {
+    const employeeId = req.user?.employeeId;
+    if (!employeeId) return res.json([]);
+    const salaries = await Salary.find({
+      employeeId,
+      status: { $in: ['approved_by_hr', 'paid'] },
+    })
+      .select('-approvedBy -paidBy -moneyAccount')
+      .populate({
+        path: 'employeeId',
+        select: 'name employeeCode department role designationId',
+        populate: { path: 'designationId', select: 'name' },
+      })
+      .sort({ year: -1, month: -1 })
+      .lean();
+    // Own slips only — the account number is still shown masked.
+    for (const s of salaries) {
+      if (s.bankDetails?.accountNumber) s.bankDetails.accountNumber = maskTail(s.bankDetails.accountNumber);
+      // Staff see only the system attendance line — never HR's internal notes.
+      s.notes = String(s.notes || '').split(/\r?\n/).filter((l) => l.startsWith('Attendance ')).join('\n');
+    }
+    res.json(salaries);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @desc    Auto-generate monthly salary slips for all active employees
 // @route   POST /api/salaries/generate
 // @access  Private
@@ -115,6 +161,9 @@ export const generateMonthlySalaries = async (req, res) => {
     const { month, year } = req.body;
     const targetMonth = Number(month) || new Date().getMonth() + 1;
     const targetYear = Number(year) || new Date().getFullYear();
+    if (await isPayrollLocked(targetMonth, targetYear)) {
+      return res.status(409).json({ message: lockedMsg(targetMonth, targetYear) });
+    }
 
     // Outsource (freelance) artists are paid per booking via the Artist Payout
     // module — NEVER on monthly payroll — so exclude them from generation.
@@ -218,6 +267,9 @@ export const createSalary = async (req, res) => {
       return res.status(400).json({ message: 'Month and year are required' });
     }
 
+    if (await isPayrollLocked(month, year)) {
+      return res.status(409).json({ message: lockedMsg(month, year) });
+    }
     const employee = await Employee.findById(employeeId);
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
@@ -291,6 +343,17 @@ export const updateSalary = async (req, res) => {
     if (!salary) {
       return res.status(404).json({ message: 'Salary slip not found' });
     }
+    if (await isPayrollLocked(salary.month, salary.year)) {
+      return res.status(409).json({ message: lockedMsg(salary.month, salary.year) });
+    }
+    // A paid slip is final; only the owner (admin) may correct it.
+    if (salary.status === 'paid' && String(req.user?.role || '') !== 'admin') {
+      return res.status(409).json({ message: 'This salary is already paid and can no longer be edited.' });
+    }
+    // 'paid' is set only by the Pay action, which records how it was paid.
+    if (req.body.status === 'paid' && salary.status !== 'paid') {
+      return res.status(400).json({ message: 'Use "Mark as paid" to record a payment.' });
+    }
 
     const {
       baseSalary,
@@ -306,6 +369,7 @@ export const updateSalary = async (req, res) => {
       role,
     } = req.body;
 
+    const before = snapshot(salary, SALARY_AUDIT_FIELDS);
     if (baseSalary !== undefined) salary.baseSalary = Number(baseSalary) || 0;
     if (incentives !== undefined) salary.incentives = Number(incentives) || 0;
     if (roomRent !== undefined) salary.roomRent = Number(roomRent) || 0;
@@ -326,6 +390,11 @@ export const updateSalary = async (req, res) => {
     );
 
     await salary.save();
+    await logChange({
+      req, entity: 'Salary', entityId: salary._id, employeeId: salary.employeeId,
+      action: 'update', before, after: salary, fields: SALARY_AUDIT_FIELDS,
+      note: `Slip ${salary.month}/${salary.year}`,
+    });
 
     // Post paid salaries to the ledger (best-effort).
     await safePost(() => postDoc('Salary', salary.toObject(), req.user?._id || null));
@@ -351,11 +420,26 @@ export const approveSalary = async (req, res) => {
       return res.status(404).json({ message: 'Salary slip not found' });
     }
 
+    if (await isPayrollLocked(salary.month, salary.year)) {
+      return res.status(409).json({ message: lockedMsg(salary.month, salary.year) });
+    }
+    // Only a draft (or cancelled) slip can be approved — never pull a paid
+    // slip back to "approved".
+    if (salary.status === 'paid') {
+      return res.status(409).json({ message: 'This salary is already paid.' });
+    }
+
+    const beforeStatus = snapshot(salary, ['status']);
     salary.status = 'approved_by_hr';
     salary.approvedBy = req.user?._id || null;
     salary.approvedAt = new Date();
 
     await salary.save();
+    await logChange({
+      req, entity: 'Salary', entityId: salary._id, employeeId: salary.employeeId,
+      action: 'approve', before: beforeStatus, after: salary, fields: ['status'], always: true,
+      note: `Slip ${salary.month}/${salary.year}`,
+    });
 
     const populated = await Salary.findById(salary._id)
       .populate('employeeId')
@@ -379,6 +463,7 @@ export const paySalary = async (req, res) => {
 
     const { paymentDate, paymentMethod, transactionRef, notes } = req.body;
 
+    const before = snapshot(salary, SALARY_AUDIT_FIELDS);
     salary.status = 'paid';
     salary.paymentDate = paymentDate ? new Date(paymentDate) : new Date();
     salary.paymentMethod = paymentMethod || 'bank_transfer';
@@ -394,6 +479,11 @@ export const paySalary = async (req, res) => {
     if (moneyErr) return res.status(400).json({ message: moneyErr });
 
     await salary.save();
+    await logChange({
+      req, entity: 'Salary', entityId: salary._id, employeeId: salary.employeeId,
+      action: 'pay', before, after: salary, fields: SALARY_AUDIT_FIELDS, always: true,
+      note: `Slip ${salary.month}/${salary.year}`,
+    });
 
     // Post paid salaries to the ledger (best-effort).
     await safePost(() => postDoc('Salary', salary.toObject(), req.user?._id || null));
@@ -422,8 +512,16 @@ export const deleteSalary = async (req, res) => {
     if (salary.status === 'paid') {
       return res.status(400).json({ message: 'Cannot delete a paid salary slip.' });
     }
+    if (await isPayrollLocked(salary.month, salary.year)) {
+      return res.status(409).json({ message: lockedMsg(salary.month, salary.year) });
+    }
 
     await salary.deleteOne();
+    await logChange({
+      req, entity: 'Salary', entityId: salary._id, employeeId: salary.employeeId,
+      action: 'delete', before: salary, after: {}, fields: ['status', 'netAmount'], always: true,
+      note: `Slip ${salary.month}/${salary.year} deleted`,
+    });
     await safePost(() => unpostDoc('Salary', salary._id));
     res.json({ message: 'Salary slip removed' });
   } catch (error) {
@@ -439,6 +537,9 @@ export const submitPayrollToAccounts = async (req, res) => {
     const { month, year } = req.body;
     if (!month || !year) {
       return res.status(400).json({ message: 'Month and year are required' });
+    }
+    if (await isPayrollLocked(month, year)) {
+      return res.status(409).json({ message: lockedMsg(month, year) });
     }
 
     const result = await Salary.updateMany(
@@ -456,6 +557,82 @@ export const submitPayrollToAccounts = async (req, res) => {
       message: `Submitted ${result.modifiedCount} payroll records to Accounts.`,
       modifiedCount: result.modifiedCount,
     });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// ── Payroll month lock ───────────────────────────────────────────────────────
+// @route GET /api/salaries/locks?year=  — locked months (for the screens)
+export const getPayrollLocks = async (req, res) => {
+  try {
+    const filter = { locked: true };
+    if (req.query.year) filter.year = Number(req.query.year);
+    const locks = await PayrollLock.find(filter).populate('lockedBy', 'name').sort({ year: -1, month: -1 }).lean();
+    res.json(locks);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @route POST /api/salaries/lock { month, year, note? }
+// Finalises a month: no more generating / editing / approving / deleting.
+export const lockPayrollMonth = async (req, res) => {
+  try {
+    const month = Number(req.body.month);
+    const year = Number(req.body.year);
+    if (!(month >= 1 && month <= 12) || !year) {
+      return res.status(400).json({ message: 'Month and year are required' });
+    }
+    const drafts = await Salary.countDocuments({ month, year, status: 'draft' });
+    if (drafts > 0) {
+      return res.status(400).json({
+        message: `${drafts} slip(s) for ${month}/${year} are still drafts. Approve or remove them before locking.`,
+      });
+    }
+    const lock = await PayrollLock.findOneAndUpdate(
+      { month, year },
+      {
+        $set: {
+          locked: true,
+          lockedBy: req.user?._id || null,
+          lockedAt: new Date(),
+          unlockedBy: null,
+          unlockedAt: null,
+          note: String(req.body.note || '').trim(),
+        },
+      },
+      { upsert: true, new: true }
+    );
+    await logChange({
+      req, entity: 'PayrollLock', entityId: lock?._id, action: 'lock', always: true,
+      note: `Payroll ${month}/${year} locked${lock?.note ? ` — ${lock.note}` : ''}`,
+    });
+    res.json({ message: `Payroll for ${month}/${year} locked.`, lock });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @route POST /api/salaries/unlock { month, year }  — admin only
+export const unlockPayrollMonth = async (req, res) => {
+  try {
+    if (String(req.user?.role || '') !== 'admin') {
+      return res.status(403).json({ message: 'Only an admin can unlock a payroll month.' });
+    }
+    const month = Number(req.body.month);
+    const year = Number(req.body.year);
+    const lock = await PayrollLock.findOneAndUpdate(
+      { month, year, locked: true },
+      { $set: { locked: false, unlockedBy: req.user._id, unlockedAt: new Date() } },
+      { new: true }
+    );
+    if (!lock) return res.status(404).json({ message: 'That month is not locked.' });
+    await logChange({
+      req, entity: 'PayrollLock', entityId: lock._id, action: 'unlock', always: true,
+      note: `Payroll ${month}/${year} unlocked`,
+    });
+    res.json({ message: `Payroll for ${month}/${year} unlocked.`, lock });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }

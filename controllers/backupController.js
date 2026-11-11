@@ -21,17 +21,22 @@ const DEPARTMENT_COLLECTIONS = {
   fleet: ['Vehicle', 'FuelExpense', 'AccidentReport', 'ServiceReminder',
     'DriverReview', 'BlockedDate'],
   artist: ['Booking', 'Trial', 'StaffKit', 'Collection'],
+  consultations: ['Consultation', 'StylistClient'],
 };
 
 const DEPARTMENT_LABEL = {
   sales: 'Sales', crm: 'CRM', accounts: 'Accounts', finance: 'Finance',
   hr: 'HR', marketing: 'Marketing', it: 'IT', fleet: 'Fleet', artist: 'Artist',
+  consultations: 'Consultations',
 };
 
 // The permission key a NON-admin must hold to back up a given department.
 const DEPARTMENT_PERMISSION = {
   sales: 'sales', crm: 'clients', accounts: 'payables', finance: 'company_finance',
   hr: 'staff', marketing: 'marketing', it: 'it', fleet: 'fleet', artist: 'bookings',
+  // Exact parent key: only the whole-module holder (stylist lead) — a stylist
+  // with sub-permissions only does not get everyone's consultation notes.
+  consultations: 'consultations',
 };
 
 // IT / admin / manager (or any role granted the `it` permission) may back up

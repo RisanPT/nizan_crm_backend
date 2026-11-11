@@ -293,8 +293,9 @@ export const copyLastMonth = async (req, res) => {
 
 // ── Combined (pool) targets ──────────────────────────────────────────────────
 // One goal the whole team shares: every salesperson's sales in the window
-// count toward it. Achievement = bookings MADE in the window (IST), net of
-// discount, credited to a sales-role user, optionally one package only.
+// count toward it. Achievement = bookings MADE in the window (IST), complete
+// order value (no discount deducted), credited to a sales-role user,
+// optionally one package only.
 
 const DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
 const istDayStart = (day) => new Date(`${day}T00:00:00+05:30`);
@@ -455,4 +456,47 @@ export const deleteCombinedTarget = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
+};
+
+/// Target vs achieved for one month, exactly as the Sales Targets screens
+/// show it (used by the Sales Dashboard target bar so the two never differ).
+/// No userId → the team totals of GET /api/sales-targets. With userId → that
+/// salesperson's own target and achievement (a sales manager gets the team).
+export const monthTargetSummary = async ({ month, year, userId = null }) =>
+  (await monthTargetLookup({ month, year }))(userId);
+
+/// Loads the month ONCE and returns (userId) => summary — for callers that
+/// need many people (the dashboard leaderboard).
+export const monthTargetLookup = async ({ month, year }) => {
+  const { users, targetByUser, achievement, rollup, days } = await monthTeam({ month, year });
+  const managersOwn = users
+    .filter((u) => isSalesManagerRole(u.role))
+    .reduce(
+      (acc, u) => {
+        const a = achievement.get(String(u._id));
+        return { salesValue: acc.salesValue + (a?.salesValue ?? 0), bookings: acc.bookings + (a?.bookings ?? 0) };
+      },
+      { salesValue: 0, bookings: 0 }
+    );
+  const team = {
+    salesTarget: rollup.target.salesTarget,
+    bookingsTarget: rollup.target.bookingsTarget,
+    salesValue: rollup.achieved.salesValue + managersOwn.salesValue,
+    bookings: rollup.achieved.bookings + managersOwn.bookings,
+  };
+  return (userId) => {
+    if (!userId) return { scope: 'team', daysInMonth: days, ...team };
+    const u = users.find((x) => String(x._id) === String(userId));
+    if (u && isSalesManagerRole(u.role)) return { scope: 'team', daysInMonth: days, ...team };
+    const t = targetByUser.get(String(userId));
+    const a = achievement.get(String(userId));
+    return {
+      scope: 'person',
+      daysInMonth: days,
+      salesTarget: t?.salesTarget ?? 0,
+      bookingsTarget: t?.bookingsTarget ?? 0,
+      salesValue: a?.salesValue ?? 0,
+      bookings: a?.bookings ?? 0,
+    };
+  };
 };

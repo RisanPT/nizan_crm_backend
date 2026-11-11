@@ -1,16 +1,23 @@
 import asyncHandler from 'express-async-handler';
 import Designation from '../models/Designation.js';
 import Employee from '../models/Employee.js';
+import { isHrWide } from '../utils/hrDeptScope.js';
 
 // Managing designations is an HR-admin action: full access (admin/manager) or a
 // user carrying the `staff` permission key. Reading is open to any authenticated
 // user (designations are organisational labels, surfaced in pickers/org charts).
-const canManage = (user) => {
+const canManageUser = (user) => {
   const role = String(user?.role || '').toLowerCase();
   if (role === 'admin' || role === 'manager') return true;
   const perms = user?.permissions || [];
   return perms.includes('staff') || perms.includes('settings');
 };
+
+// Designations are company master data: writes are HR-wide only. Existing
+// holders (admin/manager/staff/settings) keep access; the HR-department head
+// and 'designations' permission holders are HR-wide via the shared helper.
+// A plain department head is never HR-wide, so is refused.
+const canManage = async (req) => canManageUser(req.user) || (await isHrWide(req, ['designations']));
 
 // @route GET /api/designations
 const getDesignations = asyncHandler(async (req, res) => {
@@ -26,7 +33,7 @@ const getDesignations = asyncHandler(async (req, res) => {
 
 // @route POST /api/designations
 const createDesignation = asyncHandler(async (req, res) => {
-  if (!canManage(req.user)) {
+  if (!(await canManage(req))) {
     res.status(403);
     throw new Error('You are not allowed to manage designations');
   }
@@ -51,7 +58,7 @@ const createDesignation = asyncHandler(async (req, res) => {
 
 // @route PUT /api/designations/:id
 const updateDesignation = asyncHandler(async (req, res) => {
-  if (!canManage(req.user)) {
+  if (!(await canManage(req))) {
     res.status(403);
     throw new Error('You are not allowed to manage designations');
   }
@@ -75,7 +82,7 @@ const updateDesignation = asyncHandler(async (req, res) => {
 
 // @route DELETE /api/designations/:id — blocked while employees still reference it.
 const deleteDesignation = asyncHandler(async (req, res) => {
-  if (!canManage(req.user)) {
+  if (!(await canManage(req))) {
     res.status(403);
     throw new Error('You are not allowed to manage designations');
   }

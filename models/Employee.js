@@ -196,6 +196,11 @@ const employeeSchema = mongoose.Schema(
       enum: ['probation', 'confirmed', 'notice_period', 'exited'],
       default: 'probation',
     },
+    // Set when an offboarding is completed (last working day).
+    exitDate: {
+      type: Date,
+      default: null,
+    },
     emergencyContact: {
       name: { type: String, default: '', trim: true },
       relation: { type: String, default: '', trim: true },

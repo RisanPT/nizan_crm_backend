@@ -8,6 +8,7 @@ export const PERMISSION_KEYS = [
   'calendar',
   'bookings',
   'trials',
+  'consultations',
   'services',
   'staff',
   'sales',

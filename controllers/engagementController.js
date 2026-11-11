@@ -1,5 +1,16 @@
 import asyncHandler from 'express-async-handler';
 import Announcement from '../models/Announcement.js';
+import { isHrWide } from '../utils/hrDeptScope.js';
+
+// Department heads may post, but only HR-wide callers may edit/delete posts
+// they did not create (owner decision 2026-11-06).
+const HR_KEYS = ['engagement'];
+const assertCanEdit = async (req, res, row) => {
+  if (await isHrWide(req, HR_KEYS)) return;
+  if (row.postedBy && req.user?._id && String(row.postedBy) === String(req.user._id)) return;
+  res.status(403);
+  throw new Error('You can only change posts you created');
+};
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
@@ -45,6 +56,7 @@ const updateAnnouncement = asyncHandler(async (req, res) => {
   guard(req, res);
   const row = await Announcement.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Announcement not found'); }
+  await assertCanEdit(req, res, row);
   const b = req.body;
   if (b.title !== undefined && String(b.title).trim()) row.title = String(b.title).trim();
   if (b.body !== undefined) row.body = String(b.body).trim();
@@ -59,8 +71,10 @@ const updateAnnouncement = asyncHandler(async (req, res) => {
 
 const deleteAnnouncement = asyncHandler(async (req, res) => {
   guard(req, res);
-  const row = await Announcement.findByIdAndDelete(req.params.id);
+  const row = await Announcement.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Announcement not found'); }
+  await assertCanEdit(req, res, row);
+  await row.deleteOne();
   res.json({ message: 'Announcement removed', id: req.params.id });
 });
 

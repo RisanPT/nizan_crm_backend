@@ -5,7 +5,8 @@ import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 import { applyMoneyAccount } from '../utils/moneyAccount.js';
 
 const expensePopulate = [
-  { path: 'bookingId', select: 'bookingNumber customerName service' },
+  // serviceStart/serviceEnd = the event dates, shown on the bill card.
+  { path: 'bookingId', select: 'bookingNumber customerName service serviceStart serviceEnd' },
   { path: 'employeeId', select: 'name phone artistRole status' },
   { path: 'verifiedBy', select: 'name role' },
 ];
@@ -36,7 +37,7 @@ export const getExpenses = async (req, res) => {
 };
 
 export const createExpense = async (req, res) => {
-  const { employeeId, bookingId, category, amount, date, notes, receiptImage, workType } = req.body;
+  const { employeeId, bookingId, category, amount, date, eventDate, notes, receiptImage, workType } = req.body;
 
   try {
     let finalEmployeeId = employeeId;
@@ -54,6 +55,7 @@ export const createExpense = async (req, res) => {
       workType: workType === 'model_shoot' ? 'model_shoot' : 'bridal',
       amount: amountNum,
       date: date ?? new Date(),
+      eventDate: eventDate || null,
       notes: notes ?? '',
       receiptImage: receiptImage ?? '',
     });
@@ -105,8 +107,9 @@ export const updateExpense = async (req, res) => {
       }
     }
 
-    const { bookingId, category, amount, date, notes, receiptImage, workType } =
+    const { bookingId, category, amount, date, eventDate, notes, receiptImage, workType } =
       req.body;
+    if (eventDate !== undefined) expense.eventDate = eventDate || null;
     if (workType !== undefined) {
       expense.workType = workType === 'model_shoot' ? 'model_shoot' : 'bridal';
     }

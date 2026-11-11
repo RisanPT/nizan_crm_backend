@@ -5,6 +5,7 @@ import Collection from '../models/Collection.js';
 import Expense from '../models/Expense.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { sweepSalesTargetMidMonth } from '../utils/salesTargetAlerts.js';
+import { sweepConsultationReminders } from '../utils/consultationNotify.js';
 import {
   notify,
   getUserIdsByRoles,
@@ -173,6 +174,7 @@ export const getNotifications = async (req, res) => {
     await sweepFollowUps();
     await sweepMonthEndSummary();
     await sweepSalesTargetMidMonth();
+    await sweepConsultationReminders();
 
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 30;

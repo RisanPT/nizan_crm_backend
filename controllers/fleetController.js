@@ -44,6 +44,9 @@ const activeTripOf = (driverId, exceptId = null) =>
 // Marks a not-yet-started trip as started, without inspection photos (the
 // day's inspection was done on the first trip). Returns the updated job, or
 // null when it had already been started.
+// The artist OTP is NOT checked at start (2026-11): the car usually leaves
+// the parking before the driver meets the artist. It is verified during the
+// trip and required before closing — see verifyArtistOtp / completeJob.
 const startChainedTrip = (jobId, startKm) =>
   Booking.findOneAndUpdate(
     { _id: jobId, tripStatus: { $in: NOT_STARTED } },
@@ -54,11 +57,38 @@ const startChainedTrip = (jobId, startKm) =>
         endKm: null,
         tripStartedAt: new Date(),
         tripCompletedAt: null,
-        artistOtpVerifiedAt: new Date(),
+        artistOtpVerifiedAt: null,
       },
     },
     { new: true }
   );
+
+// ── Artist trip OTP ─────────────────────────────────────────────────────────
+// Trips with an artist / assistant assigned need the artist's 4-digit code,
+// entered by the driver once the artist is in the car (any time while the
+// trip is running) and in any case before the trip can be closed.
+
+const tripNeedsOtp = (job) => Array.isArray(job.assignedStaff) && job.assignedStaff.length > 0;
+
+/// The booking's OTP, creating one if a legacy booking never got it.
+const ensureTripOtp = async (job) => {
+  if (job.artistTripOtp) return String(job.artistTripOtp).trim();
+  const otp = String(Math.floor(1000 + Math.random() * 9000));
+  await Booking.updateOne({ _id: job._id }, { $set: { artistTripOtp: otp } });
+  return otp;
+};
+
+/// null when [entered] matches, otherwise the message to show the driver.
+const otpError = (entered, expected) => {
+  const e = String(entered ?? "").trim();
+  if (!e) {
+    return "Enter the artist's 4-digit Trip OTP. Ask the artist/assistant for the code shown on their schedule.";
+  }
+  if (e !== expected) {
+    return "Invalid Artist OTP. Please check the 4-digit code with the artist and try again.";
+  }
+  return null;
+};
 
 // The driver's not-started trips on the same studio day as `date`, earliest
 // first.
@@ -87,7 +117,7 @@ export const getDriverJobs = async (req, res) => {
         'bookingNumber driverId vehicleId preTripPhotos tripStatus customerName ' +
         'address mapUrl service eventSlot serviceStart serviceEnd ' +
         'travelDistanceKm pocName pocPhone assignedStaff bookingItems ' +
-        'startKm endKm tripStartedAt tripCompletedAt'
+        'startKm endKm tripStartedAt tripCompletedAt artistOtpVerifiedAt' // never the OTP itself
       )
       // currentKm lets the app show the vehicle's last recorded reading as a
       // hint when the driver enters the starting km.
@@ -140,26 +170,15 @@ export const startTripWithInspection = async (req, res) => {
       return res.status(400).json({ message: "Enter the vehicle's starting km reading." });
     }
 
-    // OTP validation if artist / staff is assigned to this work
-    const hasAssignedStaff = Array.isArray(job.assignedStaff) && job.assignedStaff.length > 0;
-    if (hasAssignedStaff) {
-      let expectedOtp = job.artistTripOtp;
-      if (!expectedOtp) {
-        expectedOtp = String(Math.floor(1000 + Math.random() * 9000));
-        await Booking.updateOne({ _id: job._id }, { $set: { artistTripOtp: expectedOtp } });
-      }
-
-      const enteredOtp = String(req.body.artistOtp ?? "").trim();
-      if (!enteredOtp) {
-        return res.status(400).json({
-          message: "Artist verification OTP is required to start this trip. Please ask the artist/assistant for their 4-digit code.",
-        });
-      }
-      if (enteredOtp !== String(expectedOtp).trim()) {
-        return res.status(400).json({
-          message: "Invalid Artist OTP. Please check the 4-digit code with the artist and try again.",
-        });
-      }
+    // No artist OTP at start — the driver usually sets off before meeting the
+    // artist. If the app still sends a correct one (artist already in the
+    // car), record it so it needn't be entered again.
+    let verifiedAt = null;
+    if (tripNeedsOtp(job) && String(req.body.artistOtp ?? "").trim()) {
+      const expected = await ensureTripOtp(job);
+      const err = otpError(req.body.artistOtp, expected);
+      if (err) return res.status(400).json({ message: err });
+      verifiedAt = new Date();
     }
 
     // Targeted update (not job.save()) so an unrelated invalid field on an old
@@ -175,7 +194,7 @@ export const startTripWithInspection = async (req, res) => {
           endKm: null,
           tripStartedAt: new Date(),
           tripCompletedAt: null,
-          artistOtpVerifiedAt: new Date(),
+          artistOtpVerifiedAt: verifiedAt,
         },
       },
       { new: true }
@@ -227,38 +246,70 @@ export const startNextTrip = async (req, res) => {
       });
     }
 
-    // OTP validation if artist / staff is assigned to this work
-    const hasAssignedStaff = Array.isArray(job.assignedStaff) && job.assignedStaff.length > 0;
-    if (hasAssignedStaff) {
-      let expectedOtp = job.artistTripOtp;
-      if (!expectedOtp) {
-        expectedOtp = String(Math.floor(1000 + Math.random() * 9000));
-        await Booking.updateOne({ _id: job._id }, { $set: { artistTripOtp: expectedOtp } });
-      }
-
-      const enteredOtp = String(req.body.artistOtp ?? "").trim();
-      if (!enteredOtp) {
-        return res.status(400).json({
-          message: "Artist verification OTP is required to start this trip. Please ask the artist/assistant for their 4-digit code.",
-        });
-      }
-      if (enteredOtp !== String(expectedOtp).trim()) {
-        return res.status(400).json({
-          message: "Invalid Artist OTP. Please check the 4-digit code with the artist and try again.",
-        });
-      }
-    }
-
     const startKm = parseKm(req.body.startKm);
     if (startKm === null) {
       return res.status(400).json({ message: "Enter the vehicle's starting km reading." });
     }
 
-    const updated = await startChainedTrip(jobId, startKm);
+    // No artist OTP at start (see startChainedTrip). An optional correct one
+    // is recorded so it needn't be entered again.
+    let preVerified = false;
+    if (tripNeedsOtp(job) && String(req.body.artistOtp ?? "").trim()) {
+      const expected = await ensureTripOtp(job);
+      const err = otpError(req.body.artistOtp, expected);
+      if (err) return res.status(400).json({ message: err });
+      preVerified = true;
+    }
+
+    let updated = await startChainedTrip(jobId, startKm);
     if (!updated) {
       return res.status(400).json({ message: "This trip has already been started." });
     }
+    if (preVerified) {
+      updated = await Booking.findByIdAndUpdate(
+        jobId,
+        { $set: { artistOtpVerifiedAt: new Date() } },
+        { new: true }
+      );
+    }
     res.json({ message: "Trip started", job: updated });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
+// @desc    Verify the artist's trip OTP while the trip is running
+// @route   POST /api/fleet/driver/verify-otp/:jobId   { artistOtp }
+// @access  Private (Driver)
+export const verifyArtistOtp = async (req, res) => {
+  try {
+    const { jobId } = req.params;
+    const job = await Booking.findById(jobId).select(
+      "driverId tripStatus assignedStaff artistTripOtp artistOtpVerifiedAt"
+    );
+    if (!job) return res.status(404).json({ message: "Job not found" });
+    if (String(job.driverId ?? "") !== driverIdOf(req.user)) {
+      return res.status(403).json({ message: "Not authorized for this job" });
+    }
+    if (job.tripStatus !== "in_progress") {
+      return res.status(400).json({ message: "Start the trip first, then verify the artist OTP." });
+    }
+    if (!tripNeedsOtp(job)) {
+      return res.json({ message: "No artist on this trip — no OTP needed.", verified: true, job });
+    }
+    if (job.artistOtpVerifiedAt) {
+      return res.json({ message: "Artist OTP already verified.", verified: true, job });
+    }
+    const expected = await ensureTripOtp(job);
+    const err = otpError(req.body.artistOtp, expected);
+    if (err) return res.status(400).json({ message: err });
+
+    const updated = await Booking.findByIdAndUpdate(
+      jobId,
+      { $set: { artistOtpVerifiedAt: new Date() } },
+      { new: true }
+    );
+    res.json({ message: "Artist OTP verified", verified: true, job: updated });
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -272,7 +323,8 @@ export const completeJob = async (req, res) => {
     const { jobId } = req.params;
 
     const job = await Booking.findById(jobId).select(
-      "driverId tripStatus startKm vehicleId bookingNumber customerName serviceStart"
+      "driverId tripStatus startKm vehicleId bookingNumber customerName serviceStart " +
+        "assignedStaff artistTripOtp artistOtpVerifiedAt"
     );
 
     if (!job) {
@@ -300,6 +352,23 @@ export const completeJob = async (req, res) => {
       });
     }
 
+    // Artist OTP must be verified before the trip can be closed — either
+    // earlier in the trip (verifyArtistOtp) or now, sent with this request.
+    let otpVerifiedNow = false;
+    if (tripNeedsOtp(job) && !job.artistOtpVerifiedAt) {
+      const expected = await ensureTripOtp(job);
+      const err = otpError(req.body.artistOtp, expected);
+      if (err) {
+        return res.status(400).json({
+          message: String(req.body.artistOtp ?? "").trim()
+            ? err
+            : "Verify the artist's 4-digit Trip OTP before closing this trip.",
+          otpRequired: true,
+        });
+      }
+      otpVerifiedNow = true;
+    }
+
     // Optional: start the next trip of the same day in the same request, so a
     // driver with several trips never has to start them one by one. Checked
     // before completing, so a bad request changes nothing.
@@ -323,7 +392,14 @@ export const completeJob = async (req, res) => {
 
     const updated = await Booking.findOneAndUpdate(
       { _id: jobId, tripStatus: "in_progress" },
-      { $set: { tripStatus: "completed", endKm, tripCompletedAt: new Date() } },
+      {
+        $set: {
+          tripStatus: "completed",
+          endKm,
+          tripCompletedAt: new Date(),
+          ...(otpVerifiedNow ? { artistOtpVerifiedAt: new Date() } : {}),
+        },
+      },
       { new: true }
     );
     if (!updated) {

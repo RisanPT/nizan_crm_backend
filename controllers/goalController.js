@@ -4,7 +4,7 @@ import Lead from '../models/Lead.js';
 import Trial from '../models/Trial.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
-import { isSale, netValue } from './dashboardController.js';
+import { isSale, orderValue } from './dashboardController.js';
 import { istDayKey, istEnd, istStart, isDay, parseDayParam, todayIst } from '../utils/istDate.js';
 import {
   METRICS,
@@ -22,7 +22,7 @@ import {
 //  • Dates are IST calendar days; weeks start on Monday.
 //  • bookings / revenue count only real sales (not cancelled / rejected / lost /
 //    draft / pending, not bookings by users excluded from sales totals);
-//    revenue = totalPrice − discountAmount.
+//    revenue = totalPrice (complete order value, no discount deducted).
 //  • basis=added (default) → a booking / lead / trial counts on the day it was
 //    made; basis=event → on its event / trial date.
 //  • A period's total is the sum of its days, so day, week and month always
@@ -93,7 +93,7 @@ const actualsByDay = async (user, from, to, basis) => {
     if (!isSale(b) || !counts(b)) continue;
     const day = istDayKey(b[bookingField]);
     bump(day, 'bookings', 1);
-    bump(day, 'revenue', netValue(b));
+    bump(day, 'revenue', orderValue(b));
   }
   for (const l of leads) bump(istDayKey(l.leadDate || l.createdAt), 'leads', 1);
   for (const t of trials) {

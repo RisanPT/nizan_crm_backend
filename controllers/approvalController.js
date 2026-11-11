@@ -1,5 +1,6 @@
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import { canActOnApproval, decideApproval } from '../services/approvals.js';
+import { getHrScope } from '../utils/hrDeptScope.js';
 
 const populate = [
   { path: 'requesterEmployeeId', select: 'name department profileImage' },
@@ -16,16 +17,8 @@ export const getApprovalInbox = async (req, res) => {
       .limit(500)
       .lean();
 
-    const role = String(req.user.role || '');
-    const uid = String(req.user._id);
-    const inbox = all.filter((a) => {
-      const step = a.chain?.[a.currentLevel];
-      if (!step) return false;
-      if (step.approverUserId && String(step.approverUserId) === uid) return true;
-      if (step.approverRole && role === step.approverRole) return true;
-      if (role === 'admin' || role === 'manager') return true;
-      return false;
-    });
+    // Same rule as approving: never your own requests (admin excepted).
+    const inbox = all.filter((a) => canActOnApproval(a, req.user));
     res.json(inbox);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -54,8 +47,22 @@ export const getMyApprovals = async (req, res) => {
 // @route GET /api/approvals/history
 export const getApprovalHistory = async (req, res) => {
   try {
+    // The full log shows every raise / claim / leave: HR and approvers only.
+    const u = req.user;
+    const perms = Array.isArray(u?.permissions) ? u.permissions : [];
+    const allowed = ['admin', 'manager'].includes(String(u?.role || '')) || u?.isDepartmentHead === true ||
+      perms.some((p) => p === 'approvals' || p === 'staff' || String(p).startsWith('staff.'));
+    if (!allowed) return res.status(403).json({ message: 'You are not allowed to view the approvals log' });
     const { module, status } = req.query;
     const filter = {};
+    // A department head sees only their own department's requests.
+    const scope = await getHrScope(req, ['approvals']);
+    if (!scope.wide) {
+      filter.$or = [
+        { subjectEmployeeId: { $in: scope.employeeIds } },
+        { requesterEmployeeId: { $in: scope.employeeIds } },
+      ];
+    }
     if (module && module !== 'all') filter.module = module;
     if (status && status !== 'all') filter.status = status;
     const list = await ApprovalRequest.find(filter)

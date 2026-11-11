@@ -4,6 +4,7 @@ import {
   startTripWithInspection,
   startNextTrip,
   completeJob,
+  verifyArtistOtp,
   reportAccident,
   submitDriverReview,
   getDriverReviews,
@@ -31,6 +32,7 @@ router.get("/driver/jobs", protect, getDriverJobs);
 router.post("/driver/inspection/:jobId", protect, startTripWithInspection);
 router.post("/driver/start-next/:jobId", protect, startNextTrip);
 router.post("/driver/complete/:jobId", protect, completeJob);
+router.post("/driver/verify-otp/:jobId", protect, verifyArtistOtp); // artist OTP during the trip
 router.post("/driver/accident", protect, reportAccident);
 
 // ── Artist route ────────────────────────────────────────────────

@@ -5,6 +5,10 @@ import ApprovalRequest from '../models/ApprovalRequest.js';
 import { createApproval } from '../services/approvals.js';
 import { buildEmployeeApprovalChain } from '../utils/approvalChain.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
+import { scopeFilter, assertEmployeeInScope } from '../utils/hrDeptScope.js';
+
+// Dept heads only handle claims of their own department's staff.
+const KEYS = ['reimbursement'];
 
 const empPopulate = { path: 'employeeId', select: 'name department profileImage' };
 
@@ -25,8 +29,9 @@ const getMine = asyncHandler(async (req, res) => {
 
 const getRequests = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
-  const filter = {};
+  let filter = {};
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+  filter = { ...filter, ...(await scopeFilter(req, KEYS)) };
   const rows = await ExpenseClaim.find(filter).populate(empPopulate).sort({ date: -1 }).limit(300);
   res.json(rows);
 });
@@ -37,6 +42,7 @@ const submitClaim = asyncHandler(async (req, res) => {
   const onBehalf = req.body.employeeId && String(req.body.employeeId) !== String(employeeId || '');
   if (onBehalf) {
     if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed to file for others'); }
+    await assertEmployeeInScope(req, res, req.body.employeeId, KEYS);
     employeeId = req.body.employeeId;
   }
   if (!employeeId) { res.status(400); throw new Error('No employee record is linked to your account.'); }
@@ -94,6 +100,7 @@ const cancelClaim = asyncHandler(async (req, res) => {
   if (!claim) { res.status(404); throw new Error('Claim not found'); }
   const owns = String(claim.employeeId) === String(req.user.employeeId || '');
   if (!owns && !canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  if (!owns) await assertEmployeeInScope(req, res, claim.employeeId, KEYS);
   if (claim.status !== 'pending') { res.status(409); throw new Error('Only a pending claim can be cancelled'); }
   claim.status = 'cancelled';
   await claim.save();
@@ -109,6 +116,13 @@ const payClaim = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
   const claim = await ExpenseClaim.findById(req.params.id);
   if (!claim) { res.status(404); throw new Error('Claim not found'); }
+  await assertEmployeeInScope(req, res, claim.employeeId, KEYS);
+  // Separation of duties: nobody but the admin may pay out their own claim.
+  const ownClaim = req.user.employeeId && String(claim.employeeId) === String(req.user.employeeId);
+  if (ownClaim && String(req.user.role || '').toLowerCase() !== 'admin') {
+    res.status(403);
+    throw new Error('You cannot mark your own claim as paid');
+  }
   if (claim.status !== 'approved') { res.status(409); throw new Error('Only an approved claim can be paid'); }
   claim.status = 'paid';
   claim.paidAt = new Date();
@@ -121,8 +135,13 @@ const payClaim = asyncHandler(async (req, res) => {
 // @route DELETE /api/reimbursements/:id  — HR removes a claim (and its voucher)
 const deleteClaim = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
-  const claim = await ExpenseClaim.findByIdAndDelete(req.params.id);
+  const claim = await ExpenseClaim.findById(req.params.id);
   if (!claim) { res.status(404); throw new Error('Claim not found'); }
+  await assertEmployeeInScope(req, res, claim.employeeId, KEYS);
+  // A paid claim has a posted payment voucher; deleting it would silently
+  // reverse money already paid out, so it must stay on record.
+  if (claim.status === 'paid') { res.status(400); throw new Error('A paid claim cannot be deleted'); }
+  await claim.deleteOne();
   await safePost(() => unpostDoc('ExpenseClaim', claim._id));
   if (claim.approvalId) {
     await ApprovalRequest.updateOne({ _id: claim.approvalId, status: 'pending' }, { $set: { status: 'cancelled' } });
