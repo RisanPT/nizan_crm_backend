@@ -9,6 +9,7 @@ export const PERMISSION_KEYS = [
   'bookings',
   'trials',
   'consultations',
+  'stylist',
   'services',
   'staff',
   'sales',

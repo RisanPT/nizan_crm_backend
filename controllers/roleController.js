@@ -144,6 +144,23 @@ const DEFAULT_ROLES = [
     homeRoute: '/hr/home',
     permissions: ['leave'],
   },
+  {
+    key: 'stylist',
+    label: 'Stylist',
+    homeRoute: '/consultations/dashboard',
+    permissions: [
+      'consultations',
+      'consultations.calendar',
+      'consultations.notes',
+      'consultations.reports',
+      'stylist',
+      'stylist.today',
+      'stylist.clients',
+      'stylist.calendar',
+      'stylist.notes',
+      'stylist.reports',
+    ],
+  },
 ];
 
 // HR module keys that every full-access role (admin, manager) should carry.
@@ -345,13 +362,19 @@ export const deleteRole = async (req, res) => {
 
 /// Resolves the effective permission list for a role key.
 export const permissionsForRole = async (roleKey) => {
-  const role = await Role.findOne({ key: String(roleKey ?? '').trim().toLowerCase() }).lean();
-  return role?.permissions ?? [];
+  const key = String(roleKey ?? '').trim().toLowerCase();
+  const role = await Role.findOne({ key }).lean();
+  if (role?.permissions?.length) return role.permissions;
+  const fallback = DEFAULT_ROLES.find((r) => r.key === key);
+  return fallback?.permissions ?? [];
 };
 
 /// Landing page configured for a role, used so custom roles know where to
 /// send the user after login.
 export const homeRouteForRole = async (roleKey) => {
-  const role = await Role.findOne({ key: String(roleKey ?? '').trim().toLowerCase() }).lean();
-  return role?.homeRoute ?? '';
+  const key = String(roleKey ?? '').trim().toLowerCase();
+  const role = await Role.findOne({ key }).lean();
+  if (role?.homeRoute) return role.homeRoute;
+  const fallback = DEFAULT_ROLES.find((r) => r.key === key);
+  return fallback?.homeRoute ?? '';
 };
