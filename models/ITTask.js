@@ -18,6 +18,13 @@ const itTaskSchema = mongoose.Schema(
       type: String,
       required: [true, 'Please add a task title'],
     },
+    // Which of the project's departments owns this task. Blank = the owning
+    // department (every task from before projects could span departments).
+    departmentName: {
+      type: String,
+      default: '',
+      trim: true,
+    },
     description: {
       type: String,
       default: '',

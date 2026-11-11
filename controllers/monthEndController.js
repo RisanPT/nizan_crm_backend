@@ -19,7 +19,7 @@ import { filingsForPeriod } from './taxFilingController.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { istDayKey, istMonthBounds } from '../utils/istDate.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo']; // + 'ceo': read-only, enforced in middleware/ceoGuard.js
 const canView = (u) => FINANCE_ROLES.includes(u?.role);
 
 const DEAD_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];

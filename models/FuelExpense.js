@@ -15,6 +15,19 @@ const fuelExpenseSchema = mongoose.Schema(
       ref: 'Employee',
       default: null,
     },
+    // The work (booking) this expense was for. Null = not tied to one work: it
+    // is shared across that day's works (see utils/expenseAllocation.js).
+    bookingId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Booking',
+      default: null,
+    },
+    // IST calendar day the expense belongs to ('YYYY-MM-DD'), so it can be
+    // grouped under that day's works. Derived from `date` when not given.
+    dayKey: {
+      type: String,
+      default: '',
+    },
     category: {
       type: String,
       enum: [
@@ -81,6 +94,12 @@ const fuelExpenseSchema = mongoose.Schema(
     timestamps: true,
   }
 );
+
+fuelExpenseSchema.index({ driverId: 1, dayKey: 1 });
+// the Accounts list: newest first, narrowed by status / month
+fuelExpenseSchema.index({ date: -1 });
+fuelExpenseSchema.index({ status: 1, date: -1 });
+fuelExpenseSchema.index({ bookingId: 1 });
 
 const FuelExpense = mongoose.model('FuelExpense', fuelExpenseSchema);
 

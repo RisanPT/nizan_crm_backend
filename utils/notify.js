@@ -23,8 +23,30 @@ export const NOTIFICATION_TYPES = {
   REVIEW_SUBMITTED: 'review_submitted',
   CLIENT_MESSAGE: 'client_message',
   MONTH_END_SUMMARY: 'month_end_summary',
+  // The CEO's once-a-day line: what needs their decision and what is stuck with the team.
+  CEO_DIGEST: 'ceo_digest',
+  // Monthly objectives: a department head is asked to set this month's, and to close out last month's.
+  MONTHLY_OBJECTIVES_SET: 'monthly_objectives_set',
+  MONTHLY_OBJECTIVES_CLOSE: 'monthly_objectives_close',
+  // Every key result of an objective is done: the head may close it as achieved.
+  MONTHLY_OBJECTIVE_READY: 'monthly_objective_ready',
   SALES_TARGET_MIDMONTH: 'sales_target_midmonth',
   SALES_TARGET_TEAM_MIDMONTH: 'sales_target_team_midmonth',
+  // Company Projects: a department invited to a project / its answer, a staff
+  // proposal waiting for approval / the decision.
+  PROJECT_INVITE: 'project_invite',
+  PROJECT_RESPONSE: 'project_response',
+  PROJECT_PROPOSAL: 'project_proposal',
+  PROJECT_DECISION: 'project_decision',
+  // A project's estimated cost is waiting for the finance head / was decided (approved or sent back).
+  PROJECT_COST_REQUEST: 'project_cost_request',
+  PROJECT_COST_DECISION: 'project_cost_decision',
+  // Spending on a project reached 80% of its approved budget / went past it.
+  PROJECT_BUDGET_ALERT: 'project_budget_alert',
+  // A project needs more people: the request reaching HR / its answers / a department head asked to release someone.
+  MANPOWER_REQUEST: 'manpower_request',
+  MANPOWER_UPDATE: 'manpower_update',
+  MANPOWER_RELEASE: 'manpower_release',
 };
 
 // Stakeholders (admin accounts) are not part of the day-to-day operational

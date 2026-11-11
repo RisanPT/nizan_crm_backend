@@ -80,6 +80,11 @@ const collectionSchema = mongoose.Schema(
   }
 );
 
+// the Accounts lists: newest first, narrowed by status / artist / month
+collectionSchema.index({ date: -1 });
+collectionSchema.index({ status: 1, date: -1 });
+collectionSchema.index({ employeeId: 1, date: -1 });
+
 const Collection = mongoose.model('Collection', collectionSchema);
 
 export default Collection;

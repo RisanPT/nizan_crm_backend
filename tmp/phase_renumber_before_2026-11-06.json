@@ -1,0 +1,22 @@
+[
+  {
+    "_id": "6aec29773a9d427a3cdb3ac7",
+    "title": "1. Sourcing & Procurement",
+    "order": 10
+  },
+  {
+    "_id": "6aec29773a9d427a3cdb3acf",
+    "title": "2. Resource Mobilization",
+    "order": 11
+  },
+  {
+    "_id": "6aec29773a9d427a3cdb3ad7",
+    "title": "3. Site Setup & Trial",
+    "order": 12
+  },
+  {
+    "_id": "6aec29783a9d427a3cdb3adf",
+    "title": "4. Full Operations Go-Live",
+    "order": 13
+  }
+]

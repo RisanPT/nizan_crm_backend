@@ -1,4 +1,5 @@
 import Pincode from '../models/Pincode.js';
+import { resolvePincode } from '../services/pincodeLookup.js';
 
 export const getPincodes = async (req, res) => {
   try {
@@ -138,5 +139,16 @@ export const deletePincode = async (req, res) => {
     res.json({ message: 'Pincode removed' });
   } catch (error) {
     res.status(500).json({ message: error.message });
+  }
+};
+
+// @route GET /api/pincodes/lookup/:code
+// Where a pincode is (district → region → state → zone) and its area/coordinates, for the
+// pincode field on forms. Signed-in staff only: a miss asks the place lookup service.
+export const lookupPincode = async (req, res) => {
+  try {
+    res.json(await resolvePincode(req.params.code));
+  } catch (error) {
+    res.status(error.status || 500).json({ message: error.message });
   }
 };

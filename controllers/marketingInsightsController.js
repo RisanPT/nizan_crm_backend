@@ -7,7 +7,7 @@ import { slotHalf, consumesSlot, dayKey } from '../utils/slots.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 
 // Marketing intelligence is read by the marketing team + full-access managers.
-const READ_ROLES = ['admin', 'manager', 'marketing_admin', 'crm'];
+const READ_ROLES = ['admin', 'manager', 'marketing_admin', 'crm', 'ceo']; // + 'ceo': read-only, enforced in middleware/ceoGuard.js
 const canRead = (u) => READ_ROLES.includes(u?.role);
 
 // The Sales Calendar is shared with the Sales team too (it's a booking-volume

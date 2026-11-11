@@ -105,6 +105,13 @@ const chartOfAccountSchema = mongoose.Schema(
     // Control account for parties (Accounts Receivable / Payable).
     isParty: { type: Boolean, default: false },
     gstApplicable: { type: Boolean, default: false },
+    // How an EXPENSE HEAD behaves on the Administrative Expenses form. null = not set on the account:
+    // the original seeded heads then keep the flags built into models/AdminExpense.js (EXPENSE_HEADS).
+    //   jobLinked  needs a bride / event cost tag      recurring  can be a monthly bill
+    //   foreign    foreign / subscription — GST reverse charge (RCM) is suggested
+    jobLinked: { type: Boolean, default: null },
+    recurring: { type: Boolean, default: null },
+    foreign: { type: Boolean, default: null },
     gstRate: { type: Number, default: 0, min: 0, max: 100 },
     // Opening balance carried in at go-live / FY start.
     openingBalance: { type: Number, default: 0 },

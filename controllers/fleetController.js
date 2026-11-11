@@ -91,7 +91,7 @@ export const getDriverJobs = async (req, res) => {
       )
       // currentKm lets the app show the vehicle's last recorded reading as a
       // hint when the driver enters the starting km.
-      .populate('vehicleId', 'registrationNumber type currentKm')
+      .populate('vehicleId', 'registrationNumber type currentKm fuelType')
       .sort({ serviceStart: 1 });
 
     res.json(jobs);

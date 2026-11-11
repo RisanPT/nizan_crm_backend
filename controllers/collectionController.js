@@ -5,6 +5,8 @@ import { notifyRoles } from '../utils/notify.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 import { applyMoneyAccount } from '../utils/moneyAccount.js';
 import { ensureInvoiceNumber } from '../utils/invoiceNumber.js';
+import { runFinanceList } from '../services/financeList.js';
+import { isNewStyleQuery, QueryError } from '../utils/financeListQuery.js';
 
 const collectionPopulate = [
   { path: 'bookingId', select: 'bookingNumber customerName service totalOverAll status' },
@@ -107,8 +109,14 @@ export const getPaymentsReceived = async (req, res) => {
   }
 };
 
+// @desc    Collections, newest first. With ?page / ?summary / ?export / ?from / ?search /
+//          ?sort … (the Accounts screens) it is filtered, sorted and paged on the server —
+//          see services/financeList.js. Without them, the plain list older callers expect.
 export const getCollections = async (req, res) => {
   try {
+    if (isNewStyleQuery(req.query)) {
+      return res.json(await runFinanceList({ kind: 'collection', query: req.query, user: req.user, populate: collectionPopulate }));
+    }
     const { status, bookingId, trialId, employeeId, paymentMode, startDate, endDate } = req.query;
     const filter = {};
     if (status) filter.status = status;
@@ -139,7 +147,7 @@ export const getCollections = async (req, res) => {
       .sort({ date: -1, createdAt: -1 });
     res.json(collections);
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(error instanceof QueryError ? error.status : 500).json({ message: error.message });
   }
 };
 
@@ -203,14 +211,14 @@ export const verifyCollection = async (req, res) => {
       return res.status(404).json({ message: 'Collection not found' });
     }
 
-    const { status, verifiedBy } = req.body;
+    const { status, verifiedBy, verifiedAt } = req.body;
     if (!['verified', 'rejected'].includes(status)) {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
     collection.status = status;
     collection.verifiedBy = verifiedBy;
-    collection.verifiedAt = new Date();
+    collection.verifiedAt = verifiedAt ? new Date(verifiedAt) : new Date();
 
     // Where the money landed (approval popup): bank / cash account + mode.
     if (status === 'verified') {
@@ -308,6 +316,11 @@ export const updateCollection = async (req, res) => {
     if (attachmentUrl !== undefined) collection.attachmentUrl = attachmentUrl ?? null;
 
     await collection.save();
+
+    if (collection.status === 'verified') {
+      await syncBookingCollectedAmount(collection.bookingId);
+      await safePost(() => postDoc('Collection', collection.toObject(), req.user?._id || null));
+    }
 
     const populated = await Collection.findById(collection._id).populate(collectionPopulate);
     res.json(populated);

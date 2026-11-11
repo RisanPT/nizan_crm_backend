@@ -14,6 +14,8 @@ import {
   addServiceReminder,
   completeServiceReminder
 } from "../controllers/fleetController.js";
+import { getDriverDaySheet, getManagerDaySheet } from "../controllers/fleetDayController.js";
+import { fleetRolesOnly } from "../controllers/vehicleEfficiencyController.js";
 import { protect } from "../middleware/authMiddleware.js";
 
 const router = express.Router();
@@ -32,6 +34,7 @@ router.post("/driver/inspection/:jobId", protect, startTripWithInspection);
 router.post("/driver/start-next/:jobId", protect, startNextTrip);
 router.post("/driver/complete/:jobId", protect, completeJob);
 router.post("/driver/accident", protect, reportAccident);
+router.get("/driver/day-sheet", protect, getDriverDaySheet);
 
 // ── Artist route ────────────────────────────────────────────────
 router.post("/review", protect, submitDriverReview);
@@ -41,6 +44,8 @@ router.get("/manager/reviews", protect, fleetManagerOrAdmin, getDriverReviews);
 router.get("/manager/accidents", protect, fleetManagerOrAdmin, getAccidentReports);
 router.get("/manager/completed-works", protect, fleetManagerOrAdmin, getCompletedWorks);
 router.get("/manager/km-report", protect, fleetManagerOrAdmin, getKmReport);
+// fleet_manager / admin / manager — same set as the vehicle efficiency endpoints.
+router.get("/manager/day-sheet", protect, fleetRolesOnly, getManagerDaySheet);
 router.get("/manager/service-reminders", protect, fleetManagerOrAdmin, getServiceReminders);
 router.post("/manager/service-reminders", protect, fleetManagerOrAdmin, addServiceReminder);
 router.post("/manager/service-reminders/:id/complete", protect, fleetManagerOrAdmin, completeServiceReminder);

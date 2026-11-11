@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { CATEGORY_KEYS } from '../utils/vehicleCategories.js';
 
 const vehicleSchema = mongoose.Schema(
   {
@@ -22,6 +23,37 @@ const vehicleSchema = mongoose.Schema(
       type: String,
       default: '',
       trim: true,
+    },
+    // Finer class than `type`: sedan / xl / mpv … ('' = not set yet). See
+    // utils/vehicleCategories.js for the list and the default seat counts.
+    category: {
+      type: String,
+      enum: ['', ...CATEGORY_KEYS],
+      default: '',
+    },
+    // Passengers it takes besides the driver (0 = not recorded).
+    seats: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 60,
+    },
+    // Fuel efficiency information. `ratedMileage` is the manufacturer / expected
+    // figure: km per litre for petrol & diesel, km per kg for CNG, km per kWh for
+    // electric (0 = not recorded). The ACTUAL figure is worked out from fill-ups
+    // — see utils/fuelEfficiency.js.
+    ratedMileage: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 500,
+    },
+    // Litres (or kg / kWh for CNG / electric) the tank takes when full.
+    tankCapacity: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 1000,
     },
     fuelType: {
       type: String,

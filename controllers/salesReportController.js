@@ -18,7 +18,7 @@ import {
   addDays,
 } from '../utils/istDate.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo']; // + 'ceo': read-only, enforced in middleware/ceoGuard.js
 const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;

@@ -141,7 +141,7 @@ const builders = {
     if (amt <= 0) return null;
     return {
       voucherType: 'receipt',
-      date: d.date,
+      date: d.verifiedAt || d.date,
       narration: `Collection${d.notes ? ` · ${d.notes}` : ''}`,
       rawLines: [
         moneySide(d, d.paymentMode, { debit: amt, credit: 0 }),
@@ -206,7 +206,7 @@ const builders = {
     if (amt <= 0) return null;
     return {
       voucherType: 'payment',
-      date: d.date,
+      date: d.verifiedAt || d.date,
       narration: `Artist expense · ${d.category || 'other'}`,
       rawLines: [
         { code: ARTIST_EXPENSE_HEAD[d.category] || 'OFF-01', debit: amt, credit: 0 },

@@ -869,8 +869,12 @@ export const getPaginatedBookings = async (req, res) => {
 
     const baseMatch = buildBookingSearchMatch(search);
 
-    // Enforce Employee/Artist filter for artist role, or use provided filter for other roles
-    const isArtist = req.user.role === 'artist';
+    // Enforce Employee/Artist filter for solo artist role, or use provided filter for other roles / artist head
+    const isArtistHead =
+      req.user.role === 'artist_head' ||
+      req.user.role === 'regional_artist_head' ||
+      req.user.artistHead === true;
+    const isArtist = req.user.role === 'artist' && !isArtistHead;
     const isDriver = req.user.role === 'driver';
     
     const effectiveEmployeeId = (isArtist || isDriver)

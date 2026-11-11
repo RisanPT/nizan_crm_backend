@@ -1,5 +1,17 @@
 import mongoose from 'mongoose';
 
+// One report on a key result — what it stood at, and who said so. Written by the
+// server on every check-in (the app never sends these), so the timeline can plot them.
+const checkInSchema = mongoose.Schema(
+  {
+    value: { type: Number, default: 0 },
+    completed: { type: Boolean, default: false },
+    at: { type: Date, default: Date.now },
+    by: { type: String, default: '' },
+  },
+  { _id: false },
+);
+
 const keyResultItemSchema = mongoose.Schema(
   {
     id: { type: String, default: () => new mongoose.Types.ObjectId().toString() },
@@ -9,6 +21,7 @@ const keyResultItemSchema = mongoose.Schema(
     currentValue: { type: Number, default: 0 },
     unit: { type: String, default: '%' },
     completed: { type: Boolean, default: false },
+    checkIns: { type: [checkInSchema], default: [] },
   },
   { _id: false },
 );
@@ -32,6 +45,15 @@ const okrSchema = mongoose.Schema(
     department: {
       type: String,
       default: 'research-and-development',
+    },
+    // company | department | project. Stored explicitly: it used to be guessed from
+    // the department text ('research-and-development' or blank meant company-wide),
+    // which meant a real R&D department could never have objectives of its own.
+    // Documents saved before this have none and are read the old way
+    // (see levelOf in utils/okrAccess.js).
+    level: {
+      type: String,
+      enum: ['company', 'department', 'project'],
     },
     objective: {
       type: String,

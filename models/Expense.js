@@ -26,6 +26,21 @@ const expenseSchema = mongoose.Schema(
       enum: ['bridal', 'model_shoot'],
       default: 'bridal',
     },
+    // For FOOD: which meal it was. With the time in `date`, this lets Accounts put the
+    // spend under the work it was eaten for (utils/mealAllocation.js). '' = not recorded
+    // (older entries, or non-food).
+    meal: {
+      type: String,
+      enum: ['', 'breakfast', 'lunch', 'snacks', 'dinner'],
+      default: '',
+    },
+    // For FOOD: every meal the entry covers. One bill may cover several (a long trip: breakfast,
+    // lunch and dinner together); then `meal` is '' and this holds them. Older entries have only
+    // `meal` — read both through mealsOf() in utils/mealAllocation.js.
+    meals: {
+      type: [{ type: String, enum: ['breakfast', 'lunch', 'snacks', 'dinner'] }],
+      default: [],
+    },
     amount: {
       type: Number,
       required: [true, 'Please add an amount'],
@@ -81,6 +96,11 @@ const expenseSchema = mongoose.Schema(
     timestamps: true,
   }
 );
+
+// the Accounts lists: newest first, narrowed by status / artist / month
+expenseSchema.index({ date: -1 });
+expenseSchema.index({ status: 1, date: -1 });
+expenseSchema.index({ employeeId: 1, date: -1 });
 
 const Expense = mongoose.model('Expense', expenseSchema);
 

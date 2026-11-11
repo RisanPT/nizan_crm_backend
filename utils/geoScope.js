@@ -10,7 +10,10 @@ import mongoose from 'mongoose';
 const FULL_ACCESS_ROLES = ['admin', 'manager'];
 
 export const isFullGeoAccess = (user) =>
-  !user || FULL_ACCESS_ROLES.includes(String(user.role || '').toLowerCase());
+  !user ||
+  FULL_ACCESS_ROLES.includes(String(user.role || '').toLowerCase()) ||
+  String(user.role || '').toLowerCase() === 'artist_head' ||
+  user.artistHead === true;
 
 // The most specific geo level the user is pinned to, or null (= all-India).
 export const pinnedGeoLevel = (user) => {

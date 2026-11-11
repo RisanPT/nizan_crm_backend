@@ -44,7 +44,7 @@ import {
 //    ever see their own figures.
 
 const NOT_A_SALE = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo']; // + 'ceo': read-only, enforced in middleware/ceoGuard.js
 const SELF_SCOPED_ROLES = ['sales', 'sales_executive'];
 const NO_DASHBOARD_ROLES = ['artist', 'driver'];
 

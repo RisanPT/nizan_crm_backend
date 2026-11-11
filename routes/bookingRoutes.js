@@ -11,6 +11,8 @@ import {
 import { protect } from '../middleware/authMiddleware.js';
 import { getSalesExcludedCreatorsHandler } from '../utils/salesRules.js';
 import { getBookingMap } from '../controllers/bookingMapController.js';
+import { getNextWorkHints } from '../controllers/artistDayController.js';
+import { fleetAssignmentGuard } from '../middleware/fleetAssignmentGuard.js';
 
 const router = express.Router();
 
@@ -23,7 +25,10 @@ router.get('/paged', getPaginatedBookings);
 router.get('/sales-excluded-creators', getSalesExcludedCreatorsHandler);
 // Booking Map: bookings grouped by place with coordinates (before '/:id').
 router.get('/map', getBookingMap);
-router.route('/').get(getBookings).post(createBooking);
-router.route('/:id').get(getBookingById).put(updateBooking).delete(deleteBooking);
+// An artist's works screen: where each work falls in their day + the road to the next one (before '/:id').
+router.get('/next-work', getNextWorkHints);
+// A driver / vehicle that is already on another work then (or unavailable) needs a confirmation.
+router.route('/').get(getBookings).post(fleetAssignmentGuard, createBooking);
+router.route('/:id').get(getBookingById).put(fleetAssignmentGuard, updateBooking).delete(deleteBooking);
 
 export default router;

@@ -117,6 +117,12 @@ const adminExpenseSchema = mongoose.Schema(
       default: '',
       trim: true,
     },
+    // The project this is charged to (optional). Approved ones count as what the project has SPENT, pending ones as COMMITTED,
+    // against the cost its finance head approved (utils/projectSpend.js). The name is kept so the line still reads if the project goes.
+    projectId: { type: mongoose.Schema.Types.ObjectId, ref: 'Project', default: null, index: true },
+    projectName: { type: String, default: '' },
+    // Why it was approved although it took the project past its approved budget (finance head / admin only).
+    overBudgetReason: { type: String, default: '' },
     // Monthly recurring bill (Electricity, Telephone/Internet, Rent).
     isRecurring: {
       type: Boolean,

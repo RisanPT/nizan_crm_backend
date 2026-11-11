@@ -22,6 +22,8 @@ import Subscription from '../models/Subscription.js';
 import Trial from '../models/Trial.js';
 import CashTransaction from '../models/CashTransaction.js';
 import { liveCashBankTotals } from './bankAccountController.js';
+import { previousWindow } from '../utils/periodCompare.js';
+import { istDayOf, bucketDocs, sumRows, buildSeries } from '../utils/dayBuckets.js';
 import GstSetting from '../models/GstSetting.js';
 import AccountingSetting from '../models/AccountingSetting.js';
 import {
@@ -865,6 +867,114 @@ const agingSummary = (report) => ({
   })),
 });
 
+/// Money and entries per IST day for one source: [{ day, amount, count }].
+const dayRowsOf = async (Model, match, dateField, amountField) => {
+  const rows = await Model.aggregate([
+    { $match: match },
+    {
+      $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: `$${dateField}`, timezone: '+05:30' } },
+        amount: { $sum: { $ifNull: [`$${amountField}`, 0] } },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  return rows.filter((r) => r._id).map((r) => ({ day: r._id, amount: r.amount, count: r.count }));
+};
+
+/// Income and expense for ONE period — only money that has cleared approval — as lines, totals and the
+/// day-by-day series. Everything that depends on the period lives here, so the dashboard can run it for the
+/// period shown and again for the one it is compared with.
+const periodFigures = async (fromStr, toStr) => {
+  const start = istDayStart(fromStr);
+  const end = istDayEnd(toStr);
+  const inRange = { $gte: start, $lte: end };
+  const within = (d) => d && new Date(d) >= start && new Date(d) <= end;
+
+  const [collections, advances, trials, admin, salaries, hra, artistExp, payouts, fleet, purchases, subs, refunds, cashTxns] =
+    await Promise.all([
+      // Trial-only collections are left out: the trial's fee is counted below.
+      dayRowsOf(Collection, { status: 'verified', date: inRange, bookingId: { $ne: null } }, 'date', 'amount'),
+      dayRowsOf(Booking, { createdAt: inRange, advanceAmount: { $gt: 0 }, status: { $nin: INACTIVE_BOOKING } }, 'createdAt', 'advanceAmount'),
+      // A trial's date is stored as a 'YYYY-MM-DD' STRING, so it is compared as a day string. (Compared as a
+      // Date range it never matched anything, and trial fees always showed ₹0.)
+      Trial.find({ trialDate: { $gte: fromStr, $lte: toStr }, status: { $ne: 'cancelled' } }).select('trialDate trialItems.price').lean(),
+      dayRowsOf(AdminExpense, { status: 'approved', source: { $ne: 'hra' }, date: inRange }, 'date', 'amount'),
+      Salary.find({ status: 'paid' }).select('netAmount paymentDate month year').lean(),
+      dayRowsOf(HraRecord, { status: 'paid', date: inRange }, 'date', 'amount'),
+      dayRowsOf(Expense, { status: 'verified', date: inRange }, 'date', 'amount'),
+      ArtistPayout.find({ status: 'paid' }).select('amount paidAt date').lean(),
+      dayRowsOf(FuelExpense, { status: 'approved', date: inRange }, 'date', 'totalAmount'),
+      Purchase.find({ date: inRange }).select('date total gstAmount').lean(),
+      Subscription.find({ status: 'active' }).select('cost billingCycle').lean(),
+      dayRowsOf(SalesReturn, { status: { $in: ['approved', 'processed'] }, date: inRange }, 'date', 'amount'),
+      // Accounts' own Cash In / Out entries, split by the booked account's nature (only income /
+      // expense count; capital, loans etc. don't).
+      CashTransaction.aggregate([
+        { $match: { type: { $in: ['in', 'out'] }, date: inRange } },
+        { $lookup: { from: 'chartofaccounts', localField: 'account', foreignField: '_id', as: 'acc' } },
+        { $unwind: '$acc' },
+        { $match: { 'acc.nature': { $in: ['income', 'expense'] } } },
+        {
+          $group: {
+            _id: { nature: '$acc.nature', day: { $dateToString: { format: '%Y-%m-%d', date: '$date', timezone: '+05:30' } } },
+            amount: { $sum: '$amount' },
+            count: { $sum: 1 },
+          },
+        },
+      ]),
+    ]);
+
+  const cashRows = (nature) => cashTxns.filter((c) => c._id.nature === nature && c._id.day).map((c) => ({ day: c._id.day, amount: c.amount, count: c.count }));
+  const trialRows = bucketDocs(trials, (t) => t.trialDate, (t) => (t.trialItems || []).reduce((a, i) => a + (i.price || 0), 0));
+  const salaryAt = (s) => s.paymentDate || new Date(s.year, (s.month || 1) - 1, 15);
+  const salaryRows = bucketDocs(salaries.filter((s) => within(salaryAt(s))), salaryAt, (s) => s.netAmount);
+  const payoutAt = (p) => p.paidAt || p.date;
+  const payoutRows = bucketDocs(payouts.filter((p) => within(payoutAt(p))), payoutAt, (p) => p.amount);
+  const purchaseRows = bucketDocs(purchases, (p) => p.date, (p) => (p.total || 0) + (p.gstAmount || 0));
+  // Subscriptions record a plan cost, not individual payments, so this is the active plans' monthly
+  // run-rate scaled to the length of the period.
+  const perMonth = subs.reduce((s, x) => {
+    const c = Number(x.cost) || 0;
+    return s + (x.billingCycle === 'monthly' ? c : x.billingCycle === 'quarterly' ? c / 3 : c / 12);
+  }, 0);
+  const periodMonths = (end - start + 1) / (86400000 * (365 / 12));
+  const subscriptions = { amount: round2(perMonth * periodMonths), count: subs.length, estimated: true };
+
+  const line = (key, label, v, extra = {}) => ({ key, label, amount: v.amount, count: v.count, ...extra });
+  const incomeItems = [
+    line('collections', 'Booking collections', sumRows(collections)),
+    line('advances', 'Booking advances', sumRows(advances)),
+    line('trial_fees', 'Trial fees', sumRows(trialRows)),
+    line('other_income', 'Other income (Cash In)', sumRows(cashRows('income'))),
+  ];
+  const expenseItems = [
+    line('salaries', 'Salaries', sumRows(salaryRows)),
+    line('admin_expenses', 'Office & admin expenses', sumRows(admin)),
+    line('artist_expenses', 'Artist expenses', sumRows(artistExp)),
+    line('artist_payouts', 'Artist payouts', sumRows(payoutRows)),
+    line('fleet', 'Fleet & fuel', sumRows(fleet)),
+    line('hra', 'HRA', sumRows(hra)),
+    line('vendor_bills', 'Vendor bills', sumRows(purchaseRows)),
+    line('subscriptions', 'Subscriptions', subscriptions, { estimated: true }),
+    line('refunds', 'Customer refunds', sumRows(refunds)),
+    line('cash_out', 'Other expenses (Cash Out)', sumRows(cashRows('expense'))),
+  ];
+  const total = (items) => round2(items.reduce((s, i) => s + i.amount, 0));
+  return {
+    incomeItems,
+    expenseItems,
+    incomeTotal: total(incomeItems),
+    expenseTotal: total(expenseItems),
+    series: buildSeries(
+      fromStr,
+      toStr,
+      { rows: [collections, advances, trialRows, cashRows('income')] },
+      { rows: [salaryRows, admin, artistExp, payoutRows, fleet, hra, purchaseRows, refunds, cashRows('expense')], spread: [subscriptions.amount] },
+    ),
+  };
+};
+
 // @desc    Combined accounts dashboard summary for a period
 // @route   GET /api/accounting/dashboard-summary?from=YYYY-MM-DD&to=YYYY-MM-DD
 const getDashboardSummary = async (req, res) => {
@@ -881,138 +991,66 @@ const getDashboardSummary = async (req, res) => {
       return res.status(400).json({ message: 'Invalid date range' });
     }
     const inRange = { $gte: start, $lte: end };
-    const within = (d) => d && new Date(d) >= start && new Date(d) <= end;
     const asOf = new Date();
+    const today = istDayOf(asOf);
 
-    const [
-      collections,
-      advances,
-      trials,
-      admin,
-      salaries,
-      hra,
-      artistExp,
-      payouts,
-      fleet,
-      purchases,
-      subs,
-      refunds,
-      pendCollections,
-      pendAdmin,
-      pendArtistExp,
-      pendFleet,
-      recvItems,
-      payItems,
-      cashTxns,
-      cashBank,
-    ] = await Promise.all([
-      // Trial-only collections are left out: the trial's fee is counted below.
-      sumMatch(Collection, { status: 'verified', date: inRange, bookingId: { $ne: null } }, 'amount'),
-      sumMatch(
-        Booking,
-        { createdAt: inRange, advanceAmount: { $gt: 0 }, status: { $nin: INACTIVE_BOOKING } },
-        'advanceAmount'
-      ),
-      Trial.find({ trialDate: inRange, status: { $ne: 'cancelled' } }).select('trialItems.price').lean(),
-      sumMatch(AdminExpense, { status: 'approved', source: { $ne: 'hra' }, date: inRange }, 'amount'),
-      Salary.find({ status: 'paid' }).select('netAmount paymentDate month year').lean(),
-      sumMatch(HraRecord, { status: 'paid', date: inRange }, 'amount'),
-      sumMatch(Expense, { status: 'verified', date: inRange }, 'amount'),
-      ArtistPayout.find({ status: 'paid' }).select('amount paidAt date').lean(),
-      sumMatch(FuelExpense, { status: 'approved', date: inRange }, 'totalAmount'),
-      Purchase.find({ date: inRange }).select('total gstAmount').lean(),
-      Subscription.find({ status: 'active' }).select('cost billingCycle').lean(),
-      sumMatch(SalesReturn, { status: { $in: ['approved', 'processed'] }, date: inRange }, 'amount'),
+    const [current, pendCollections, pendAdmin, pendArtistExp, pendFleet, recvItems, payItems, cashBank] = await Promise.all([
+      periodFigures(fromStr, toStr),
       sumMatch(Collection, { status: 'pending', date: inRange }, 'amount'),
       sumMatch(AdminExpense, { status: 'pending', source: { $ne: 'hra' }, date: inRange }, 'amount'),
       sumMatch(Expense, { status: 'pending', date: inRange }, 'amount'),
       sumMatch(FuelExpense, { status: 'pending', date: inRange }, 'totalAmount'),
       receivableItems(asOf),
       payableItems(asOf),
-      // Accounts' own Cash In / Out entries, split by the booked account's
-      // nature (only income / expense count; capital, loans etc. don't).
-      CashTransaction.aggregate([
-        { $match: { type: { $in: ['in', 'out'] }, date: inRange } },
-        { $lookup: { from: 'chartofaccounts', localField: 'account', foreignField: '_id', as: 'acc' } },
-        { $unwind: '$acc' },
-        { $match: { 'acc.nature': { $in: ['income', 'expense'] } } },
-        { $group: { _id: '$acc.nature', amount: { $sum: '$amount' }, count: { $sum: 1 } } },
-      ]),
       liveCashBankTotals(),
     ]);
-    const cashBy = Object.fromEntries(cashTxns.map((c) => [c._id, c]));
-    const cashIncome = { amount: round2(cashBy.income?.amount), count: cashBy.income?.count || 0 };
-    const cashExpense = { amount: round2(cashBy.expense?.amount), count: cashBy.expense?.count || 0 };
-
-    const trialFees = {
-      amount: round2(trials.reduce((s, t) => s + (t.trialItems || []).reduce((a, i) => a + (i.price || 0), 0), 0)),
-      count: trials.length,
-    };
-    const paidSalaries = salaries.filter((s) =>
-      within(s.paymentDate || new Date(s.year, (s.month || 1) - 1, 15))
-    );
-    const salary = {
-      amount: round2(paidSalaries.reduce((s, x) => s + (x.netAmount || 0), 0)),
-      count: paidSalaries.length,
-    };
-    const paidPayouts = payouts.filter((p) => within(p.paidAt || p.date));
-    const artistPayouts = {
-      amount: round2(paidPayouts.reduce((s, p) => s + (p.amount || 0), 0)),
-      count: paidPayouts.length,
-    };
-    const vendorBills = {
-      amount: round2(purchases.reduce((s, p) => s + (p.total || 0) + (p.gstAmount || 0), 0)),
-      count: purchases.length,
-    };
-    // Subscriptions record a plan cost, not individual payments, so this is the
-    // active plans' monthly run-rate scaled to the length of the period.
-    const perMonth = subs.reduce((s, x) => {
-      const c = Number(x.cost) || 0;
-      return s + (x.billingCycle === 'monthly' ? c : x.billingCycle === 'quarterly' ? c / 3 : c / 12);
-    }, 0);
-    const periodMonths = (end - start + 1) / (86400000 * (365 / 12));
-    const subscriptions = { amount: round2(perMonth * periodMonths), count: subs.length, estimated: true };
-
-    const line = (key, label, v, extra = {}) => ({ key, label, amount: v.amount, count: v.count, ...extra });
-    const incomeItems = [
-      line('collections', 'Booking collections', collections),
-      line('advances', 'Booking advances', advances),
-      line('trial_fees', 'Trial fees', trialFees),
-      line('other_income', 'Other income (Cash In)', cashIncome),
-    ];
-    const expenseItems = [
-      line('salaries', 'Salaries', salary),
-      line('admin_expenses', 'Office & admin expenses', admin),
-      line('artist_expenses', 'Artist expenses', artistExp),
-      line('artist_payouts', 'Artist payouts', artistPayouts),
-      line('fleet', 'Fleet & fuel', fleet),
-      line('hra', 'HRA', hra),
-      line('vendor_bills', 'Vendor bills', vendorBills),
-      line('subscriptions', 'Subscriptions', subscriptions, { estimated: true }),
-      line('refunds', 'Customer refunds', refunds),
-      line('cash_out', 'Other expenses (Cash Out)', cashExpense),
-    ];
+    const line = (key, label, v) => ({ key, label, amount: v.amount, count: v.count });
     const pendingItems = [
       line('collections', 'Collections to verify', pendCollections),
       line('admin_expenses', 'Admin expenses to approve', pendAdmin),
       line('artist_expenses', 'Artist expenses to verify', pendArtistExp),
       line('fleet', 'Fleet expenses to approve', pendFleet),
     ];
-    const total = (items) => round2(items.reduce((s, i) => s + i.amount, 0));
-    const incomeTotal = total(incomeItems);
-    const expenseTotal = total(expenseItems);
+    const pendingTotal = round2(pendingItems.reduce((s, i) => s + i.amount, 0));
+
+    // How the period compares with the one before it (utils/periodCompare.js). Only the days that have
+    // happened count, so a month in progress is not measured against a whole month: `current*` is this
+    // period up to today — the figures the percentages are worked out from.
+    let previous = null;
+    const window = previousWindow(fromStr, toStr, today);
+    if (window) {
+      const [before, soFar] = await Promise.all([
+        periodFigures(window.from, window.to),
+        toStr > today ? periodFigures(fromStr, today) : Promise.resolve(current),
+      ]);
+      previous = {
+        from: window.from,
+        to: window.to,
+        mode: window.mode,
+        days: window.days,
+        income: before.incomeTotal,
+        expense: before.expenseTotal,
+        net: round2(before.incomeTotal - before.expenseTotal),
+        currentIncome: soFar.incomeTotal,
+        currentExpense: soFar.expenseTotal,
+        currentNet: round2(soFar.incomeTotal - soFar.expenseTotal),
+      };
+    }
 
     res.json({
       from: fromStr,
       to: toStr,
-      income: { total: incomeTotal, items: incomeItems },
-      expense: { total: expenseTotal, items: expenseItems },
-      net: round2(incomeTotal - expenseTotal),
-      pending: { total: total(pendingItems), items: pendingItems },
+      income: { total: current.incomeTotal, items: current.incomeItems },
+      expense: { total: current.expenseTotal, items: current.expenseItems },
+      net: round2(current.incomeTotal - current.expenseTotal),
+      pending: { total: pendingTotal, items: pendingItems },
       // Live balances, as on the Bank & Cash Balance screen (today, not the period).
       cashBank,
       receivables: agingSummary(buildAging(recvItems, asOf)),
       payables: agingSummary(buildAging(payItems, asOf)),
+      // One point per day of the period, for the trend chart and the sparklines.
+      series: current.series,
+      previous,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });

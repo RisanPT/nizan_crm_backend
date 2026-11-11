@@ -1,6 +1,8 @@
 import jwt from 'jsonwebtoken';
 import User from '../models/User.js';
 import { permissionsForRole } from '../controllers/roleController.js';
+import { loginExpired, EXPIRED_MESSAGE } from '../utils/driverLogin.js';
+import { applyCeoGuard } from './ceoGuard.js';
 
 export const protect = async (req, res, next) => {
   const authHeader = req.headers.authorization ?? '';
@@ -27,8 +29,15 @@ export const protect = async (req, res, next) => {
     if (!user || !user.active) {
       return res.status(401).json({ message: 'Not authorized' });
     }
+    // A temporary login (an outsourced driver) stops working at its end date, even for a
+    // token issued before it — so the app signs them out on the next request.
+    if (loginExpired(user)) {
+      return res.status(401).json({ message: EXPIRED_MESSAGE, code: 'LOGIN_EXPIRED' });
+    }
 
     req.user = user;
+    // The CEO login is view-and-decide only (utils/ceoAccess.js): answered here, for every staff route at once.
+    if (applyCeoGuard(req, res)) return;
     next();
   } catch (error) {
     return res.status(401).json({ message: 'Not authorized, token invalid' });

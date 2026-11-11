@@ -17,6 +17,7 @@ import leadRoutes from './routes/leadRoutes.js';
 import notificationRoutes from './routes/notificationRoutes.js';
 import attendanceRoutes from './routes/attendanceRoutes.js';
 import bookingRoutes from './routes/bookingRoutes.js';
+import foodAllowanceRoutes from './routes/foodAllowanceRoutes.js';
 import packageRoutes from './routes/packageRoutes.js';
 import regionRoutes from './routes/regionRoutes.js';
 import zoneRoutes from './routes/zoneRoutes.js';
@@ -27,12 +28,16 @@ import addonServiceRoutes from './routes/addonServiceRoutes.js';
 import blockedDateRoutes from './routes/blockedDateRoutes.js';
 import vehicleRoutes from './routes/vehicleRoutes.js';
 import fuelExpenseRoutes from './routes/fuelExpenseRoutes.js';
+import fuelPriceRoutes from './routes/fuelPriceRoutes.js';
+import fleetAvailabilityRoutes from './routes/fleetAvailabilityRoutes.js';
+import workProfitRoutes from './routes/workProfitRoutes.js';
 import collectionRoutes from './routes/collectionRoutes.js';
 import artistPayoutRoutes from './routes/artistPayoutRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
+import manpowerRoutes from './routes/manpowerRoutes.js';
 import itTaskRoutes from './routes/itTaskRoutes.js';
 import timeBlockRoutes from './routes/timeBlockRoutes.js';
 import budgetRoutes from './routes/budgetRoutes.js';
@@ -40,6 +45,7 @@ import { seedAdminUser } from './utils/seedAdminUser.js';
 import { migrateAndSyncAll } from './utils/syncUserEmployee.js';
 
 import fleetRoutes from './routes/fleetRoutes.js';
+import gpsKmRoutes from './routes/gpsKmRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
 import marketingRoutes from './routes/marketingRoutes.js';
 import trialRoutes from './routes/trialRoutes.js';
@@ -70,6 +76,8 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import salesTargetRoutes from './routes/salesTargetRoutes.js';
 import goalRoutes from './routes/goalRoutes.js';
 import slotRoutes from './routes/slotRoutes.js';
+import ceoRoutes from './routes/ceoRoutes.js';
+import monthlyObjectiveRoutes from './routes/monthlyObjectiveRoutes.js';
 import bankAccountRoutes from './routes/bankAccountRoutes.js';
 import cashTransactionRoutes from './routes/cashTransactionRoutes.js';
 import bookingAdvanceRoutes from './routes/bookingAdvanceRoutes.js';
@@ -81,6 +89,7 @@ import ticketRoutes from './routes/ticketRoutes.js';
 import contentRoutes from './routes/contentRoutes.js';
 import backupRoutes from './routes/backupRoutes.js';
 import okrRoutes from './routes/okrRoutes.js';
+import strategicVisionRoutes from './routes/strategicVisionRoutes.js';
 import projectDocRoutes from './routes/projectDocRoutes.js';
 import leaveRoutes from './routes/leaveRoutes.js';
 import approvalRoutes from './routes/approvalRoutes.js';
@@ -196,6 +205,9 @@ app.use(
   })
 );
 app.options('*', cors());
+// A GPS km report can run to a few thousand rows — more than the default 100 kb body limit —
+// so this one route reads its own, larger body before the global parser below.
+app.use('/api/fleet/gps-km', express.json({ limit: '4mb' }), gpsKmRoutes);
 app.use(express.json());
 
 // Routes
@@ -218,14 +230,20 @@ app.use('/api/addon-services', addonServiceRoutes);
 app.use('/api/blocked-dates', blockedDateRoutes);
 app.use('/api/vehicles', vehicleRoutes);
 app.use('/api/fuel-expenses', fuelExpenseRoutes);
+app.use('/api/fuel-prices', fuelPriceRoutes);
+app.use('/api/fleet/availability', fleetAvailabilityRoutes);
+app.use('/api/work-profit', workProfitRoutes);
 app.use('/api/collections', collectionRoutes);
 app.use('/api/artist-payouts', artistPayoutRoutes);
 app.use('/api/expenses', expenseRoutes);
+app.use('/api/food-allowances', foodAllowanceRoutes);
 app.use('/api/reports', reportRoutes);
 app.use('/api/upload', uploadRoutes);
 app.use('/api/projects', projectRoutes);
+app.use('/api/manpower', manpowerRoutes);
 app.use('/api/it-tasks', itTaskRoutes);
 app.use('/api/okrs', okrRoutes);
+app.use('/api/strategic-vision', strategicVisionRoutes);
 app.use('/api/project-docs', projectDocRoutes); // Versioned project documents (SRS, design, API specs)
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/content', contentRoutes);          // Marketing content planning
@@ -273,6 +291,8 @@ app.use('/api/dashboard', dashboardRoutes);         // Main dashboard analytics 
 app.use('/api/sales-targets', salesTargetRoutes); // Monthly salesperson targets
 app.use('/api/goals', goalRoutes); // Company day / week / month goals + day-wise report
 app.use('/api/slots', slotRoutes);                // Day-wise booking slot capacity
+app.use('/api/monthly-objectives', monthlyObjectiveRoutes); // Company Projects → Monthly objectives per department
+app.use('/api/ceo', ceoRoutes);                  // CEO home: decisions inbox + watch list
 app.use('/api/bank-accounts', bankAccountRoutes); // Manual bank balances (Finance)
 app.use('/api/cash-transactions', cashTransactionRoutes); // Accounts' Cash In / Out / Transfer entries
 app.use('/api/booking-advances', bookingAdvanceRoutes); // Accounts verifies booking advances

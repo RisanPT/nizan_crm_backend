@@ -8,6 +8,12 @@ import Employee from '../models/Employee.js';
 import { syncUserToEmployee } from '../utils/syncUserEmployee.js';
 import { invalidateSalesRules } from '../utils/salesRules.js';
 import { transporter, sendMail } from '../utils/mailer.js';
+import {
+  loginEmailFor, loginIdOf, expiryFromDay, loginExpired, canReuseDriverAccount, phoneDigits, EXPIRED_MESSAGE,
+} from '../utils/driverLogin.js';
+import { canManageUsers, authorizeUserChange, mayGiveRole } from '../utils/userAccess.js';
+
+const NOT_ALLOWED_TO_MANAGE_USERS = 'You are not allowed to manage users.';
 
 const generateToken = (id) =>
   jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '7d' });
@@ -63,9 +69,8 @@ const toAuthResponse = async (user) => ({
 });
 
 export const login = async (req, res) => {
-  const email = String(req.body.email ?? '')
-    .trim()
-    .toLowerCase();
+  // The sign-in id is an email, or a mobile number for a driver who has no email.
+  const email = loginEmailFor(req.body.email) ?? '';
   const password = String(req.body.password ?? '');
 
   if (!email || !password) {
@@ -80,6 +85,10 @@ export const login = async (req, res) => {
 
   if (!user || !(await user.matchPassword(password)) || !user.active) {
     return res.status(401).json({ message: 'Invalid email or password' });
+  }
+  // Only said once the password was right, so it doesn't reveal which logins exist.
+  if (loginExpired(user)) {
+    return res.status(401).json({ message: EXPIRED_MESSAGE, code: 'LOGIN_EXPIRED' });
   }
 
   await ensureDefaultRoles();
@@ -137,6 +146,7 @@ export const getUsers = async (req, res) => {
       email: u.email,
       role: u.role,
       active: u.active,
+      accessExpiresAt: u.accessExpiresAt ?? null,
       inventoryAccess: u.inventoryAccess ?? false,
       inventoryManage: u.inventoryManage ?? false,
       isDepartmentHead: u.isDepartmentHead ?? false,
@@ -178,6 +188,7 @@ export const getUsers = async (req, res) => {
     email: u.email,
     role: u.role,
     active: u.active,
+    accessExpiresAt: u.accessExpiresAt ?? null,
     inventoryAccess: u.inventoryAccess ?? false,
     inventoryManage: u.inventoryManage ?? false,
     isDepartmentHead: u.isDepartmentHead ?? false,
@@ -234,6 +245,9 @@ export const createUser = async (req, res) => {
   const roleDoc = await Role.findOne({ key: role });
   if (!roleDoc) {
     return res.status(400).json({ message: `Unknown role "${role}".` });
+  }
+  if (!mayGiveRole(req.user, role)) {
+    return res.status(403).json({ message: 'Only an administrator can create the CEO account.' });
   }
 
   if (!name || !email || !password) {
@@ -297,36 +311,63 @@ export const createUser = async (req, res) => {
   });
 };
 
-// Grant (or refresh) a driver's login. Upserts by email so it works for a
-// brand-new driver AND for an existing driver whose email is already on file.
+const FLEET_LOGIN_ROLES = ['admin', 'manager', 'fleet_manager'];
+
+const driverLoginSummary = (user, created) => ({
+  id: user._id.toString(),
+  name: user.name,
+  email: user.email,
+  loginId: loginIdOf(user.email), // what the driver types to sign in
+  role: user.role,
+  active: user.active,
+  accessExpiresAt: user.accessExpiresAt ?? null,
+  created,
+});
+
+// Grant (or refresh) a driver's login. A fleet manager gives an outsourced driver a TEMPORARY
+// login by passing `expiresOn` ('YYYY-MM-DD', valid through the end of that day); without it
+// the login is permanent, as before. The driver signs in with the email, or — when there is
+// none — their mobile number (`phone`).
+//
+// It only ever creates a driver account or refreshes THAT driver's own: an email that already
+// belongs to anyone else's account (an admin, an artist, another driver) is refused rather than
+// having its password and role overwritten.
 export const grantDriverLogin = async (req, res) => {
   try {
     const requesterRole = req.user?.role;
-    if (!['admin', 'manager', 'fleet_manager'].includes(requesterRole)) {
+    if (!FLEET_LOGIN_ROLES.includes(requesterRole)) {
       return res
         .status(403)
         .json({ message: 'You are not allowed to grant login access.' });
     }
 
     const name = String(req.body.name ?? '').trim();
-    const email = String(req.body.email ?? '').trim().toLowerCase();
     const password = String(req.body.password ?? '').trim();
     const employeeId = req.body.employeeId || null;
+    const email = loginEmailFor(req.body.email) ?? (phoneDigits(req.body.phone) ? loginEmailFor(req.body.phone) : null);
 
-    if (!email || password.length < 6) {
+    if (!email) {
       return res.status(400).json({
-        message: 'Email and a password of at least 6 characters are required.',
+        message: 'Give the driver a login: an email address, or a mobile number if they have no email.',
       });
     }
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'The login password needs at least 6 characters.' });
+    }
+    const expiry = expiryFromDay(req.body.expiresOn);
+    if (expiry.error) return res.status(400).json({ message: expiry.error });
 
     let user = await User.findOne({ email });
+    const reuse = canReuseDriverAccount(user, employeeId);
+    if (reuse.error) return res.status(409).json({ message: reuse.error });
+
     let created = false;
     if (user) {
       if (name) user.name = name;
       user.password = password; // hashed by the pre-save hook
-      user.role = 'driver';
       if (employeeId) user.employeeId = employeeId;
       user.active = true;
+      user.accessExpiresAt = expiry.at;
       await user.save();
     } else {
       user = await User.create({
@@ -336,6 +377,7 @@ export const grantDriverLogin = async (req, res) => {
         role: 'driver',
         active: true,
         employeeId,
+        accessExpiresAt: expiry.at,
       });
       created = true;
     }
@@ -347,11 +389,7 @@ export const grantDriverLogin = async (req, res) => {
     }
 
     return res.status(created ? 201 : 200).json({
-      id: user._id.toString(),
-      name: user.name,
-      email: user.email,
-      role: user.role,
-      created,
+      ...driverLoginSummary(user, created),
       message: created ? 'Driver login created' : 'Driver login updated',
     });
   } catch (error) {
@@ -361,11 +399,53 @@ export const grantDriverLogin = async (req, res) => {
   }
 };
 
+// @desc    Renew, end or switch off a driver's login — without touching its password
+// @route   PUT /api/auth/users/driver-login/:employeeId   { expiresOn?: 'YYYY-MM-DD' | null, active?: bool }
+// @access  Private (fleet_manager / manager / admin) — driver accounts only
+//   expiresOn: a day = valid through it (renew / shorten); null = permanent
+//   active:    false = switch it off now; true = back on
+export const setDriverLoginAccess = async (req, res) => {
+  try {
+    if (!FLEET_LOGIN_ROLES.includes(req.user?.role)) {
+      return res.status(403).json({ message: 'You are not allowed to change login access.' });
+    }
+    const user = await User.findOne({ employeeId: req.params.employeeId, role: 'driver' });
+    if (!user) return res.status(404).json({ message: 'This driver has no login yet.' });
+
+    if (req.body.expiresOn !== undefined) {
+      const expiry = expiryFromDay(req.body.expiresOn);
+      if (expiry.error) return res.status(400).json({ message: expiry.error });
+      user.accessExpiresAt = expiry.at;
+    }
+    if (req.body.active !== undefined) user.active = Boolean(req.body.active);
+    await user.save();
+
+    return res.json({ ...driverLoginSummary(user, false), message: 'Driver login updated' });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
+// @route   PUT /api/auth/users/:id
+// @access  Private — admin / manager, or a department head for their own team (utils/userAccess.js).
+//          Checked before the lookup so a caller with no user-management rights learns nothing
+//          about which ids exist.
 export const updateUser = async (req, res) => {
+  if (!canManageUsers(req.user)) {
+    return res.status(403).json({ message: NOT_ALLOWED_TO_MANAGE_USERS });
+  }
+
   const user = await User.findById(req.params.id);
 
   if (!user) {
     return res.status(404).json({ message: 'User not found' });
+  }
+
+  const verdict = authorizeUserChange(req.user, user, {
+    nextRole: req.body.role == null ? undefined : req.body.role,
+  });
+  if (!verdict.ok) {
+    return res.status(403).json({ message: verdict.message });
   }
 
   const nextEmail = req.body.email == null
@@ -466,16 +546,29 @@ export const updateUser = async (req, res) => {
   });
 };
 
+// @route   DELETE /api/auth/users/:id
+// @access  Private — same people as updateUser (utils/userAccess.js)
 export const deleteUser = async (req, res) => {
+  if (!canManageUsers(req.user)) {
+    return res.status(403).json({ message: NOT_ALLOWED_TO_MANAGE_USERS });
+  }
+
   // Guard: cannot delete your own account
   if (req.user._id.toString() === req.params.id) {
     return res.status(400).json({ message: 'You cannot delete your own account' });
   }
 
-  const user = await User.findByIdAndDelete(req.params.id);
-  if (!user) {
+  const target = await User.findById(req.params.id).select('role managedBy');
+  if (!target) {
     return res.status(404).json({ message: 'User not found' });
   }
+
+  const verdict = authorizeUserChange(req.user, target);
+  if (!verdict.ok) {
+    return res.status(403).json({ message: verdict.message });
+  }
+
+  await User.findByIdAndDelete(target._id);
 
   return res.json({ message: 'User deleted successfully', id: req.params.id });
 };
@@ -549,8 +642,14 @@ export const provisionEmployeeLogin = async (req, res) => {
     const role = String(req.body.role || 'employee').trim().toLowerCase() || 'employee';
     const roleDoc = await Role.findOne({ key: role });
     if (!roleDoc) return res.status(400).json({ message: `Unknown role "${role}".` });
+    if (!mayGiveRole(req.user, role)) {
+      return res.status(403).json({ message: 'Only an administrator can create the CEO account.' });
+    }
 
     let user = await User.findOne({ email }).select('+passwordSetupToken +passwordSetupExpires');
+    if (user && String(user.role).trim().toLowerCase() === 'ceo' && !mayGiveRole(req.user, 'ceo')) {
+      return res.status(403).json({ message: 'Only an administrator can change the CEO account.' });
+    }
     let created = false;
     if (user) {
       user.employeeId = employee._id;

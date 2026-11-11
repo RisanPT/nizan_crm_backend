@@ -102,7 +102,7 @@ const placeFromName = async (text) => {
   }
 
   if (pinPlace) {
-    return { place: pinPlace, label: `${parts[0] || 'Venue'} — pincode ${pin} area (approx.)` };
+    return { place: pinPlace, label: `${parts[0] || 'Venue'} — pincode ${pin} area (approx.)`, approximate: true };
   }
   return null;
 };
@@ -203,4 +203,83 @@ export const distanceFromMapLink = async (link) => {
   }
   const route = await routeFromHq(place);
   return { km: route.roadKm, durationMin: route.durationMin, from: headquarters().label, to, method: 'map_link' };
+};
+
+// ── Driver's-day planning (utils/dayTrip.js, services/dayTrip.js) ────────────
+
+/// Is the road-distance service configured on this server?
+export const distanceConfigured = () => !!orsKey();
+
+/**
+ * Road distance + drive time between two points (a leg of a driver's day).
+ * Not cached: legs between venues would store client locations, which
+ * GeoCache deliberately never does. The day's plan is stored once instead
+ * (models/DayTrip.js) and only recalculated when a work on that day changes.
+ * @returns {{ km, durationMin }}
+ */
+export const routeLeg = async (from, to) => {
+  if (!orsKey()) {
+    throw new DistanceError('Distance is not set up yet — ORS_API_KEY is missing on the server.', 503);
+  }
+  const url = new URL(`${ORS}/v2/directions/driving-car`);
+  url.search = new URLSearchParams({
+    api_key: orsKey(),
+    start: `${from.lng},${from.lat}`,
+    end: `${to.lng},${to.lat}`,
+  }).toString();
+  const res = await fetch(url, { signal: AbortSignal.timeout(20000) });
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new DistanceError(`Route lookup failed: ${body?.error?.message || `HTTP ${res.status}`}`, 502);
+  }
+  const s = body?.features?.[0]?.properties?.summary;
+  if (!s || s.distance == null) throw new DistanceError('No driving route found between these places.', 404);
+  return { km: Math.round((s.distance / 1000) * 10) / 10, durationMin: Math.round((s.duration || 0) / 60) };
+};
+
+// A Mongoose Map (live document) or a plain object (.lean()) → the value at `key`.
+const mapValue = (m, key) => (!m ? '' : typeof m.get === 'function' ? m.get(key) || '' : m[key] || '');
+
+/**
+ * Where is a work (booking)? The same sources and order the booking's own
+ * distance check uses, for the given calendar day (multi-date bookings keep a
+ * map per date):
+ *   1. the map link / coordinates (that date's, else the booking's)
+ *   2. the venue address, trusted only within 25 km of the pincode
+ *   3. the pincode's area — approximate, and flagged as such
+ * @returns {{ lat, lng, label, method, approximate } | null}
+ */
+export const resolveWorkPlace = async (booking, dayKey) => {
+  const link = String(mapValue(booking.dateMaps, dayKey) || booking.mapUrl || '').trim();
+  if (link) {
+    try {
+      const loc = await locationFromMapLink(link);
+      if (loc?.lat != null) {
+        return { lat: loc.lat, lng: loc.lng, label: `Map pin ${loc.lat.toFixed(5)}, ${loc.lng.toFixed(5)}`, method: 'map_link', approximate: false };
+      }
+      if (loc?.query) {
+        const named = await placeFromName(loc.query);
+        if (named) {
+          return { lat: named.place.lat, lng: named.place.lng, label: named.label, method: 'map_link_name', approximate: !!named.approximate };
+        }
+      }
+    } catch (err) {
+      console.error('work map link read failed:', err.message); // fall through to the address / pincode
+    }
+  }
+
+  const pin = String(booking.pincode || '').replace(/\D/g, '');
+  const text = String(booking.address || '').trim();
+  const pinPlace = /^[1-9]\d{5}$/.test(pin) ? await coordsForPincodeNow(pin) : null;
+  if (text.length >= 4) {
+    const venue = await addressPlace(text);
+    if (venue?.precise && (!pinPlace || straightKm(venue, pinPlace) <= ADDRESS_MATCH_KM)) {
+      return { lat: venue.lat, lng: venue.lng, label: venue.label, method: 'address', approximate: false };
+    }
+  }
+  if (pinPlace) {
+    const area = [pinPlace.label, pinPlace.district].filter(Boolean).join(', ') || pin;
+    return { lat: pinPlace.lat, lng: pinPlace.lng, label: `${area} (pincode ${pin} area)`, method: 'pincode', approximate: true };
+  }
+  return null;
 };

@@ -108,6 +108,12 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    // A TEMPORARY login (an outsourced driver…): works until the end of this moment,
+    // then sign-in and every request are refused. null = permanent. See utils/driverLogin.js.
+    accessExpiresAt: {
+      type: Date,
+      default: null,
+    },
     // Employee self-service (ESS) provisioning: when HR creates a login for an
     // employee, the account starts with a random password and an emailed
     // set-password link. These hold the hashed token + its expiry; cleared once

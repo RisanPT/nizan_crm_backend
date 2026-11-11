@@ -5,6 +5,9 @@ import Collection from '../models/Collection.js';
 import Expense from '../models/Expense.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { sweepSalesTargetMidMonth } from '../utils/salesTargetAlerts.js';
+import { loadCeoInbox, digestText } from '../services/ceoInbox.js';
+import { runMonthlyObjectiveReminders } from '../services/monthlyObjectiveReminders.js';
+import { istStart, todayIst } from '../utils/istDate.js';
 import {
   notify,
   getUserIdsByRoles,
@@ -121,7 +124,8 @@ const sweepMonthEndSummary = async () => {
   lastMonthEndCheckAt = nowMs;
 
   try {
-    const admins = await getUserIdsByRoles(ADMIN_ROLES);
+    // the CEO gets it too — on top of their own daily digest, not instead of it
+    const admins = await getUserIdsByRoles([...ADMIN_ROLES, 'ceo']);
     if (admins.length === 0) return;
 
     // The calendar month that just ended.
@@ -168,10 +172,61 @@ const sweepMonthEndSummary = async () => {
   }
 };
 
+// ── The CEO's daily digest ───────────────────────────────────────────────────
+// Once a day (the first fetch of the day creates it, like the month-end summary): how many things need the CEO's decision and
+// how many approvals are waiting with the team, the oldest for how long. Nothing to report = no notification.
+let lastCeoDigestCheckAt = 0;
+const CEO_DIGEST_CHECK_MS = 30 * 60 * 1000;
+
+const sweepCeoDigest = async () => {
+  const nowMs = Date.now();
+  if (nowMs - lastCeoDigestCheckAt < CEO_DIGEST_CHECK_MS) return;
+  lastCeoDigestCheckAt = nowMs;
+
+  try {
+    const ceos = await getUserIdsByRoles(['ceo']);
+    if (ceos.length === 0) return;
+
+    const day = istStart(todayIst());
+    const existing = await Notification.findOne({ type: NOTIFICATION_TYPES.CEO_DIGEST, forDate: day }).select('_id');
+    if (existing) return;
+
+    const body = digestText(await loadCeoInbox());
+    if (!body) return;
+    await notify({
+      recipients: ceos,
+      type: NOTIFICATION_TYPES.CEO_DIGEST,
+      title: 'Your day at a glance',
+      body,
+      link: '/ceo',
+      forDate: day,
+    });
+  } catch (err) {
+    console.error('sweepCeoDigest failed:', err.message);
+  }
+};
+
+// ── Monthly objectives: "set this month's" and "close out last month" for department heads ─────────────────
+let lastMonthlyObjectivesAt = 0;
+const MONTHLY_OBJECTIVES_CHECK_MS = 60 * 60 * 1000; // hourly is plenty; each head gets at most one of each a month (deduped in the DB)
+
+const sweepMonthlyObjectives = async () => {
+  const nowMs = Date.now();
+  if (nowMs - lastMonthlyObjectivesAt < MONTHLY_OBJECTIVES_CHECK_MS) return;
+  lastMonthlyObjectivesAt = nowMs;
+  try {
+    await runMonthlyObjectiveReminders();
+  } catch (err) {
+    console.error('sweepMonthlyObjectives failed:', err.message);
+  }
+};
+
 export const getNotifications = async (req, res) => {
   try {
     await sweepFollowUps();
     await sweepMonthEndSummary();
+    await sweepCeoDigest();
+    await sweepMonthlyObjectives();
     await sweepSalesTargetMidMonth();
 
     const page = parseInt(req.query.page) || 1;

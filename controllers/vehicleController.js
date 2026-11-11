@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import Vehicle from '../models/Vehicle.js';
+import { CATEGORY_KEYS, defaultSeatsFor } from '../utils/vehicleCategories.js';
 
 const normalizeObjectId = (value) => {
   const normalized = String(value ?? '').trim();
@@ -9,6 +10,35 @@ const normalizeObjectId = (value) => {
 
 const normalizeRegistrationNumber = (value) =>
   String(value ?? '').trim().toUpperCase();
+
+// Category / seats / fuel-efficiency fields from the request. `undefined` means
+// "not sent — leave as is"; a bad value is an error (never silently stored).
+// Returns { fields } with only the sent, valid ones, or { error }.
+const NUMBER_FIELDS = [
+  ['seats', 'Seats', 60, true],
+  ['ratedMileage', 'Rated mileage', 500, false],
+  ['tankCapacity', 'Tank capacity', 1000, false],
+];
+const parseProfileFields = (body) => {
+  const fields = {};
+  if (body.category !== undefined && body.category !== null) {
+    const category = String(body.category).trim();
+    if (category && !CATEGORY_KEYS.includes(category)) {
+      return { error: `Unknown vehicle category "${category}".` };
+    }
+    fields.category = category;
+  }
+  for (const [key, label, max, whole] of NUMBER_FIELDS) {
+    const raw = body[key];
+    if (raw === undefined || raw === null || String(raw).trim() === '') continue;
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0 || n > max || (whole && !Number.isInteger(n))) {
+      return { error: `${label} must be ${whole ? 'a whole number' : 'a number'} between 0 and ${max}.` };
+    }
+    fields[key] = n;
+  }
+  return { fields };
+};
 
 const handleVehicleError = (error, res) => {
   if (error?.code === 11000) {
@@ -75,7 +105,15 @@ export const createVehicle = async (req, res) => {
   } = req.body;
 
   try {
+    const profile = parseProfileFields(req.body);
+    if (profile.error) return res.status(400).json({ message: profile.error });
+    // A category on its own brings its usual seat count.
+    if (profile.fields.category && profile.fields.seats === undefined) {
+      profile.fields.seats = defaultSeatsFor(profile.fields.category);
+    }
+
     const vehicle = await Vehicle.create({
+      ...profile.fields,
       name,
       registrationNumber: normalizeRegistrationNumber(registrationNumber),
       type: type ?? 'car',
@@ -128,6 +166,14 @@ export const updateVehicle = async (req, res) => {
     vehicle.status = status ?? vehicle.status;
     vehicle.notes = notes ?? vehicle.notes;
     vehicle.ownershipType = ownershipType ?? vehicle.ownershipType;
+
+    const profile = parseProfileFields(req.body);
+    if (profile.error) return res.status(400).json({ message: profile.error });
+    // Choosing a category for a vehicle with no seat count recorded fills it in.
+    if (profile.fields.category && profile.fields.seats === undefined && !vehicle.seats) {
+      profile.fields.seats = defaultSeatsFor(profile.fields.category);
+    }
+    Object.assign(vehicle, profile.fields);
 
     await vehicle.save();
 

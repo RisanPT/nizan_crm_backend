@@ -1,4 +1,5 @@
 import Employee from '../models/Employee.js';
+import User from '../models/User.js';
 import Department from '../models/Department.js';
 import Designation from '../models/Designation.js';
 import SalaryIncrement from '../models/SalaryIncrement.js';
@@ -491,6 +492,16 @@ export const updateEmployee = async (req, res) => {
     }
 
     await employee.save();
+
+    // A driver set Inactive must not be able to sign in: the login follows the profile's
+    // status (before this, "Inactive" only changed the profile and the login kept working).
+    // A login that has also reached its end date stays closed when set back to Active.
+    if (status !== undefined && employee.artistRole === 'driver') {
+      await User.updateMany(
+        { employeeId: employee._id, role: 'driver' },
+        { $set: { active: employee.status === 'active' } },
+      );
+    }
 
     const populatedEmployee = await Employee.findById(employee._id)
       .populate('regionId', 'name status')

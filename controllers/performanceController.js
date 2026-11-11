@@ -3,7 +3,7 @@ import Employee from '../models/Employee.js';
 
 // "HR / Admin (anyone)" tier — there is no dedicated `hr` role, so full-access
 // roles stand in for HR. Department heads may evaluate only their own team.
-const isAdmin = (u) => u?.role === 'admin' || u?.role === 'manager';
+const isAdmin = (u) => u?.role === 'admin' || u?.role === 'manager' || u?.role === 'ceo'; // + 'ceo': read-only, enforced in middleware/ceoGuard.js
 const canRead = (u) => isAdmin(u) || u?.isDepartmentHead === true;
 
 const sameDept = (u, employee) =>

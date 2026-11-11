@@ -3,6 +3,8 @@ import Lead from '../models/Lead.js';
 import Booking from '../models/Booking.js';
 import { postDoc, safePost } from '../services/posting.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
+import { applyLeadGeography } from '../services/leadGeography.js';
+import { DERIVED_KEYS } from '../utils/leadGeography.js';
 import {
   notify,
   getUserIdsByRoles,
@@ -141,6 +143,8 @@ export const getLeads = async (req, res) => {
     const or = [
       { name: { $regex: esc, $options: 'i' } },
       { location: { $regex: esc, $options: 'i' } },
+      { pincode: { $regex: esc, $options: 'i' } },
+      { district: { $regex: esc, $options: 'i' } },
     ];
     // Phone matching is digit-tolerant: strip everything but digits from the
     // query, keep at most the last 10 (drops a typed country code), and allow any
@@ -497,6 +501,12 @@ export const createLead = async (req, res) => {
     const leadData = stripServerOwned({ ...req.body });
     // Old app versions may still send this; duplicates are no longer allowed.
     delete leadData.allowDuplicate;
+    // Pincode / district → consistent stored geography (the region and names are derived).
+    try {
+      await applyLeadGeography(leadData);
+    } catch (err) {
+      return res.status(err.status || 500).json({ message: err.message });
+    }
     if (req.user && req.user.role === 'sales') {
       leadData.assignedTo = req.user._id;
     }
@@ -598,6 +608,19 @@ export const updateLead = async (req, res) => {
       }
       delete leadData.bookedDate;
       delete leadData.eventDate;
+    }
+
+    // A lead linked to a booking takes its address / geography from that booking (kept in step by
+    // bookingController), so a lead-form save never rewrites them. An unlinked lead's pincode and
+    // district become consistent geography.
+    if (existing.bookingId && leadData.bookingId !== null) {
+      for (const key of ['pincode', 'districtId', ...DERIVED_KEYS]) delete leadData[key];
+    } else {
+      try {
+        await applyLeadGeography(leadData);
+      } catch (err) {
+        return res.status(err.status || 500).json({ message: err.message });
+      }
     }
 
     // A lead-form save sends campaignId: null whenever the user couldn't load

@@ -34,6 +34,28 @@ const DEFAULT_ROLES = [
     permissions: ['dashboard', 'calendar', 'finance', 'leave'],
   },
   {
+    key: 'ceo',
+    label: 'CEO',
+    homeRoute: '/ceo',
+    // A view-and-decide role (writes are refused in middleware/ceoGuard.js). Explicit sub-keys ONLY: a parent key such as
+    // staff / payables / company_finance would open salaries and bank screens, and `it` opens the full-database backup.
+    permissions: [
+      'dashboard',
+      'ceo',
+      'reports', // the CEO daily report
+      'planning',
+      'planning.manage', // sees every company project and can decide on proposals
+      'payables.dashboard', // Combined Accounts Dashboard + Work Profit
+      'company_finance.month_end', // Month-End Review, targets, the CEO Decisions log
+      'company_finance.dept_reviews',
+      'company_finance.sales_reports',
+      'sales.dashboard',
+      'marketing.insights',
+      'hr_analytics',
+      'staff.evaluation',
+    ],
+  },
+  {
     key: 'artist_head',
     label: 'Artist Head',
     homeRoute: '/artist-head',
@@ -197,6 +219,16 @@ export const ensureDefaultRoles = async () => {
   await Role.updateOne(
     { key: 'executive_coordinator' },
     { $addToSet: { permissions: 'planning.manage' } }
+  );
+  // Ensure Artist Head and Artist roles carry calendar access so they can view
+  // and coordinate works across dates.
+  await Role.updateOne(
+    { key: 'artist_head' },
+    { $addToSet: { permissions: 'calendar' } }
+  );
+  await Role.updateOne(
+    { key: 'artist' },
+    { $addToSet: { permissions: 'calendar' } }
   );
   // Grant the HRMS module keys to the full-access roles on existing deployments
   // (admin & manager). $addToSet only adds the missing keys; admin's other picks

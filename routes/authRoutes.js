@@ -7,6 +7,7 @@ import {
   login,
   updateUser,
   grantDriverLogin,
+  setDriverLoginAccess,
   provisionEmployeeLogin,
   bulkProvisionEmployees,
   renderSetPasswordPage,
@@ -21,6 +22,7 @@ router.get('/me', protect, getMe);
 router.get('/users', protect, getUsers);
 router.post('/users', protect, createUser);
 router.post('/users/driver-login', protect, grantDriverLogin);
+router.put('/users/driver-login/:employeeId', protect, setDriverLoginAccess);
 router.put('/users/:id', protect, updateUser);
 router.delete('/users/:id', protect, deleteUser);
 

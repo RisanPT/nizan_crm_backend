@@ -42,6 +42,8 @@ export const PERMISSION_KEYS = [
   'compensation',
   'grievance',
   'settings',
+  // The CEO home: the "needs your decision" inbox and the company-at-a-glance screen (a view-and-decide role).
+  'ceo',
 ];
 
 const roleSchema = new mongoose.Schema(

@@ -28,6 +28,20 @@ export const pincodeOf = (booking) => {
   return m ? `${m[1]}${m[2]}` : '';
 };
 
+/// Coordinates of pincodes ALREADY in the cache: Map(pin → { lat, lng }). Read-only — unlike
+/// coordsForPincodes it never queues a lookup, so a caller on a hot path (availability checks) can
+/// use whatever is known without ever causing an outside request.
+export const cachedCoordsForPincodes = async (pins) => {
+  const unique = [...new Set((pins ?? []).filter(Boolean))];
+  const out = new Map();
+  if (unique.length === 0) return out;
+  const rows = await GeoCache.find({ key: { $in: unique.map(pinKey) }, status: 'ok' }).select('key lat lng').lean();
+  for (const r of rows) {
+    if (r.lat != null && r.lng != null) out.set(r.key.slice('pin:'.length), { lat: r.lat, lng: r.lng });
+  }
+  return out;
+};
+
 /// Cached coordinates for pincodes: Map(pin → {lat,lng,label,district}).
 /// Unknown / stale pins are queued for a background lookup.
 export const coordsForPincodes = async (pins) => {
@@ -92,6 +106,13 @@ const waitTurn = () => {
   });
   turn = mine.catch(() => {});
   return mine;
+};
+
+/// Did the place service already say it does not know this pincode (within the retry window)?
+/// Lets a caller that looks pincodes up as people type skip the service for a known miss.
+export const isKnownMissingPincode = async (pin) => {
+  const row = await GeoCache.findOne({ key: pinKey(pin) }).select('status updatedAt').lean();
+  return row?.status === 'not_found' && Date.now() - new Date(row.updatedAt).getTime() < RETRY_NOT_FOUND_AFTER_MS;
 };
 
 /// Coordinates for one pincode now (cache first, else a live lookup that
