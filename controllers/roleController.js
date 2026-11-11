@@ -46,9 +46,20 @@ const DEFAULT_ROLES = [
       'planning',
       'planning.manage', // sees every company project and can decide on proposals
       'payables.dashboard', // Combined Accounts Dashboard + Work Profit
+      'payables.transactions',
+      'payables.admin_expenses',
+      'payables.collections',
+      'payables.fleet_expenses',
+      'payables.subscriptions',
+      'payables.sales_returns',
+      'finance',
+      'company_reports',
       'company_finance.month_end', // Month-End Review, targets, the CEO Decisions log
       'company_finance.dept_reviews',
       'company_finance.sales_reports',
+      'company_finance.aging',
+      'company_finance.reports',
+      'company_finance.assets',
       'sales.dashboard',
       'marketing.insights',
       'hr_analytics',

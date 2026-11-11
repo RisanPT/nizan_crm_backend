@@ -29,7 +29,10 @@ const thisMonth = () => {
 //            totals (every work in the period matching the search, whatever the flag), unallocated, gst, thinMarginPct, truncated }
 export const getWorkProfit = async (req, res) => {
   try {
-    if (!ACCOUNTS_ROLES.has(req.user?.role)) throw bad('Not authorized', 403);
+    const role = String(req.user?.role ?? '').trim().toLowerCase();
+    const perms = Array.isArray(req.user?.permissions) ? req.user.permissions : [];
+    const allowed = ACCOUNTS_ROLES.has(role) || perms.includes('payables.dashboard') || perms.includes('payables');
+    if (!allowed) throw bad('Not authorized', 403);
     const [monthFrom, monthTo] = thisMonth();
     const from = req.query.from ? parseDayParam(req.query.from) : monthFrom;
     const to = req.query.to ? parseDayParam(req.query.to) : monthTo;

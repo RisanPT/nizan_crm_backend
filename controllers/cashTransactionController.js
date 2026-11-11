@@ -7,7 +7,7 @@ import { postDoc, unpostDoc, ensureLockDate, isLocked } from '../services/postin
 
 // Accounts keys these in; finance roles, or any role granted the
 // `payables.transactions` screen (or all of `payables`).
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo'];
 const canUse = (u) =>
   FINANCE_ROLES.includes(String(u?.role || '').toLowerCase()) ||
   (u?.permissions || []).some((p) => p === 'payables' || p === 'payables.transactions');

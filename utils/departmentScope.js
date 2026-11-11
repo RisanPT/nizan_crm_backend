@@ -2,9 +2,10 @@ import Department from '../models/Department.js';
 import Employee from '../models/Employee.js';
 
 // Accounts + Admin are the approvers: they see every department and manage all
-// of them. Everyone else acts within their OWN department only.
-export const APPROVER_ROLES = ['admin', 'accounts', 'finance_head'];
-export const isApprover = (user) => APPROVER_ROLES.includes(user?.role);
+// of them. The CEO has company-wide visibility (read-only enforced by ceoGuard).
+export const APPROVER_ROLES = ['admin', 'accounts', 'finance_head', 'ceo'];
+export const isApprover = (user) =>
+  APPROVER_ROLES.includes(String(user?.role ?? '').trim().toLowerCase());
 
 // The department NAME a user is scoped to. Resolved in priority order so a
 // department head is recognised however their record is set up:

@@ -3,8 +3,8 @@ import ChartOfAccount from '../models/ChartOfAccount.js';
 import { accountMovements, round2 } from './accountingController.js';
 import { istMonthBounds } from '../utils/istDate.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
-const canManage = (u) => FINANCE_ROLES.includes(u?.role);
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo'];
+const canManage = (u) => FINANCE_ROLES.includes(String(u?.role ?? '').trim().toLowerCase());
 
 const d = (y, m, day) => new Date(y, m - 1, day); // m is 1-based
 const nextMonth = (m, y) => (m === 12 ? { m: 1, y: y + 1 } : { m: m + 1, y });
