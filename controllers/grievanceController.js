@@ -1,6 +1,10 @@
 import asyncHandler from 'express-async-handler';
 import Grievance from '../models/Grievance.js';
 import Employee from '../models/Employee.js';
+import { getHrScope, assertEmployeeInScope, isHrWide } from '../utils/hrDeptScope.js';
+
+// Dept heads only see/handle grievances of their own department's staff.
+const KEYS = ['grievance'];
 
 const isFull = (user) => ['admin', 'manager'].includes(String(user?.role || '').toLowerCase());
 
@@ -26,6 +30,14 @@ const getAll = asyncHandler(async (req, res) => {
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
   // Only full-access HR sees confidential cases.
   if (!isFull(req.user)) filter.confidential = { $ne: true };
+  // Dept head: only their department's staff, and never their own cases
+  // here (they still see those via /mine) — a head shouldn't triage a
+  // grievance they raised themselves.
+  const scope = await getHrScope(req, KEYS);
+  if (!scope.wide) {
+    const me = req.user.employeeId ? String(req.user.employeeId) : null;
+    filter.employeeId = { $in: scope.employeeIds.filter((id) => id !== me) };
+  }
   const rows = await Grievance.find(filter)
     .populate('employeeId', 'name department')
     .populate('assignedTo', 'name')
@@ -62,6 +74,12 @@ const updateGrievance = asyncHandler(async (req, res) => {
   const row = await Grievance.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Grievance not found'); }
   if (row.confidential && !isFull(req.user)) { res.status(403); throw new Error('This case is confidential'); }
+  await assertEmployeeInScope(req, res, row.employeeId, KEYS);
+  // Consistent with the list: a dept head can't act on their own grievance.
+  if (!(await isHrWide(req, KEYS)) && String(row.employeeId) === String(req.user.employeeId || '')) {
+    res.status(403);
+    throw new Error('You cannot handle your own grievance');
+  }
 
   const b = req.body;
   if (b.status !== undefined) {
@@ -91,6 +109,8 @@ const withdrawGrievance = asyncHandler(async (req, res) => {
 // @route DELETE /api/grievances/:id (admin/manager cleanup)
 const deleteGrievance = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  // Hard delete wipes the record entirely, so it's HR-wide only.
+  if (!(await isHrWide(req, KEYS))) { res.status(403); throw new Error('Only HR can delete grievances'); }
   const row = await Grievance.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Grievance not found'); }
   await row.deleteOne();

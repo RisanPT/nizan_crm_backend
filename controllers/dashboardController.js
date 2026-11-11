@@ -36,7 +36,9 @@ import {
 //  • basis=event filters on bookingDate (event date), basis=added on createdAt.
 //  • A "sale" excludes cancelled/rejected/lost/draft/pending bookings and
 //    bookings entered by users excluded from sales totals.
-//  • Value    = totalPrice − discountAmount (net).
+//  • Sales tab value = totalPrice (complete order value: package + add-ons,
+//    no discount or advance deducted) — same rule as the Sales EOD.
+//  • Finance / outstanding value = totalPrice − discountAmount (net).
 //  • Received = advanceAmount + collectedAmount (verified collections).
 //  • Outstanding = max(0, value − received).
 //  • Credit   = booking.salesPersonId, else the converted lead's assignedTo.
@@ -57,6 +59,9 @@ const oid = (v) => new mongoose.Types.ObjectId(String(v));
 export const isSale = (b) => !NOT_A_SALE.includes(lc(b.status));
 export const netValue = (b) =>
   Math.max(0, (Number(b.totalPrice) || 0) - (Number(b.discountAmount) || 0));
+/// Complete order value: package + add-ons (totalPrice already includes
+/// add-ons). Discount and advance are NOT deducted.
+export const orderValue = (b) => Math.max(0, Number(b.totalPrice) || 0);
 export const receivedOf = (b) =>
   (Number(b.advanceAmount) || 0) + (Number(b.collectedAmount) || 0);
 export const outstandingOf = (b) => Math.max(0, netValue(b) - receivedOf(b));
@@ -109,9 +114,9 @@ const bucketKeys = (from, to, unit) => {
 
 // ── Access helpers ────────────────────────────────────────────────────────────
 
-const isSelfScoped = (user) => SELF_SCOPED_ROLES.includes(lc(user?.role));
+export const isSelfScoped = (user) => SELF_SCOPED_ROLES.includes(lc(user?.role));
 
-const denyNonDashboard = (req, res) => {
+export const denyNonDashboard = (req, res) => {
   if (NO_DASHBOARD_ROLES.includes(lc(req.user?.role))) {
     res.status(403).json({ message: 'No dashboard access' });
     return true;
@@ -134,7 +139,7 @@ const creditedToMatch = async (userId) => ({
 
 /// Booking filter for the Sales tab: territory + salesperson. Date range is
 /// added by the caller (it differs between current and previous windows).
-const bookingFilters = async (req) => {
+export const bookingFilters = async (req) => {
   const and = [await regionScopedMatch(req.user)];
   const sp = isSelfScoped(req.user) ? String(req.user._id) : req.query.salesPersonId;
   if (sp && sp !== 'all' && isObjectId(sp)) and.push(await creditedToMatch(sp));
@@ -142,7 +147,7 @@ const bookingFilters = async (req) => {
 };
 
 /// Active salespeople (sales roles only — not every user / staff member).
-const salespeople = async () =>
+export const salespeople = async () =>
   (await User.find({ role: { $in: SALES_TARGET_ROLES }, active: { $ne: false } }).select('name role').sort({ name: 1 }).lean())
     .map((u) => ({ id: String(u._id), name: u.name || 'Unnamed', role: u.role }));
 
@@ -153,7 +158,7 @@ const BOOKING_FIELDS =
 
 /// Bookings matching [and] + date window, with the package family and the
 /// sales-count flag attached.
-const loadBookings = async (and, field, from, to) => {
+export const loadBookings = async (and, field, from, to) => {
   const [rows, counts] = await Promise.all([
     Booking.find({ $and: [...and, rangeMatch(field, from, to)] })
       .select(BOOKING_FIELDS)
@@ -169,7 +174,7 @@ const loadBookings = async (and, field, from, to) => {
 };
 
 /// Resolve each booking's credited salesperson id (salesPersonId → lead owner).
-const attachCredit = async (bookings) => {
+export const attachCredit = async (bookings) => {
   const leadIds = [...new Set(bookings.filter((b) => !b.salesPersonId && b.leadId).map((b) => String(b.leadId)))];
   const leads = leadIds.length
     ? await Lead.find({ _id: { $in: leadIds } }).select('assignedTo').lean()
@@ -181,10 +186,12 @@ const attachCredit = async (bookings) => {
   return bookings;
 };
 
-/// Pure: KPI block for a set of bookings.
-export const salesKpis = (bookings) => {
+/// Pure: KPI block for a set of bookings. [valueOf] decides the revenue
+/// figure — net for Finance, complete order value for the Sales tab.
+/// Outstanding is always net (what the client still owes).
+export const salesKpis = (bookings, valueOf = netValue) => {
   const sales = bookings.filter((b) => isSale(b) && b.counts !== false);
-  const revenue = sales.reduce((s, b) => s + netValue(b), 0);
+  const revenue = sales.reduce((s, b) => s + valueOf(b), 0);
   const received = sales.reduce((s, b) => s + receivedOf(b), 0);
   const outstanding = sales.reduce((s, b) => s + outstandingOf(b), 0);
   const discount = sales.reduce((s, b) => s + (Number(b.discountAmount) || 0), 0);
@@ -220,7 +227,7 @@ const groupBy = (items, keyFn, valueFn) => {
 };
 
 /// Lead counts for the window, honouring the same salesperson/geo filters.
-const leadMatch = async (req, from, to) => {
+export const leadMatch = async (req, from, to) => {
   const and = [await regionScopedMatch(req.user)];
   const created = { $gte: istStart(from), $lte: istEnd(to) };
   and.push({ $or: [{ leadDate: created }, { leadDate: null, createdAt: created }] });
@@ -258,9 +265,9 @@ export const getSalesDashboard = async (req, res) => {
     ]);
     await attachCredit(current);
 
-    const kpis = { ...salesKpis(current), enquiries: leadsNow };
+    const kpis = { ...salesKpis(current, orderValue), enquiries: leadsNow };
     kpis.conversion = round2(leadsNow ? (kpis.orders / leadsNow) * 100 : 0);
-    const prev = { ...salesKpis(previous), enquiries: leadsPrev };
+    const prev = { ...salesKpis(previous, orderValue), enquiries: leadsPrev };
     prev.conversion = round2(leadsPrev ? (prev.orders / leadsPrev) * 100 : 0);
 
     // Trend, current vs previous aligned by bucket index.
@@ -273,7 +280,7 @@ export const getSalesDashboard = async (req, res) => {
         if (!isSale(b) || b.counts === false) continue;
         const k = bucketKey(b[field], unit);
         const r = m.get(k) ?? { amount: 0, count: 0 };
-        r.amount += netValue(b);
+        r.amount += orderValue(b);
         r.count += 1;
         m.set(k, r);
       }
@@ -298,7 +305,7 @@ export const getSalesDashboard = async (req, res) => {
       const id = b.creditId && teamName.has(b.creditId) ? b.creditId : '';
       const r = spMap.get(id) ?? { id, label: id ? teamName.get(id) : 'Direct / Others', count: 0, amount: 0 };
       r.count += 1;
-      r.amount += netValue(b);
+      r.amount += orderValue(b);
       spMap.set(id, r);
     }
 
@@ -309,9 +316,9 @@ export const getSalesDashboard = async (req, res) => {
       kpis,
       previous: prev,
       trend,
-      byStatus: groupBy(current, (b) => lc(b.status) || 'pending', netValue),
-      byPackage: groupBy(sales, (b) => b.serviceType, netValue),
-      byDistrict: groupBy(sales, (b) => titleCase(b.district || b.region), netValue),
+      byStatus: groupBy(current, (b) => lc(b.status) || 'pending', orderValue),
+      byPackage: groupBy(sales, (b) => b.serviceType, orderValue),
+      byDistrict: groupBy(sales, (b) => titleCase(b.district || b.region), orderValue),
       bySalesperson: [...spMap.values()]
         .map((r) => ({ ...r, amount: round2(r.amount) }))
         .sort((a, b) => b.amount - a.amount),
@@ -346,7 +353,7 @@ const monthsIn = (from, to) => {
 
 const LEAD_STAGES = ['New', 'Contacted', 'Qualified', 'Follow-up', 'Pending Lost Approval', 'Lost', 'Converted'];
 const leadDay = (l) => l.leadDate || l.createdAt;
-const titleCase = (s) =>
+export const titleCase = (s) =>
   String(s ?? '').trim().toLowerCase().replace(/\s+/g, ' ').replace(/\b([a-z])/g, (m) => m.toUpperCase());
 
 /// Campaigns running at any point in [from, to] (open-ended dates count).

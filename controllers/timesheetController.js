@@ -4,8 +4,12 @@ import Employee from '../models/Employee.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import { createApproval } from '../services/approvals.js';
 import { buildEmployeeApprovalChain } from '../utils/approvalChain.js';
+import { scopeFilter, assertEmployeeInScope } from '../utils/hrDeptScope.js';
 
 const empPopulate = { path: 'employeeId', select: 'name department profileImage' };
+
+// Management key for company-wide timesheet rights.
+const TS_KEYS = ['timesheet'];
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
@@ -42,6 +46,8 @@ const getTimesheets = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
   else filter.status = { $ne: 'draft' }; // managers see submitted work, not drafts
+  // Dept heads see only their own department's timesheets.
+  Object.assign(filter, await scopeFilter(req, TS_KEYS));
   const rows = await Timesheet.find(filter).populate(empPopulate).sort({ periodStart: -1 }).limit(200);
   res.json(rows);
 });
@@ -52,6 +58,7 @@ const saveTimesheet = asyncHandler(async (req, res) => {
   const onBehalf = req.body.employeeId && String(req.body.employeeId) !== String(employeeId || '');
   if (onBehalf) {
     if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed to file for others'); }
+    await assertEmployeeInScope(req, res, req.body.employeeId, TS_KEYS);
     employeeId = req.body.employeeId;
   }
   if (!employeeId) { res.status(400); throw new Error('No employee record is linked to your account.'); }
@@ -87,6 +94,7 @@ const submitTimesheet = asyncHandler(async (req, res) => {
   if (!ts) { res.status(404); throw new Error('Timesheet not found'); }
   const owns = String(ts.employeeId) === String(req.user.employeeId || '');
   if (!owns && !canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  if (!owns) await assertEmployeeInScope(req, res, ts.employeeId, TS_KEYS);
   if (ts.status !== 'draft') { res.status(409); throw new Error('Only a draft can be submitted'); }
   if (!ts.entries.length) { res.status(400); throw new Error('Add at least one entry before submitting'); }
 
@@ -119,6 +127,7 @@ const deleteTimesheet = asyncHandler(async (req, res) => {
   if (!ts) { res.status(404); throw new Error('Timesheet not found'); }
   const owns = String(ts.employeeId) === String(req.user.employeeId || '');
   if (!owns && !canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  if (!owns) await assertEmployeeInScope(req, res, ts.employeeId, TS_KEYS);
   if (ts.status !== 'draft') { res.status(409); throw new Error('Only a draft can be deleted'); }
   await ts.deleteOne();
   res.json({ message: 'Timesheet removed', id: req.params.id });

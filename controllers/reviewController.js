@@ -132,14 +132,20 @@ export const ensureReviewForBooking = async (booking, user) => {
   return review;
 };
 
-// @route POST /api/reviews/for-booking/:bookingId  (auth)
+// @route POST /api/reviews/for-booking/:bookingId  (auth)   body: markSent?
 // Ensure a review exists for a booking and return its public form URL, so the
 // app can send the link on demand (independent of the completion save flow).
+// markSent=true is the "Send Review" button: staff are sending it by hand, so
+// the automatic next-day send (services/reviewAutoSend.js) skips this review.
 export const createReviewForBooking = async (req, res) => {
   try {
     const booking = await Booking.findById(req.params.bookingId);
     if (!booking) return res.status(404).json({ message: 'Booking not found' });
     const review = await ensureReviewForBooking(booking, req.user);
+    if (req.body?.markSent === true && !review.manualSentAt && review.autoSendStatus !== 'sent') {
+      review.manualSentAt = new Date();
+      await review.save();
+    }
     res.json({ reviewUrl: reviewFormUrl(req, review.token), token: review.token });
   } catch (error) {
     res.status(500).json({ message: error.message });

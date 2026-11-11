@@ -75,3 +75,24 @@ export const sendTeamnChatDocument = (mode, { pdf, filename, phone, kind, refere
   const path = mode === 'send' ? '/api/integrations/send-document' : '/api/integrations/documents';
   return call(path, { method: 'POST', body: form });
 };
+
+/**
+ * Sends an approved WhatsApp template by itself (guide section 7) — e.g. the
+ * next-day review request. TeamN Chat never sends the same template + phone +
+ * reference twice (it answers `duplicate: true`), so a retry is safe.
+ */
+export const sendTeamnChatTemplate = ({ template, phone, bodyParams, buttonParams, reference, channel, customerName, sentBy }) =>
+  call('/api/integrations/send-template', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      template,
+      phone,
+      body_params: bodyParams,
+      button_params: buttonParams,
+      ...(reference ? { reference } : {}),
+      ...(channel ? { channel } : {}),
+      ...(customerName ? { customer_name: customerName } : {}),
+      ...(sentBy ? { sent_by: sentBy } : {}),
+    }),
+  });

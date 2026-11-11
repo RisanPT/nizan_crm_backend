@@ -5,8 +5,12 @@ import Employee from '../models/Employee.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import { createApproval } from '../services/approvals.js';
 import { buildEmployeeApprovalChain } from '../utils/approvalChain.js';
+import { scopeFilter, assertEmployeeInScope, isHrWide } from '../utils/hrDeptScope.js';
 
 const empPopulate = { path: 'employeeId', select: 'name department profileImage' };
+
+// Management key for company-wide compensation rights.
+const COMP_KEYS = ['compensation'];
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
@@ -23,6 +27,15 @@ const guard = (req, res) => {
   }
 };
 
+// Salary bands are company master data — HR-wide only (dept heads read-only).
+const guardMaster = async (req, res) => {
+  guard(req, res);
+  if (!(await isHrWide(req, COMP_KEYS))) {
+    res.status(403);
+    throw new Error('Only HR can create or change salary bands');
+  }
+};
+
 // ── Salary bands ─────────────────────────────────────────────────────────────
 const getBands = asyncHandler(async (_req, res) => {
   const bands = await SalaryBand.find({}).sort({ level: 1, name: 1 }).lean();
@@ -30,7 +43,7 @@ const getBands = asyncHandler(async (_req, res) => {
 });
 
 const createBand = asyncHandler(async (req, res) => {
-  guard(req, res);
+  await guardMaster(req, res);
   const name = String(req.body.name || '').trim();
   if (!name) { res.status(400); throw new Error('Please provide a band name'); }
   const band = await SalaryBand.create({
@@ -47,7 +60,7 @@ const createBand = asyncHandler(async (req, res) => {
 });
 
 const updateBand = asyncHandler(async (req, res) => {
-  guard(req, res);
+  await guardMaster(req, res);
   const band = await SalaryBand.findById(req.params.id);
   if (!band) { res.status(404); throw new Error('Band not found'); }
   const b = req.body;
@@ -63,7 +76,7 @@ const updateBand = asyncHandler(async (req, res) => {
 });
 
 const deleteBand = asyncHandler(async (req, res) => {
-  guard(req, res);
+  await guardMaster(req, res);
   const band = await SalaryBand.findByIdAndDelete(req.params.id);
   if (!band) { res.status(404); throw new Error('Band not found'); }
   res.json({ message: 'Band removed', id: req.params.id });
@@ -75,7 +88,11 @@ const getRevisions = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.employeeId) filter.employeeId = req.query.employeeId;
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
-  const rows = await CompensationRevision.find(filter).populate(empPopulate).sort({ createdAt: -1 }).limit(300);
+  // Dept heads see only their own department ($and so a query employeeId
+  // can't widen it).
+  const scope = await scopeFilter(req, COMP_KEYS);
+  const finalFilter = Object.keys(scope).length ? { $and: [filter, scope] } : filter;
+  const rows = await CompensationRevision.find(finalFilter).populate(empPopulate).sort({ createdAt: -1 }).limit(300);
   res.json(rows);
 });
 
@@ -86,6 +103,13 @@ const proposeRevision = asyncHandler(async (req, res) => {
   const proposedSalary = Number(req.body.proposedSalary) || 0;
   if (!employeeId) { res.status(400); throw new Error('An employee is required'); }
   if (proposedSalary <= 0) { res.status(400); throw new Error('Proposed salary must be greater than zero'); }
+  // Nobody proposes their own pay rise (the owner/admin account excepted).
+  if (String(req.user.role || '').toLowerCase() !== 'admin' &&
+      req.user.employeeId && String(req.user.employeeId) === employeeId) {
+    res.status(403);
+    throw new Error('You cannot propose a revision for yourself');
+  }
+  await assertEmployeeInScope(req, res, employeeId, COMP_KEYS);
 
   const employee = await Employee.findById(employeeId);
   if (!employee) { res.status(404); throw new Error('Employee not found'); }
@@ -133,6 +157,7 @@ const cancelRevision = asyncHandler(async (req, res) => {
   guard(req, res);
   const rev = await CompensationRevision.findById(req.params.id);
   if (!rev) { res.status(404); throw new Error('Revision not found'); }
+  await assertEmployeeInScope(req, res, rev.employeeId, COMP_KEYS);
   if (rev.status !== 'pending') { res.status(409); throw new Error('Only a pending revision can be cancelled'); }
   rev.status = 'cancelled';
   await rev.save();

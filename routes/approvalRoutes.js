@@ -1,5 +1,5 @@
 import express from 'express';
-import { protect } from '../middleware/authMiddleware.js';
+import { protect, attachRolePermissions } from '../middleware/authMiddleware.js';
 import {
   getApprovalInbox,
   getMyApprovals,
@@ -10,7 +10,7 @@ import {
 
 const router = express.Router();
 
-router.use(protect);
+router.use(protect, attachRolePermissions);
 
 router.get('/inbox', getApprovalInbox);
 router.get('/mine', getMyApprovals);

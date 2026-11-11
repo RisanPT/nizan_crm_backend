@@ -25,6 +25,11 @@ export const NOTIFICATION_TYPES = {
   MONTH_END_SUMMARY: 'month_end_summary',
   SALES_TARGET_MIDMONTH: 'sales_target_midmonth',
   SALES_TARGET_TEAM_MIDMONTH: 'sales_target_team_midmonth',
+  CONSULTATION_ASSIGNED: 'consultation_assigned',
+  CONSULTATION_CHANGED: 'consultation_changed',
+  CONSULTATION_REMINDER: 'consultation_reminder',
+  MARKETING_EOD_REMINDER: 'marketing_eod_reminder',
+  MARKETING_EOD_MISSED_SUMMARY: 'marketing_eod_missed_summary',
 };
 
 // Stakeholders (admin accounts) are not part of the day-to-day operational

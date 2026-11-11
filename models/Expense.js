@@ -36,6 +36,12 @@ const expenseSchema = mongoose.Schema(
       required: true,
       default: Date.now,
     },
+    // When the work this bill belongs to took place. Bridal bills take it
+    // from the linked booking (bookingId); model-shoot bills store it here.
+    eventDate: {
+      type: Date,
+      default: null,
+    },
     notes: {
       type: String,
       default: '',

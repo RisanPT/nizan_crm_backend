@@ -4,15 +4,21 @@ import Employee from '../models/Employee.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import { createApproval } from '../services/approvals.js';
 import { buildEmployeeApprovalChain } from '../utils/approvalChain.js';
+import { scopeFilter, assertEmployeeInScope } from '../utils/hrDeptScope.js';
 
 const empPopulate = { path: 'employeeId', select: 'name department profileImage' };
 
+// Management key for company-wide regularization rights.
+const REG_KEYS = ['regularization'];
+
+// Not the plain `leave` key: every employee/artist has it for self-service,
+// so it must not unlock everyone's regularizations.
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
   if (role === 'admin' || role === 'manager') return true;
   if (user?.isDepartmentHead) return true;
   const perms = user?.permissions || [];
-  return perms.includes('staff') || perms.includes('leave') || perms.includes('regularization');
+  return perms.includes('staff') || perms.includes('regularization');
 };
 
 // @route GET /api/regularizations/mine
@@ -33,6 +39,8 @@ const getRequests = asyncHandler(async (req, res) => {
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
   if (req.query.month) filter.month = Number(req.query.month);
   if (req.query.year) filter.year = Number(req.query.year);
+  // Dept heads see only their own department's requests.
+  Object.assign(filter, await scopeFilter(req, REG_KEYS));
   const rows = await AttendanceRegularization.find(filter).populate(empPopulate).sort({ date: -1 }).limit(200);
   res.json(rows);
 });
@@ -43,6 +51,7 @@ const applyRegularization = asyncHandler(async (req, res) => {
   const onBehalf = req.body.employeeId && String(req.body.employeeId) !== String(employeeId || '');
   if (onBehalf) {
     if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed to file for others'); }
+    await assertEmployeeInScope(req, res, req.body.employeeId, REG_KEYS);
     employeeId = req.body.employeeId;
   }
   if (!employeeId) { res.status(400); throw new Error('No employee record is linked to your account.'); }
@@ -94,6 +103,7 @@ const cancelRegularization = asyncHandler(async (req, res) => {
   if (!reg) { res.status(404); throw new Error('Request not found'); }
   const owns = String(reg.employeeId) === String(req.user.employeeId || '');
   if (!owns && !canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  if (!owns) await assertEmployeeInScope(req, res, reg.employeeId, REG_KEYS);
   if (reg.status !== 'pending') { res.status(409); throw new Error('Only a pending request can be cancelled'); }
   reg.status = 'cancelled';
   await reg.save();

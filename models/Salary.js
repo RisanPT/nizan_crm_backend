@@ -89,6 +89,13 @@ const salarySchema = mongoose.Schema(
       required: true,
       default: 0,
     },
+    // The part of `deductions` that came from attendance (absence / LOP).
+    // Kept separately so re-running attendance payroll replaces only this part
+    // and never wipes manual deductions or advances. null = legacy slip.
+    attendanceDeduction: {
+      type: Number,
+      default: null,
+    },
     status: {
       type: String,
       enum: SALARY_STATUSES,

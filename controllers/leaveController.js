@@ -7,21 +7,151 @@ import Employee from '../models/Employee.js';
 import User from '../models/User.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import { createApproval } from '../services/approvals.js';
+import { dispatchLeaveCallback } from '../services/leaveCallbackService.js';
+import Department from '../models/Department.js';
+import { scopeFilter, canManageEmployee, isHrWide } from '../utils/hrDeptScope.js';
+import {
+  asOfForYear,
+  computeTypeBalance,
+  countLeaveDays,
+  daysInYear,
+  normaliseWeeklyOffs,
+  toDayKey,
+  yearOf,
+} from '../utils/leaveMath.js';
 
 const empPopulate = { path: 'employeeId', select: 'name department profileImage' };
 
-/// HR / admin / dept-head / anyone granted the `leave` or `staff` feature may
-/// manage leave for others. Plain employees can only act on their own records.
+/// Admin / manager / dept-head / anyone granted the `staff` module may manage
+/// leave for others. NOT the plain `leave` key — that is the self-service key
+/// every employee and artist has, so it must never unlock others' leave.
 const canManageLeave = (user) => {
   const role = String(user?.role || '');
   if (role === 'admin' || role === 'manager') return true;
   if (user?.isDepartmentHead) return true;
   const perms = Array.isArray(user?.permissions) ? user.permissions : [];
-  return perms.some((p) => p === 'leave' || p === 'staff' || String(p).startsWith('leave.') || String(p).startsWith('staff.'));
+  return perms.some((p) => p === 'staff' || String(p).startsWith('staff.'));
 };
 
-const dayDiffInclusive = (from, to) =>
-  Math.round((to.setHours(0, 0, 0, 0) - from.setHours(0, 0, 0, 0)) / 86400000) + 1;
+// No module key grants company-wide leave rights (see above): only
+// admin/manager, the `staff` module and the HR department head are HR-wide.
+const LEAVE_KEYS = [];
+
+/// Narrow a list filter to the caller's department scope. `$and` so a dept
+/// head can't widen it by passing another employee's id in the query.
+const withLeaveScope = async (req, filter) => {
+  const scope = await scopeFilter(req, LEAVE_KEYS);
+  return Object.keys(scope).length ? { $and: [filter, scope] } : filter;
+};
+
+/// Manager AND the target employee is in their department (HR-wide: anyone).
+const canManageLeaveFor = async (req, employeeId) =>
+  canManageLeave(req.user) && canManageEmployee(req, employeeId, LEAVE_KEYS);
+
+/// Leave types / holidays are company master data — HR-wide only.
+const canEditLeaveMaster = async (req) => canManageLeave(req.user) && isHrWide(req, LEAVE_KEYS);
+
+const parseDateMiddayUtc = (d) => {
+  if (!d) return null;
+  if (typeof d === 'string') {
+    const m = d.match(/^(\d{4})-(\d{2})-(\d{2})/);
+    if (m) {
+      return new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0));
+    }
+  }
+  const dt = new Date(d);
+  return new Date(Date.UTC(dt.getFullYear(), dt.getMonth(), dt.getDate(), 12, 0, 0));
+};
+
+const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const DAY_MS = 86400000;
+
+/// An employee's weekly offs = their department's (by departmentId, else by the
+/// free-text department name), else Sunday.
+async function weeklyOffsFor(employee) {
+  let dept = null;
+  if (employee?.departmentId) {
+    dept = await Department.findById(employee.departmentId).select('weeklyOffs').lean();
+  }
+  if (!dept && employee?.department) {
+    dept = await Department.findOne({
+      name: new RegExp(`^\\s*${escapeRegExp(String(employee.department).trim())}\\s*$`, 'i'),
+    })
+      .select('weeklyOffs')
+      .lean();
+  }
+  return normaliseWeeklyOffs(dept?.weeklyOffs);
+}
+
+/// Holidays that could fall between two dates (plus recurring ones). A day of
+/// slack either side covers holidays stored at midnight in another timezone.
+const holidaysBetween = (from, to) =>
+  Holiday.find({
+    $or: [
+      { date: { $gte: new Date(from.getTime() - DAY_MS), $lte: new Date(to.getTime() + DAY_MS) } },
+      { recurring: true },
+    ],
+  })
+    .select('date recurring type')
+    .lean();
+
+/// { weeklyOffs, holidays } for counting an employee's leave days in a range.
+async function leaveDayContext(employee, from, to) {
+  const [weeklyOffs, holidays] = await Promise.all([weeklyOffsFor(employee), holidaysBetween(from, to)]);
+  return { weeklyOffs, holidays };
+}
+
+const todayKey = () => toDayKey(new Date());
+
+/// Per-type balances for `employee` in `year` (monthly credit, carry-forward,
+/// used, pending). `types` defaults to the active leave types.
+async function computeBalances(employee, year, { types, asOfKey } = {}) {
+  const typeList =
+    types || (await LeaveType.find({ active: true }).sort({ order: 1, name: 1 }).lean());
+  const asOf = asOfKey || asOfForYear(year, todayKey());
+  const winStart = new Date(Date.UTC(year - 1, 0, 1));
+  const winEnd = new Date(Date.UTC(year, 11, 31, 23, 59, 59));
+  const reqs = await LeaveRequest.find({
+    employeeId: employee._id,
+    status: { $in: ['approved', 'pending'] },
+    fromDate: { $lte: winEnd },
+    toDate: { $gte: winStart },
+  })
+    .select('leaveTypeId fromDate toDate days status')
+    .lean();
+
+  // Only a leave crossing Dec→Jan needs the calendar to split its days.
+  const crosses = reqs.some((r) => yearOf(toDayKey(r.fromDate)) !== yearOf(toDayKey(r.toDate)));
+  const ctx = crosses
+    ? await leaveDayContext(employee, new Date(Date.UTC(year - 2, 11, 1)), new Date(Date.UTC(year + 1, 0, 31)))
+    : {};
+
+  const joinKey = employee.dateOfJoining ? toDayKey(employee.dateOfJoining) : null;
+  return typeList.map((t) => {
+    let used = 0;
+    let pending = 0;
+    let lastYearUsed = 0;
+    for (const r of reqs) {
+      if (String(r.leaveTypeId || '') !== String(t._id)) continue;
+      if (r.status === 'approved') {
+        used += daysInYear(r, year, ctx);
+        lastYearUsed += daysInYear(r, year - 1, ctx);
+      } else {
+        pending += daysInYear(r, year, ctx);
+      }
+    }
+    const b = computeTypeBalance({ type: t, year, asOfKey: asOf, joinKey, used, pending, lastYearUsed });
+    return {
+      leaveTypeId: t._id,
+      name: t.name,
+      code: t.code || '',
+      color: t.color,
+      paid: t.paid,
+      year,
+      ...b,
+    };
+  });
+}
 
 const toObjectId = (v) => {
   try {
@@ -57,7 +187,29 @@ async function buildLeaveChain(employee) {
 // @route GET /api/leave/types
 export const getLeaveTypes = async (_req, res) => {
   try {
-    res.json(await LeaveType.find({}).sort({ order: 1, name: 1 }));
+    let list = await LeaveType.find({}).sort({ order: 1, name: 1 });
+    if (!list || list.length === 0) {
+      const defaults = [
+        { name: 'Casual Leave', code: 'CL', annualQuota: 12, paid: true, carryForward: false, color: '#3B82F6', order: 1 },
+        { name: 'Sick Leave', code: 'SL', annualQuota: 12, paid: true, carryForward: true, carryForwardMax: 6, color: '#EF4444', order: 2 },
+        { name: 'Earned Leave', code: 'EL', annualQuota: 15, paid: true, carryForward: true, carryForwardMax: 15, color: '#10B981', order: 3 },
+        { name: 'Unpaid Leave (LWP)', code: 'LWP', annualQuota: 0, paid: false, carryForward: false, color: '#6B7280', order: 4 },
+      ];
+      await LeaveType.insertMany(defaults);
+      list = await LeaveType.find({}).sort({ order: 1, name: 1 });
+    }
+    res.json(list);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// @desc  Whether the caller may edit leave types / holidays (HR-wide only), so
+//        the app can show the Leave Types editor to the right people.
+// @route GET /api/leave/types/access
+export const getLeaveMasterAccess = async (req, res) => {
+  try {
+    res.json({ canEdit: await canEditLeaveMaster(req) });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -66,7 +218,7 @@ export const getLeaveTypes = async (_req, res) => {
 // @route POST /api/leave/types
 export const createLeaveType = async (req, res) => {
   try {
-    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
+    if (!(await canEditLeaveMaster(req))) return res.status(403).json({ message: 'Not allowed' });
     const { name, code, annualQuota, paid, carryForward, carryForwardMax, docRequired, color, order } = req.body;
     if (!name) return res.status(400).json({ message: 'Name is required' });
     const t = await LeaveType.create({
@@ -89,7 +241,7 @@ export const createLeaveType = async (req, res) => {
 // @route PUT /api/leave/types/:id
 export const updateLeaveType = async (req, res) => {
   try {
-    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
+    if (!(await canEditLeaveMaster(req))) return res.status(403).json({ message: 'Not allowed' });
     const t = await LeaveType.findById(req.params.id);
     if (!t) return res.status(404).json({ message: 'Leave type not found' });
     const fields = ['name', 'code', 'docRequired', 'color'];
@@ -110,7 +262,7 @@ export const updateLeaveType = async (req, res) => {
 // @route DELETE /api/leave/types/:id
 export const deleteLeaveType = async (req, res) => {
   try {
-    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
+    if (!(await canEditLeaveMaster(req))) return res.status(403).json({ message: 'Not allowed' });
     const t = await LeaveType.findById(req.params.id);
     if (!t) return res.status(404).json({ message: 'Leave type not found' });
     await t.deleteOne();
@@ -124,7 +276,7 @@ export const deleteLeaveType = async (req, res) => {
 // @route POST /api/leave/types/seed
 export const seedLeaveTypes = async (req, res) => {
   try {
-    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
+    if (!(await canEditLeaveMaster(req))) return res.status(403).json({ message: 'Not allowed' });
     const defaults = [
       { name: 'Casual', code: 'CL', annualQuota: 8, paid: true, order: 1 },
       { name: 'Sick', code: 'SL', annualQuota: 6, paid: true, docRequired: 'Certificate > 2 days', order: 2 },
@@ -156,7 +308,7 @@ export const applyLeave = async (req, res) => {
     const onBehalf =
       req.body.employeeId && String(req.body.employeeId) !== String(req.user.employeeId || '');
     if (onBehalf) {
-      if (!canManageLeave(req.user)) {
+      if (!(await canManageLeaveFor(req, req.body.employeeId))) {
         return res.status(403).json({ message: 'Not allowed to file leave for others' });
       }
       employeeId = req.body.employeeId;
@@ -168,18 +320,80 @@ export const applyLeave = async (req, res) => {
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
     if (!fromDate || !toDate) return res.status(400).json({ message: 'Select the leave dates.' });
-    const from = new Date(fromDate);
-    const to = new Date(toDate);
-    if (Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
+    const from = parseDateMiddayUtc(fromDate);
+    const to = parseDateMiddayUtc(toDate);
+    if (!from || !to || Number.isNaN(from.getTime()) || Number.isNaN(to.getTime())) {
       return res.status(400).json({ message: 'Enter valid dates.' });
     }
     if (to < from) return res.status(400).json({ message: 'End date cannot be before start date.' });
 
-    const fromKeep = new Date(from);
-    let days = dayDiffInclusive(new Date(from), new Date(to));
-    if ((halfDay || 'none') !== 'none' && days === 1) days = 0.5;
+    let leaveType = leaveTypeId ? await LeaveType.findById(leaveTypeId) : null;
+    if (!leaveType) {
+      leaveType = await LeaveType.findOne({ active: { $ne: false } }).sort({ order: 1 });
+    }
 
-    const leaveType = leaveTypeId ? await LeaveType.findById(leaveTypeId) : null;
+    // Days = calendar days − the department's weekly offs − holidays (no
+    // sandwich rule). A single-day half-day is 0.5.
+    // The app has sent 'first_half'/'second_half'; the model stores first/second.
+    const HALF_ALIASES = { first_half: 'first', second_half: 'second' };
+    const half = HALF_ALIASES[halfDay] || (['first', 'second'].includes(halfDay) ? halfDay : 'none');
+    const ctx = await leaveDayContext(employee, from, to);
+    const counted = countLeaveDays({ from, to, ...ctx, halfDay: half });
+    const days = counted.days;
+    if (days <= 0) {
+      return res.status(400).json({ message: 'Those dates are all weekly offs/holidays — no leave is needed.' });
+    }
+
+    // No overlap with another pending/approved leave of the same employee
+    // (two half-days on different halves of the same day are fine).
+    const overlaps = await LeaveRequest.find({
+      employeeId: employee._id,
+      status: { $in: ['pending', 'approved'] },
+      fromDate: { $lte: new Date(to.getTime() + DAY_MS / 2) },
+      toDate: { $gte: new Date(from.getTime() - DAY_MS / 2) },
+    })
+      .select('fromDate toDate halfDay status')
+      .lean();
+    const fromKey = toDayKey(from);
+    const toKey = toDayKey(to);
+    const clash = overlaps.find((o) => {
+      const ok = toDayKey(o.fromDate);
+      const okEnd = toDayKey(o.toDate);
+      if (okEnd < fromKey || ok > toKey) return false;
+      const bothHalves =
+        half !== 'none' && fromKey === toKey && ok === okEnd && (o.halfDay || 'none') !== 'none' && o.halfDay !== half;
+      return !bothHalves;
+    });
+    if (clash) {
+      return res.status(409).json({
+        message: `These dates overlap an existing ${clash.status} leave (${toDayKey(clash.fromDate)} to ${toDayKey(clash.toDate)}).`,
+      });
+    }
+
+    // A comp-off being spent covers the leave instead of the type's quota.
+    let compOff = null;
+    if (useCompOffId) {
+      compOff = await CompOff.findOne({ _id: useCompOffId, employeeId: employee._id, status: 'available' }).lean();
+      if (!compOff) return res.status(400).json({ message: 'That comp-off is not available.' });
+    }
+
+    // Balance check — paid types with a quota only (LWP / quota 0 skip it).
+    // Each calendar year is checked against its own credit.
+    if (!compOff && leaveType && leaveType.paid !== false && Number(leaveType.annualQuota) > 0) {
+      for (const [y, need] of Object.entries(counted.byYear)) {
+        const [bal] = await computeBalances(employee, Number(y), { types: [leaveType.toObject()] });
+        if (bal && need > bal.available) {
+          const multiYear = Object.keys(counted.byYear).length > 1;
+          return res.status(400).json({
+            message:
+              `Not enough ${leaveType.name} balance${multiYear ? ` for ${y}` : ''}: ` +
+              `${bal.available} day(s) available, this request needs ${need}.`,
+            available: bal.available,
+            requested: need,
+          });
+        }
+      }
+    }
 
     const lr = await LeaveRequest.create({
       employeeId: employee._id,
@@ -187,15 +401,15 @@ export const applyLeave = async (req, res) => {
       department: employee.department || '',
       leaveTypeId: leaveType?._id || null,
       leaveTypeName: leaveType?.name || '',
-      fromDate: fromKeep,
+      fromDate: from,
       toDate: to,
       days,
-      halfDay: halfDay || 'none',
+      halfDay: half,
       reason: reason || '',
       documentUrl: documentUrl || '',
       status: 'pending',
-      month: fromKeep.getMonth() + 1,
-      year: fromKeep.getFullYear(),
+      month: from.getUTCMonth() + 1,
+      year: from.getUTCFullYear(),
       compOffId: useCompOffId || null,
       createdBy: req.user?._id || null,
     });
@@ -251,16 +465,10 @@ export const getLeaveRequests = async (req, res) => {
     if (employeeId && employeeId !== 'all') filter.employeeId = employeeId;
     if (department && department !== 'all') filter.department = department;
 
-    if (!canManageLeave(req.user)) {
-      if (req.user.isDepartmentHead && req.user.departmentId) {
-        const emps = await Employee.find({ departmentId: req.user.departmentId }).select('_id');
-        filter.employeeId = { $in: emps.map((e) => e._id) };
-      } else {
-        return res.status(403).json({ message: 'Not allowed' });
-      }
-    }
+    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
 
-    const list = await LeaveRequest.find(filter)
+    // Dept heads see only their own department's requests.
+    const list = await LeaveRequest.find(await withLeaveScope(req, filter))
       .populate(empPopulate)
       .sort({ fromDate: -1 })
       .limit(500);
@@ -270,26 +478,53 @@ export const getLeaveRequests = async (req, res) => {
   }
 };
 
-// @desc  Cancel a pending leave request (owner or HR).
+// @desc  Cancel a leave request.
+//        Pending: the owner or a manager in scope.
+//        Approved: the owner before the leave's start date, or a manager in
+//        scope at any time (not on their own leave). Balances are computed, so
+//        they restore automatically; a spent comp-off is released.
 // @route POST /api/leave/:id/cancel
 export const cancelLeave = async (req, res) => {
   try {
     const lr = await LeaveRequest.findById(req.params.id);
     if (!lr) return res.status(404).json({ message: 'Leave request not found' });
-    const isOwner = req.user.employeeId && String(lr.employeeId) === String(req.user.employeeId);
-    if (!isOwner && !canManageLeave(req.user)) {
-      return res.status(403).json({ message: 'Not allowed' });
+    const isOwner = !!req.user.employeeId && String(lr.employeeId) === String(req.user.employeeId);
+    const isAdmin = String(req.user.role || '') === 'admin';
+    // Manager rights never apply to one's own leave (the admin account excepted).
+    const asManager = (!isOwner || isAdmin) && (await canManageLeaveFor(req, lr.employeeId));
+    if (!isOwner && !asManager) return res.status(403).json({ message: 'Not allowed' });
+
+    if (lr.status === 'approved') {
+      const started = toDayKey(lr.fromDate) <= todayKey();
+      if (!asManager && started) {
+        return res.status(400).json({
+          message: 'This leave has already started — ask your manager or HR to cancel it.',
+        });
+      }
+    } else if (lr.status !== 'pending') {
+      return res.status(400).json({ message: `This leave is already ${lr.status}.` });
     }
-    if (lr.status !== 'pending') {
-      return res.status(400).json({ message: 'Only a pending request can be cancelled.' });
-    }
+
+    const wasApproved = lr.status === 'approved';
     lr.status = 'cancelled';
+    lr.cancelledBy = req.user._id || null;
+    lr.cancelledAt = new Date();
+    lr.cancelReason = String(req.body?.reason || '').trim();
     await lr.save();
     if (lr.approvalId) {
       await ApprovalRequest.updateOne(
-        { _id: lr.approvalId, status: 'pending' },
+        { _id: lr.approvalId, status: { $in: ['pending', 'approved'] } },
         { $set: { status: 'cancelled' } }
       );
+    }
+    // Give a spent comp-off back (or mark it expired if its window has passed).
+    if (wasApproved && lr.compOffId) {
+      const co = await CompOff.findOne({ _id: lr.compOffId, status: 'used' });
+      if (co && (!co.usedInLeaveId || String(co.usedInLeaveId) === String(lr._id))) {
+        co.status = co.expiresOn && co.expiresOn < new Date() ? 'expired' : 'available';
+        co.usedInLeaveId = null;
+        await co.save();
+      }
     }
     res.json(lr);
   } catch (err) {
@@ -305,35 +540,19 @@ export const getBalances = async (req, res) => {
     if (!employeeId) return res.json([]);
     if (
       String(employeeId) !== String(req.user.employeeId || '') &&
-      !canManageLeave(req.user)
+      !(await canManageLeaveFor(req, employeeId))
     ) {
       return res.status(403).json({ message: 'Not allowed' });
     }
     const oid = toObjectId(employeeId);
     if (!oid) return res.status(400).json({ message: 'Invalid employee id' });
-    const year = Number(req.query.year) || new Date().getFullYear();
+    const year = Number(req.query.year) || yearOf(todayKey());
+    const employee = await Employee.findById(oid).select('department departmentId dateOfJoining').lean();
+    if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
-    const types = await LeaveType.find({ active: true }).sort({ order: 1, name: 1 });
-    const used = await LeaveRequest.aggregate([
-      { $match: { employeeId: oid, status: 'approved', year } },
-      { $group: { _id: '$leaveTypeId', used: { $sum: '$days' } } },
-    ]);
-    const usedMap = new Map(used.map((u) => [String(u._id), u.used]));
-
-    res.json(
-      types.map((t) => {
-        const u = usedMap.get(String(t._id)) || 0;
-        return {
-          leaveTypeId: t._id,
-          name: t.name,
-          color: t.color,
-          paid: t.paid,
-          allocated: t.annualQuota,
-          used: u,
-          available: Math.max(0, t.annualQuota - u),
-        };
-      })
-    );
+    // { quota, credited, carriedForward, used, pending, available } per type,
+    // plus the legacy `allocated`. Overdrawn balances come back negative.
+    res.json(await computeBalances(employee, year));
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -355,7 +574,7 @@ export const getHolidays = async (req, res) => {
 // @route POST /api/leave/holidays
 export const createHoliday = async (req, res) => {
   try {
-    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
+    if (!(await canEditLeaveMaster(req))) return res.status(403).json({ message: 'Not allowed' });
     const { name, date, type, recurring, notes } = req.body;
     if (!name || !date) return res.status(400).json({ message: 'Name and date are required' });
     const d = new Date(date);
@@ -378,7 +597,7 @@ export const createHoliday = async (req, res) => {
 // @route DELETE /api/leave/holidays/:id
 export const deleteHoliday = async (req, res) => {
   try {
-    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
+    if (!(await canEditLeaveMaster(req))) return res.status(403).json({ message: 'Not allowed' });
     const h = await Holiday.findById(req.params.id);
     if (!h) return res.status(404).json({ message: 'Holiday not found' });
     await h.deleteOne();
@@ -399,8 +618,10 @@ export const getCompOffs = async (req, res) => {
     } else if (req.query.employeeId && req.query.employeeId !== 'all') {
       filter.employeeId = req.query.employeeId;
     }
+    // Managers are limited to their department (self-service already is own id).
+    const scoped = canManageLeave(req.user) ? await withLeaveScope(req, filter) : filter;
     res.json(
-      await CompOff.find(filter).populate({ path: 'employeeId', select: 'name department' }).sort({ createdAt: -1 })
+      await CompOff.find(scoped).populate({ path: 'employeeId', select: 'name department' }).sort({ createdAt: -1 })
     );
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -415,6 +636,10 @@ export const createCompOff = async (req, res) => {
     const { employeeId, workedOn, reason, grantedDays, expiresOn } = req.body;
     if (!employeeId || !workedOn) {
       return res.status(400).json({ message: 'Employee and worked-on date are required' });
+    }
+    // Dept heads may only grant comp-offs inside their own department.
+    if (!(await canManageEmployee(req, employeeId, LEAVE_KEYS))) {
+      return res.status(403).json({ message: 'This employee is not in your department' });
     }
     const employee = await Employee.findById(employeeId);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
@@ -446,7 +671,9 @@ export const getLeavePayrollFeed = async (req, res) => {
     const month = Number(req.query.month);
     const year = Number(req.query.year);
     if (!month || !year) return res.status(400).json({ message: 'month and year are required' });
-    const reqs = await LeaveRequest.find({ status: 'approved', month, year }).populate({
+    // Was open to any signed-in user; now managers only, scoped to department.
+    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
+    const reqs = await LeaveRequest.find(await withLeaveScope(req, { status: 'approved', month, year })).populate({
       path: 'leaveTypeId',
       select: 'paid name',
     });
@@ -464,3 +691,368 @@ export const getLeavePayrollFeed = async (req, res) => {
     res.status(500).json({ message: err.message });
   }
 };
+
+// ─── External Webhook Integration (Timebox / PHP Portal) ───────────────────
+
+/**
+ * Validate incoming authentication header for the external webhook.
+ * Supports:
+ *   - Bearer <token> in Authorization header
+ *   - X-API-Key: <token> header
+ */
+function verifyWebhookAuth(req) {
+  const configuredKeys = [
+    process.env.LEAVE_WEBHOOK_API_KEY,
+  ].filter(Boolean);
+
+  const authHeader = req.headers['authorization'] || '';
+  const apiKeyHeader = req.headers['x-api-key'] || req.headers['x-apikey'] || '';
+
+  let providedToken = '';
+  if (authHeader.startsWith('Bearer ')) {
+    providedToken = authHeader.slice(7).trim();
+  } else if (authHeader.startsWith('bearer ')) {
+    providedToken = authHeader.slice(7).trim();
+  } else if (authHeader) {
+    providedToken = authHeader.trim();
+  } else if (apiKeyHeader) {
+    providedToken = String(apiKeyHeader).trim();
+  }
+
+  if (!providedToken) {
+    return { valid: false, reason: 'Missing Authorization header or X-API-Key' };
+  }
+
+  const isMatch = configuredKeys.some((k) => k && k === providedToken);
+  if (!isMatch) {
+    return { valid: false, reason: 'Invalid API key or Bearer token' };
+  }
+
+  return { valid: true, token: providedToken };
+}
+
+/**
+ * @desc  External app submits an employee leave application into Nizan CRM.
+ * @route POST /api/leave/external-request
+ * @route POST /api/leave/webhook
+ * @access External Webhook (Bearer token / X-API-Key)
+ */
+export const handleExternalLeaveRequest = async (req, res) => {
+  try {
+    // 1. Auth check
+    const auth = verifyWebhookAuth(req);
+    if (!auth.valid) {
+      return res.status(401).json({
+        ok: false,
+        message: auth.reason || 'Unauthorized webhook request',
+      });
+    }
+
+    const {
+      request_id,
+      employee,
+      department_head,
+      leave_type,
+      start_date,
+      end_date,
+      working_days,
+      reason,
+      requested_at,
+      callback_url,
+    } = req.body || {};
+
+    // 2. Validate mandatory fields
+    if (request_id == null) {
+      return res.status(422).json({
+        ok: false,
+        message: 'request_id is required',
+      });
+    }
+
+    if (!start_date || !end_date) {
+      return res.status(422).json({
+        ok: false,
+        message: 'start_date and end_date are required',
+      });
+    }
+
+    const fromDate = new Date(start_date);
+    const toDate = new Date(end_date);
+    if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+      return res.status(422).json({
+        ok: false,
+        message: 'start_date or end_date is an invalid date string',
+      });
+    }
+
+    if (toDate < fromDate) {
+      return res.status(422).json({
+        ok: false,
+        message: 'end_date cannot be earlier than start_date',
+      });
+    }
+
+    const extReqId = Number(request_id);
+
+    // 3. Idempotency check: Safe to retry. If already exists, return 200 without duplicating
+    const existing = await LeaveRequest.findOne({ externalRequestId: extReqId });
+    if (existing) {
+      return res.status(200).json({
+        ok: true,
+        id: existing._id,
+        reference: String(existing._id),
+        request_id: extReqId,
+        status: existing.status,
+        message: 'Leave request already exists in CRM (idempotent response)',
+      });
+    }
+
+    // 4. Match or auto-provision Employee in CRM
+    const empData = employee || {};
+    const tbEmpId = empData.id != null ? Number(empData.id) : null;
+    const empEmail = String(empData.email || '').trim().toLowerCase();
+    const empName = String(empData.name || '').trim();
+
+    let crmEmp = null;
+    if (tbEmpId != null) {
+      crmEmp = await Employee.findOne({ timeboxEmployeeId: tbEmpId });
+    }
+    if (!crmEmp && empEmail) {
+      crmEmp = await Employee.findOne({ email: empEmail });
+    }
+    if (!crmEmp && empName) {
+      crmEmp = await Employee.findOne({ name: new RegExp(`^${empName}$`, 'i') });
+    }
+
+    if (!crmEmp) {
+      // Auto-provision so external employee leaves are never lost
+      crmEmp = await Employee.create({
+        name: empName || `Employee #${tbEmpId || extReqId}`,
+        email: empEmail || '',
+        role: String(empData.designation || 'Staff').trim(),
+        department: String(empData.department || 'Operations').trim(),
+        timeboxEmployeeId: tbEmpId,
+        timeboxName: empName || '',
+        status: 'active',
+        employmentStatus: 'confirmed',
+        category: 'administrative',
+        salaryType: 'fixed_monthly',
+      });
+      console.log(`[Leave Webhook] Auto-provisioned CRM Employee ${crmEmp.name} (id: ${crmEmp._id}) for Timebox ID: ${tbEmpId}`);
+    } else {
+      // Keep timeboxEmployeeId synced if missing
+      if (tbEmpId != null && !crmEmp.timeboxEmployeeId) {
+        crmEmp.timeboxEmployeeId = tbEmpId;
+        if (empName && !crmEmp.timeboxName) crmEmp.timeboxName = empName;
+        await crmEmp.save();
+      }
+    }
+
+    // 5. Match LeaveType (Paid vs Unpaid)
+    const isPaid = !/^unpaid/i.test(String(leave_type || 'paid').trim());
+    let leaveTypeDoc = await LeaveType.findOne({ paid: isPaid, active: true }).sort({ order: 1, name: 1 });
+    if (!leaveTypeDoc) {
+      // Fallback to any active leave type
+      leaveTypeDoc = await LeaveType.findOne({ active: true }).sort({ order: 1 });
+    }
+
+    // 6. Day count — same rule as an in-app apply (calendar days − weekly
+    //    offs − holidays), but an external request is never rejected here.
+    //    Timebox's working_days only signals a half day (0.5).
+    const startKey = toDayKey(typeof start_date === 'string' ? start_date : fromDate);
+    const endKey = toDayKey(typeof end_date === 'string' ? end_date : toDate);
+    const extHalf = Number(working_days) === 0.5 && startKey === endKey ? 'first' : 'none';
+    const extCtx = await leaveDayContext(crmEmp, fromDate, toDate);
+    const days = countLeaveDays({ from: startKey, to: endKey, ...extCtx, halfDay: extHalf }).days;
+
+    // 7. Configure Department Head Approver if provided
+    let designatedApproverUserId = null;
+    if (department_head && (department_head.email || department_head.name)) {
+      const deptHeadEmail = String(department_head.email || '').trim().toLowerCase();
+      if (deptHeadEmail) {
+        const headUser = await User.findOne({ email: deptHeadEmail, active: { $ne: false } }).select('_id');
+        if (headUser) designatedApproverUserId = headUser._id;
+      }
+    }
+
+    // 8. Create LeaveRequest document
+    const lr = await LeaveRequest.create({
+      employeeId: crmEmp._id,
+      employeeName: crmEmp.name,
+      department: crmEmp.department || empData.department || '',
+      leaveTypeId: leaveTypeDoc?._id || null,
+      leaveTypeName: leaveTypeDoc?.name || (isPaid ? 'Paid Leave' : 'Unpaid Leave'),
+      fromDate,
+      toDate,
+      days,
+      halfDay: extHalf,
+      reason: String(reason || 'External portal leave application').trim(),
+      status: 'pending',
+      month: fromDate.getMonth() + 1,
+      year: fromDate.getFullYear(),
+      externalRequestId: extReqId,
+      callbackUrl: String(callback_url || '').trim(),
+      externalSource: 'timebox',
+      externalEmployeeId: tbEmpId,
+      externalPayload: req.body,
+      callbackStatus: 'none',
+    });
+
+    // 9. Route into CRM Approvals Engine
+    const chain = designatedApproverUserId
+      ? [{ label: 'Department Head', approverUserId: designatedApproverUserId }]
+      : await buildLeaveChain(crmEmp);
+
+    const approval = await createApproval({
+      module: 'leave',
+      title: `Leave — ${crmEmp.name}`,
+      summary: `${lr.leaveTypeName} · ${days} day(s) · External Req #${extReqId}`,
+      requesterEmployeeId: crmEmp._id,
+      subjectEmployeeId: crmEmp._id,
+      refModel: 'LeaveRequest',
+      refId: lr._id,
+      chain,
+      link: '/hr/approvals',
+    });
+
+    lr.approvalId = approval._id;
+    await lr.save();
+
+    console.log(`[Leave Webhook] Successfully created LeaveRequest ${lr._id} for external request #${extReqId} (Employee: ${crmEmp.name})`);
+
+    // 10. Return 201 response with reference ID
+    res.status(201).json({
+      ok: true,
+      id: lr._id,
+      reference: String(lr._id),
+      request_id: extReqId,
+      status: 'pending',
+      message: 'Leave request received and queued for approval in Nizan CRM',
+    });
+  } catch (err) {
+    console.error('[Leave Webhook] Error processing incoming leave request:', err);
+    res.status(500).json({
+      ok: false,
+      message: err.message || 'Internal server error processing leave request',
+    });
+  }
+};
+
+/**
+ * @desc  Directly approve or reject a leave request (HR / Manager), triggering callback.
+ * @route POST /api/leave/:id/decide
+ * @access Private (HR/Admin/Manager)
+ */
+export const decideLeaveDirectly = async (req, res) => {
+  try {
+    if (!canManageLeave(req.user)) {
+      return res.status(403).json({ message: 'Not authorized to decide leave requests' });
+    }
+
+    const { status, note } = req.body;
+    if (!['approved', 'rejected'].includes(status)) {
+      return res.status(400).json({ message: 'status must be "approved" or "rejected"' });
+    }
+
+    const lr = await LeaveRequest.findById(req.params.id);
+    if (!lr) return res.status(404).json({ message: 'Leave request not found' });
+    if (!(await canManageEmployee(req, lr.employeeId, LEAVE_KEYS))) {
+      return res.status(403).json({ message: 'This employee is not in your department' });
+    }
+
+    // Only a pending request can be decided — no flipping approved ↔ rejected.
+    if (lr.status !== 'pending') {
+      return res.status(409).json({ message: `This leave is already ${lr.status}.` });
+    }
+    // Nobody decides their own leave (the owner/admin account excepted).
+    const ownEmp = req.user.employeeId ? String(req.user.employeeId) : '';
+    if (String(req.user.role || '') !== 'admin' && ownEmp && String(lr.employeeId) === ownEmp) {
+      return res.status(403).json({ message: 'You cannot decide your own leave request.' });
+    }
+
+    lr.status = status;
+    lr.decidedBy = req.user._id;
+    lr.decidedAt = new Date();
+    lr.decisionNote = String(note || '').trim();
+    await lr.save();
+
+    // Sync linked approval request if present
+    if (lr.approvalId) {
+      await ApprovalRequest.updateOne(
+        { _id: lr.approvalId },
+        { $set: { status, decidedAt: new Date() } }
+      );
+    }
+
+    // Release/spend comp-off if approved
+    if (status === 'approved' && lr.compOffId) {
+      await CompOff.updateOne(
+        { _id: lr.compOffId },
+        { $set: { status: 'used', usedInLeaveId: lr._id } }
+      );
+    }
+
+    // Trigger external callback if linked
+    let callbackResult = null;
+    if (lr.callbackUrl && lr.externalRequestId != null) {
+      callbackResult = await dispatchLeaveCallback(lr, {
+        approver: req.user?.name || 'HR Department',
+        note: lr.decisionNote,
+      });
+    }
+
+    const populated = await LeaveRequest.findById(lr._id).populate(empPopulate);
+    res.json({
+      leaveRequest: populated,
+      callback: callbackResult,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+/**
+ * @desc  Manually re-dispatch callback to external app (safe to retry).
+ * @route POST /api/leave/:id/retry-callback
+ * @access Private (HR/Admin)
+ */
+export const retryLeaveCallback = async (req, res) => {
+  try {
+    if (!canManageLeave(req.user)) {
+      return res.status(403).json({ message: 'Not allowed' });
+    }
+
+    const lr = await LeaveRequest.findById(req.params.id);
+    if (!lr) return res.status(404).json({ message: 'Leave request not found' });
+    if (!(await canManageEmployee(req, lr.employeeId, LEAVE_KEYS))) {
+      return res.status(403).json({ message: 'This employee is not in your department' });
+    }
+
+    if (!lr.callbackUrl || lr.externalRequestId == null) {
+      return res.status(400).json({
+        message: 'This leave request is not linked to an external webhook callback',
+      });
+    }
+
+    if (lr.status === 'pending') {
+      return res.status(400).json({
+        message: 'Cannot send callback for a pending request. Decide the request first.',
+      });
+    }
+
+    const result = await dispatchLeaveCallback(lr, {
+      approver: req.user?.name || 'HR Manager',
+      note: lr.decisionNote,
+    });
+
+    const updated = await LeaveRequest.findById(lr._id);
+    res.json({
+      message: result.sent ? 'Callback delivered successfully' : 'Callback dispatch failed',
+      result,
+      leaveRequest: updated,
+    });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+

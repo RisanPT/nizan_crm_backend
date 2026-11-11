@@ -20,7 +20,8 @@
     "import:fma-packages": "node scripts/importPackagesFromReviewCsv.js tmp/booking_package_review_fma.csv",
     "import:legacy-bookings": "node scripts/importLegacyBookingsFromNormalizedCsv.js",
     "import:nizan-legacy-bookings": "node scripts/importLegacyBookingsFromNormalizedCsv.js tmp/bookings_formatted_nizan_only.csv tmp/booking_package_review_nizan.csv",
-    "import:fma-legacy-bookings": "node scripts/importLegacyBookingsFromNormalizedCsv.js tmp/bookings_formatted_fma_only.csv tmp/booking_package_review_fma.csv"
+    "import:fma-legacy-bookings": "node scripts/importLegacyBookingsFromNormalizedCsv.js tmp/bookings_formatted_fma_only.csv tmp/booking_package_review_fma.csv",
+    "import:marketing-eod": "node scripts/importMarketingEodSpreadsheet.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",
@@ -35,8 +36,10 @@
     "multer": "^2.1.1",
     "multer-storage-cloudinary": "^4.0.0",
     "nodemailer": "^6.10.1",
+    "pdf-parse": "^2.4.5",
     "pdfkit": "^0.18.0",
-    "puppeteer": "^24.43.1"
+    "puppeteer": "^24.43.1",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "nodemon": "^3.1.4"

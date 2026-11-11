@@ -6,6 +6,7 @@ import {
   updateLeaveType,
   deleteLeaveType,
   seedLeaveTypes,
+  getLeaveMasterAccess,
   applyLeave,
   getMyLeave,
   getLeaveRequests,
@@ -17,16 +18,30 @@ import {
   getCompOffs,
   createCompOff,
   getLeavePayrollFeed,
+  handleExternalLeaveRequest,
+  decideLeaveDirectly,
+  retryLeaveCallback,
 } from '../controllers/leaveController.js';
 
 const router = express.Router();
 
+// ── External Webhook Endpoints (Timebox / External App) ──────────────────────
+// Authenticated via Bearer token or X-API-Key (does not require CRM user JWT)
+router.post('/external-request', handleExternalLeaveRequest);
+router.post('/webhook', handleExternalLeaveRequest); // convenience alias
+
+// ── Authenticated CRM Routes ────────────────────────────────────────────────
 // attachRolePermissions so canManageLeave() can honour the `leave`/`staff`
 // features an admin granted a custom role (not just hard-coded role keys).
 router.use(protect, attachRolePermissions);
 
+// External callback retry & direct decision
+router.post('/:id/decide', decideLeaveDirectly);
+router.post('/:id/retry-callback', retryLeaveCallback);
+
 // Leave types
 router.get('/types', getLeaveTypes);
+router.get('/types/access', getLeaveMasterAccess);
 router.post('/types', createLeaveType);
 router.post('/types/seed', seedLeaveTypes);
 router.put('/types/:id', updateLeaveType);
