@@ -353,11 +353,19 @@ export async function performTimeboxEmployeeSync() {
       continue;
     }
 
-    // Already synced with the same ID — just backfill the department if unset.
+    // Already synced with the same ID — backfill department if unset and sync active status.
     if (Number(crmMatch.timeboxEmployeeId) === tbId) {
+      const updates = {};
       if (!crmMatch.departmentId) {
         const did = deptIdForTimebox(tb.department);
-        if (did) await Employee.findByIdAndUpdate(crmMatch._id, { departmentId: did });
+        if (did) updates.departmentId = did;
+      }
+      if (tb.active !== undefined) {
+        const tbStatus = tb.active === false ? 'inactive' : 'active';
+        if (crmMatch.status !== tbStatus) updates.status = tbStatus;
+      }
+      if (Object.keys(updates).length > 0) {
+        await Employee.findByIdAndUpdate(crmMatch._id, updates);
       }
       alreadySynced += 1;
       results.push({
@@ -372,11 +380,15 @@ export async function performTimeboxEmployeeSync() {
       continue;
     }
 
-    // Write the binding back to CRM (+ slot into their department if unset).
+    // Write the binding back to CRM (+ slot into their department if unset and sync active status).
     const patch = { timeboxEmployeeId: tbId, timeboxName: tbName };
     if (!crmMatch.departmentId) {
       const did = deptIdForTimebox(tb.department);
       if (did) patch.departmentId = did;
+    }
+    if (tb.active !== undefined) {
+      const tbStatus = tb.active === false ? 'inactive' : 'active';
+      if (crmMatch.status !== tbStatus) patch.status = tbStatus;
     }
     await Employee.findByIdAndUpdate(crmMatch._id, patch);
 

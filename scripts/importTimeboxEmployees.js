@@ -46,8 +46,11 @@ async function run() {
         if (!existing.timeboxEmployeeId) {
            existing.timeboxEmployeeId = tbId;
            existing.timeboxName = tbName;
-           await existing.save();
         }
+        if (tb.active !== undefined) {
+           existing.status = tb.active === false ? 'inactive' : 'active';
+        }
+        await existing.save();
         continue;
       }
 
