@@ -270,7 +270,6 @@ export const createEmployee = async (req, res) => {
   } = req.body;
 
   try {
-    const auditBefore = snapshot(employee, EMPLOYEE_AUDIT_FIELDS);
     const normalizedEmail = normalizeEmail(email);
     const normalizedRegionId = normalizeRegionId(regionId);
     const normalizedZoneId = normalizeRegionId(zoneId);
@@ -342,6 +341,10 @@ export const createEmployee = async (req, res) => {
     if (emergencyContact) employeeData.emergencyContact = emergencyContact;
 
     const employee = await Employee.create(employeeData);
+    await logChange({
+      req, entity: 'Employee', entityId: employee._id, employeeId: employee._id,
+      action: 'create', before: null, after: employee, fields: EMPLOYEE_AUDIT_FIELDS,
+    });
 
     const populatedEmployee = await Employee.findById(employee._id)
       .populate('regionId', 'name status')
@@ -398,6 +401,7 @@ export const updateEmployee = async (req, res) => {
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
+    const auditBefore = snapshot(employee, EMPLOYEE_AUDIT_FIELDS);
 
     const normalizedEmail = normalizeEmail(email);
     const normalizedRegionId = normalizeRegionId(regionId);
