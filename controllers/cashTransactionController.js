@@ -4,10 +4,11 @@ import ChartOfAccount, { resolveAccountType } from '../models/ChartOfAccount.js'
 import BankAccount from '../models/BankAccount.js';
 import { applyMoneyAccount } from '../utils/moneyAccount.js';
 import { postDoc, unpostDoc, ensureLockDate, isLocked } from '../services/posting.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
 // Accounts keys these in; finance roles, or any role granted the
 // `payables.transactions` screen (or all of `payables`).
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', ...LEADERSHIP_ROLES];
 const canUse = (u) =>
   FINANCE_ROLES.includes(String(u?.role || '').toLowerCase()) ||
   (u?.permissions || []).some((p) => p === 'payables' || p === 'payables.transactions');

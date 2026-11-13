@@ -26,6 +26,7 @@ import {
   istStart,
   todayIst,
 } from '../utils/istDate.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
 // ── Main dashboard analytics ─────────────────────────────────────────────────
 // Server-side aggregates for the dashboard's Sales, Sales Team, Work Completed
@@ -46,7 +47,7 @@ import {
 //    ever see their own figures.
 
 const NOT_A_SALE = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo']; // + 'ceo': read-only, enforced in middleware/ceoGuard.js
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', ...LEADERSHIP_ROLES]; // + leadership (CEO, Executive Director): read-only, enforced in middleware/ceoGuard.js
 const SELF_SCOPED_ROLES = ['sales', 'sales_executive'];
 const NO_DASHBOARD_ROLES = ['artist', 'driver'];
 

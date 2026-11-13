@@ -2,9 +2,10 @@ import { SORTS, sortRows, summarize, THIN_MARGIN_PCT } from '../utils/workProfit
 import { addDays, parseDayParam, todayIst } from '../utils/istDate.js';
 import { escapeRegex } from '../utils/financeListQuery.js';
 import { identityOf, workProfitFor } from '../services/workProfit.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
 // Money per work is for Accounts and the owners only.
-const ACCOUNTS_ROLES = new Set(['accounts', 'finance_head', 'admin', 'ceo']); // + 'ceo': read-only, enforced in middleware/ceoGuard.js
+const ACCOUNTS_ROLES = new Set(['accounts', 'finance_head', 'admin', ...LEADERSHIP_ROLES]); // + leadership: read-only, enforced in middleware/ceoGuard.js
 const EXPORT_CAP = 2000;
 const MAX_DAYS = 366;
 const FLAGS = ['loss', 'thin', 'no_costs', 'pending_costs'];

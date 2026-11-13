@@ -32,6 +32,17 @@ const ceoDecisionSchema = mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     decidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     decidedAt: { type: Date, default: null },
+    // Who settled it and why, kept readable even if the login changes later. Reopening it does NOT erase these: the history shows the turns.
+    decidedByName: { type: String, default: '' },
+    decidedByRole: { type: String, default: '' },
+    decisionNote: { type: String, default: '' },
+    statusHistory: {
+      type: [{ at: Date, by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' }, byName: String, from: String, to: String, note: String, _id: false }],
+      default: [],
+    },
+    // Removing an entry hides it; the record stays.
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true }
 );

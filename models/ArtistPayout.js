@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { leadershipStampField } from './leadershipStamp.js';
 import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 // A per-booking fee owed to an OUTSOURCE (freelance) artist for a job they
@@ -81,6 +82,8 @@ const artistPayoutSchema = mongoose.Schema(
       ref: 'User',
       default: null,
     },
+    // Held for the CEO / Executive Director when it is above the limit (see models/leadershipStamp.js).
+    leadership: leadershipStampField(),
     // Bank / cash account it was paid from (pay popup).
     ...moneyAccountFields,
   },

@@ -1,8 +1,41 @@
 import Role from '../models/Role.js';
 import User from '../models/User.js';
 import { PERMISSION_KEYS } from '../models/Role.js';
+import { LEADERSHIP_ROLES, LEADERSHIP_BANNED_PERMISSIONS, clampPermissions } from '../utils/leadership.js';
 
 const ALL = [...PERMISSION_KEYS];
+
+// What the CEO and the Executive Director carry: a view-and-decide role (writes are refused in middleware/ceoGuard.js). Explicit
+// sub-keys ONLY: a parent key such as staff / payables / company_finance would open salaries and bank screens, and `it` opens the
+// full-database backup (utils/leadership.js keeps those off however the role is edited).
+export const LEADERSHIP_PERMISSIONS = [
+  'dashboard',
+  'ceo',
+  'reports', // the CEO daily report
+  'planning',
+  'planning.manage', // sees every company project and can decide on proposals
+  'payables.dashboard', // Combined Accounts Dashboard + Work Profit
+  'payables.transactions',
+  'payables.admin_expenses',
+  'payables.collections',
+  'payables.fleet_expenses',
+  'payables.subscriptions',
+  'payables.sales_returns',
+  'finance',
+  'company_reports',
+  'company_finance.month_end', // Month-End Review, targets, the CEO Decisions log
+  'company_finance.dept_reviews',
+  'company_finance.sales_reports',
+  'company_finance.aging',
+  'company_finance.reports',
+  'company_finance.pnl', // Profit & Loss (totals by account) — the month-end review links to it
+  'company_finance.gst', // the tax filing tracker — the month-end review links to it
+  'company_finance.assets',
+  'sales.dashboard',
+  'marketing.insights',
+  'hr_analytics',
+  'staff.evaluation',
+];
 
 // Mirrors the hard-coded matrix that used to live in app_role.dart, so seeding
 // reproduces today's behaviour exactly and nothing changes until an admin
@@ -33,39 +66,8 @@ const DEFAULT_ROLES = [
     homeRoute: '/',
     permissions: ['dashboard', 'calendar', 'finance', 'leave'],
   },
-  {
-    key: 'ceo',
-    label: 'CEO',
-    homeRoute: '/ceo',
-    // A view-and-decide role (writes are refused in middleware/ceoGuard.js). Explicit sub-keys ONLY: a parent key such as
-    // staff / payables / company_finance would open salaries and bank screens, and `it` opens the full-database backup.
-    permissions: [
-      'dashboard',
-      'ceo',
-      'reports', // the CEO daily report
-      'planning',
-      'planning.manage', // sees every company project and can decide on proposals
-      'payables.dashboard', // Combined Accounts Dashboard + Work Profit
-      'payables.transactions',
-      'payables.admin_expenses',
-      'payables.collections',
-      'payables.fleet_expenses',
-      'payables.subscriptions',
-      'payables.sales_returns',
-      'finance',
-      'company_reports',
-      'company_finance.month_end', // Month-End Review, targets, the CEO Decisions log
-      'company_finance.dept_reviews',
-      'company_finance.sales_reports',
-      'company_finance.aging',
-      'company_finance.reports',
-      'company_finance.assets',
-      'sales.dashboard',
-      'marketing.insights',
-      'hr_analytics',
-      'staff.evaluation',
-    ],
-  },
+  { key: 'ceo', label: 'CEO', homeRoute: '/ceo', permissions: LEADERSHIP_PERMISSIONS },
+  { key: 'executive_director', label: 'Executive Director', homeRoute: '/ceo', permissions: LEADERSHIP_PERMISSIONS },
   {
     key: 'artist_head',
     label: 'Artist Head',
@@ -225,6 +227,13 @@ export const ensureDefaultRoles = async () => {
       await Role.create({ ...def, isSystem: true });
     }
   }
+  // The CEO and the Executive Director never hold the keys that open pay, bank details or the backup — taken off again here if an
+  // admin ever ticked them (and kept off in updateRole below).
+  // A role that held one of them (typically a parent such as `payables` or `company_finance`, which opened whole modules) is given the
+  // safe sub-keys in their place — otherwise taking the parent away would leave the leader with no Money or Finance screens at all.
+  const hadBanned = (await Role.find({ key: { $in: LEADERSHIP_ROLES }, permissions: { $in: LEADERSHIP_BANNED_PERMISSIONS } }).select('key').lean()).map((r) => r.key);
+  await Role.updateMany({ key: { $in: LEADERSHIP_ROLES } }, { $pull: { permissions: { $in: LEADERSHIP_BANNED_PERMISSIONS } } });
+  if (hadBanned.length) await Role.updateMany({ key: { $in: hadBanned } }, { $addToSet: { permissions: { $each: LEADERSHIP_PERMISSIONS } } });
   // One-time nudge: point the Sales role at the new personal dashboard, but only
   // if it's still the previous default (never override an admin's custom home).
   await Role.updateOne(
@@ -329,7 +338,7 @@ export const updateRole = async (req, res) => {
     // Permissions and landing page are editable for every role; the key and
     // name of a system role stay fixed because other code branches on them.
     if (permissions !== undefined) {
-      role.permissions = sanitizePermissions(permissions);
+      role.permissions = clampPermissions(role.key, sanitizePermissions(permissions));
     }
     if (homeRoute !== undefined) {
       role.homeRoute = String(homeRoute).trim() || '/';

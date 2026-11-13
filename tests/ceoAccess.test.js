@@ -3,16 +3,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { isCeo, ceoVerdict, redactPay, REDACTED_FIELDS } from '../utils/ceoAccess.js';
+import { isCeo, ceoVerdict, redactPay, scrubPayText, REDACTED_FIELDS } from '../utils/ceoAccess.js';
+import { SENSITIVE_EMPLOYEE_FIELDS } from '../utils/hrAccess.js';
 import { applyCeoGuard } from '../middleware/ceoGuard.js';
 
 const verdict = (m, u) => ceoVerdict(m, u);
 const refused = (m, u) => !verdict(m, u).ok;
 const code = (m, u) => verdict(m, u).code;
 
-test('who is the CEO', () => {
+test('who is the CEO (and the Executive Director, who has the same login rules)', () => {
   assert.equal(isCeo({ role: 'ceo' }), true);
   assert.equal(isCeo({ role: ' CEO ' }), true);
+  assert.equal(isCeo({ role: 'executive_director' }), true);
+  assert.equal(isCeo({ role: ' Executive_Director ' }), true);
   for (const role of ['admin', 'manager', 'accounts', 'finance_head', 'ceo_assistant', '', undefined]) assert.equal(isCeo({ role }), false, String(role));
   assert.equal(isCeo(undefined), false);
 });
@@ -194,4 +197,151 @@ test('middleware: an allowed request passes, and the people list is redacted on 
   const other = run({ role: 'ceo' }, 'GET', '/api/bookings');
   other.res.json([{ name: 'X', baseSalary: 5 }]);
   assert.deepEqual(other.res.sent, [{ name: 'X', baseSalary: 5 }]); // only the people list is touched
+});
+
+// ── the Executive Director gets exactly the CEO's rules ──────────────────────
+
+const LEADERS = ['ceo', 'executive_director'];
+
+test('middleware: the Executive Director is refused and redacted just like the CEO', () => {
+  for (const role of LEADERS) {
+    const write = run({ role }, 'POST', '/api/bookings');
+    assert.equal(write.answered, true, role);
+    assert.equal(write.res.sent.code, 'CEO_READ_ONLY', role);
+    assert.equal(run({ role }, 'GET', '/api/salaries').res.sent.code, 'CEO_NO_ACCESS', role);
+    assert.equal(run({ role }, 'POST', '/api/projects/abc/approve').answered, false, role);
+    assert.equal(run({ role }, 'PUT', '/api/admin-expenses/1/verify').res.sent.code, 'CEO_READ_ONLY', role);
+    const people = run({ role }, 'GET', '/api/employees');
+    people.res.json([{ name: 'Amna', baseSalary: 5, bankName: 'ZZ', overtimeRate: 3, dateOfBirth: 'x' }]);
+    assert.deepEqual(people.res.sent, [{ name: 'Amna' }], role);
+  }
+});
+
+// ── routes that carry pay although their name does not say so ────────────────
+
+test('the audit log, raise history, ledger vouchers, settlements and offers are not readable (they hold people\'s pay)', () => {
+  for (const url of [
+    '/api/audit',
+    '/api/audit?entity=Salary',
+    '/api/audit/employee/123',
+    '/api/employees/123/increments',
+    '/api/employees/123/increments/',
+    '/api/accounting/journal',
+    '/api/accounting/journal?from=2026-11-01',
+    '/api/accounting/ledger/123',
+    '/api/offboarding/123/settlement',
+    '/api/recruitment/offers',
+    '/api/recruitment/offers/123',
+    '/API/Audit/', // case and a trailing slash do not get round it
+  ]) {
+    assert.equal(code('GET', url), 'CEO_NO_ACCESS', url);
+  }
+});
+
+test('…while their neighbours stay readable — the dashboards, customers, the exit list, hiring plans, one person\'s record', () => {
+  for (const url of [
+    '/api/accounting/dashboard-summary',
+    '/api/accounting/party-statement',
+    '/api/accounting/transactions',
+    '/api/employees',
+    '/api/employees/123',
+    '/api/employees/123/reporting',
+    '/api/offboarding',
+    '/api/offboarding/123',
+    '/api/recruitment/plans',
+    '/api/recruitment/jobs',
+    '/api/auditx',
+  ]) {
+    assert.equal(verdict('GET', url).ok, true, url);
+  }
+});
+
+test('the redacted fields are the one list HR uses for "only HR / payroll may read", plus the raise history', () => {
+  for (const f of SENSITIVE_EMPLOYEE_FIELDS) assert.ok(REDACTED_FIELDS.includes(f), f);
+  assert.ok(REDACTED_FIELDS.includes('previousSalary'));
+  assert.ok(REDACTED_FIELDS.includes('newSalary'));
+  assert.equal(REDACTED_FIELDS.length, SENSITIVE_EMPLOYEE_FIELDS.length + 2);
+  const out = redactPay([{ _id: 'i1', employeeId: 'e1', previousSalary: 30000, newSalary: 35000, bankName: 'ZZ', note: 'annual' }]);
+  assert.deepEqual(out, [{ _id: 'i1', employeeId: 'e1', note: 'annual' }]);
+});
+
+// ── pay lines on the accounts ────────────────────────────────────────────────
+
+test('a text standing alone that names a person\'s pay reads "Salary · (staff)"', () => {
+  assert.equal(scrubPayText('Salary · Aisha'), 'Salary · (staff)');
+  assert.equal(scrubPayText('HRA · Aisha K'), 'HRA · (staff)');
+  assert.equal(scrubPayText('Salary - Aisha (11/2026)'), 'Salary · (staff)');
+  assert.equal(scrubPayText('hra – bob'), 'hra · (staff)');
+  assert.equal(scrubPayText('SALARY · X'), 'SALARY · (staff)');
+  assert.deepEqual(scrubPayText({ title: 'HRA - Bob (1/2026)', note: 'ok' }), { title: 'HRA · (staff)', note: 'ok' });
+});
+
+test('in a LIST, a row that is one person\'s pay is dropped altogether — its amount alone would be her salary', () => {
+  const rows = [
+    { voucherNo: 'JV1', narration: 'Salary · Aisha', amount: 48211.55 },
+    { voucherNo: 'JV2', narration: 'Studio rent', amount: 9000 },
+    { voucherNo: 'JV3', narration: 'HRA - Bob (1/2026)', amount: 5000 },
+  ];
+  assert.deepEqual(scrubPayText(rows), [{ voucherNo: 'JV2', narration: 'Studio rent', amount: 9000 }]);
+  assert.deepEqual(scrubPayText({ unusual: rows, total: 62211.55 }), { unusual: [{ voucherNo: 'JV2', narration: 'Studio rent', amount: 9000 }], total: 62211.55 });
+  assert.deepEqual(scrubPayText(['Salary · Aisha', 'Office rent']), ['Office rent'], 'a bare list of narrations too');
+  assert.deepEqual(scrubPayText({ a: [{ lines: [{ narration: 'Salary · Z', debit: 1 }, { narration: 'Rent', debit: 2 }] }] }), { a: [{ lines: [{ narration: 'Rent', debit: 2 }] }] }, 'however deep');
+});
+
+test('…and nothing else is: other text, numbers, dates, nulls, totals, and the word salary elsewhere in a sentence', () => {
+  const when = new Date(0);
+  for (const v of ['Office rent', 'Salary', 'Salary advance policy', 'Monthly salary · note', '', 'Hrafn', 5, null, true]) assert.equal(scrubPayText(v), v, String(v));
+  assert.equal(scrubPayText(undefined), undefined);
+  assert.equal(scrubPayText(when), when);
+  assert.deepEqual(scrubPayText({ payroll: { total: 58211.65, byDepartment: [{ name: 'Sales', total: 58211.65 }] } }), { payroll: { total: 58211.65, byDepartment: [{ name: 'Sales', total: 58211.65 }] } });
+  const doc = { toJSON: () => ({ narration: 'Salary · Aisha', n: 1 }) };
+  assert.deepEqual(scrubPayText({ rows: [doc, { narration: 'Rent' }] }), { rows: [{ narration: 'Rent' }] });
+});
+
+test('the accounts, cash, expense, report and dashboard reads are scrubbed; nothing else is touched', () => {
+  for (const url of ['/api/accounting/transactions', '/api/cash-transactions', '/api/admin-expenses', '/api/reports/month-end', '/api/dashboard/finance']) {
+    assert.equal(verdict('GET', url).scrub, true, url);
+  }
+  for (const url of ['/api/bookings', '/api/employees', '/api/projects', '/api/leads', '/api/accountingX']) {
+    assert.equal(verdict('GET', url).scrub, false, url);
+  }
+});
+
+test('middleware: a leader\'s accounts response loses the lines about people\'s pay (the totals stay)', () => {
+  for (const role of LEADERS) {
+    const r = run({ role }, 'GET', '/api/accounting/transactions');
+    assert.equal(r.answered, false);
+    r.res.json({ total: 13000, rows: [{ narration: 'Salary · Aisha', amount: 4000 }, { narration: 'Studio rent', amount: 9000 }] });
+    assert.deepEqual(r.res.sent, { total: 13000, rows: [{ narration: 'Studio rent', amount: 9000 }] }, role);
+  }
+});
+
+test('middleware: other people get the accounts untouched', () => {
+  const r = run({ role: 'accounts' }, 'GET', '/api/accounting/transactions');
+  assert.equal(r.answered, false);
+  r.res.json([{ narration: 'Salary · Aisha' }]);
+  assert.deepEqual(r.res.sent, [{ narration: 'Salary · Aisha' }]);
+});
+
+// ── the decision desk: what the leaders may change, and nothing else ─────────
+
+test('leaders may decide on a request and set the decision rules — and write nothing else under those paths', () => {
+  assert.equal(ceoVerdict('POST', '/api/decisions/64b2f0c1a1b2c3d4e5f60718/decide').ok, true);
+  assert.equal(ceoVerdict('PUT', '/api/decision-policy').ok, true);
+  assert.equal(ceoVerdict('GET', '/api/decisions/queue?scope=open').ok, true);
+  assert.equal(ceoVerdict('GET', '/api/decision-policy').ok, true);
+  for (const [m, p] of [
+    ['DELETE', '/api/decisions/64b2f0c1a1b2c3d4e5f60718'],
+    ['PUT', '/api/decisions/64b2f0c1a1b2c3d4e5f60718'],
+    ['POST', '/api/decisions/64b2f0c1a1b2c3d4e5f60718'],
+    ['POST', '/api/decisions/64b2f0c1a1b2c3d4e5f60718/decide/extra'],
+    ['POST', '/api/decisions/queue'],
+    ['POST', '/api/decision-policy'],
+    ['DELETE', '/api/decision-policy'],
+    ['PUT', '/api/decision-policy/x'],
+  ]) {
+    const v = ceoVerdict(m, p);
+    assert.equal(v.ok, false, `${m} ${p}`);
+    assert.equal(v.code, 'CEO_READ_ONLY', `${m} ${p}`);
+  }
 });

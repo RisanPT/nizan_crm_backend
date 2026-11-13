@@ -1,7 +1,8 @@
-import { isCeo, ceoVerdict, redactPay } from '../utils/ceoAccess.js';
+import { isCeo, ceoVerdict, redactPay, scrubPayText } from '../utils/ceoAccess.js';
 
-/// Called by `protect` once the user is loaded. For the CEO login: refuses writes (except the decisions it may take) and the
-/// pay / bank routes, and strips pay fields from the people list. Returns true when it has answered the request itself.
+/// Called by `protect` once the user is loaded. For a leadership login (CEO or Executive Director): refuses writes (except the
+/// decisions it may take) and the pay / bank routes, strips pay fields from the people list and pay narrations from the accounts.
+/// Returns true when it has answered the request itself.
 export const applyCeoGuard = (req, res) => {
   if (!isCeo(req.user)) return false;
 
@@ -11,9 +12,9 @@ export const applyCeoGuard = (req, res) => {
     return true;
   }
 
-  if (verdict.redact) {
+  if (verdict.redact || verdict.scrub) {
     const send = res.json.bind(res);
-    res.json = (body) => send(redactPay(body));
+    res.json = (body) => send(verdict.scrub ? scrubPayText(verdict.redact ? redactPay(body) : body) : redactPay(body));
   }
   return false;
 };

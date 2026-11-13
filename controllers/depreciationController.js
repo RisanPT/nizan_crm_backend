@@ -4,8 +4,9 @@ import ChartOfAccount from '../models/ChartOfAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
 import DepreciationRun from '../models/DepreciationRun.js';
 import { fyLabelFor, nextVoucherNo, ensureLockDate, isLocked } from '../services/posting.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', ...LEADERSHIP_ROLES];
 const canManageFinance = (user) => FINANCE_ROLES.includes(String(user?.role ?? '').trim().toLowerCase());
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;

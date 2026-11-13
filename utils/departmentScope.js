@@ -1,9 +1,10 @@
 import Department from '../models/Department.js';
 import Employee from '../models/Employee.js';
+import { LEADERSHIP_ROLES } from './leadership.js';
 
 // Accounts + Admin are the approvers: they see every department and manage all
 // of them. The CEO has company-wide visibility (read-only enforced by ceoGuard).
-export const APPROVER_ROLES = ['admin', 'accounts', 'finance_head', 'ceo'];
+export const APPROVER_ROLES = ['admin', 'accounts', 'finance_head', ...LEADERSHIP_ROLES];
 export const isApprover = (user) =>
   APPROVER_ROLES.includes(String(user?.role ?? '').trim().toLowerCase());
 

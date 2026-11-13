@@ -12,6 +12,8 @@ import {
   loginEmailFor, loginIdOf, expiryFromDay, loginExpired, canReuseDriverAccount, phoneDigits, EXPIRED_MESSAGE,
 } from '../utils/driverLogin.js';
 import { canManageUsers, authorizeUserChange, mayGiveRole } from '../utils/userAccess.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
+import { logChange } from '../utils/audit.js';
 
 const NOT_ALLOWED_TO_MANAGE_USERS = 'You are not allowed to manage users.';
 
@@ -209,6 +211,26 @@ export const getUsers = async (req, res) => {
   return res.json(serialized);
 };
 
+// Who made, re-roled, deactivated or removed a top-level login (admin, manager, CEO, Executive Director) — written to the audit log
+// ('User' entity). Best effort: logChange never throws.
+const WATCHED_LOGIN_ROLES = ['admin', 'manager', ...LEADERSHIP_ROLES];
+const watchedRole = (r) => WATCHED_LOGIN_ROLES.includes(String(r ?? '').trim().toLowerCase());
+const logLogin = (req, user, action, before = null, note = '') => {
+  if (!watchedRole(user?.role) && !watchedRole(before?.role)) return null;
+  return logChange({
+    req,
+    entity: 'User',
+    entityId: user._id,
+    employeeId: user.employeeId || null,
+    action,
+    before,
+    after: { role: user.role, active: user.active, email: user.email },
+    fields: ['role', 'active', 'email'],
+    note: [`${user.name} (${user.email})`, note].filter(Boolean).join(' — '),
+    always: true,
+  });
+};
+
 export const createUser = async (req, res) => {
   const name = String(req.body.name ?? '').trim();
   const email = String(req.body.email ?? '')
@@ -247,7 +269,7 @@ export const createUser = async (req, res) => {
     return res.status(400).json({ message: `Unknown role "${role}".` });
   }
   if (!mayGiveRole(req.user, role)) {
-    return res.status(403).json({ message: 'Only an administrator can create the CEO account.' });
+    return res.status(403).json({ message: 'Only an administrator can create an admin, manager, CEO or Executive Director account.' });
   }
 
   if (!name || !email || !password) {
@@ -286,6 +308,8 @@ export const createUser = async (req, res) => {
   } catch (syncErr) {
     console.error('Error auto-syncing User to Employee:', syncErr.message);
   }
+
+  await logLogin(req, user, 'login created');
 
   return res.status(201).json({
     id: user._id.toString(),
@@ -452,6 +476,7 @@ export const updateUser = async (req, res) => {
   if (!verdict.ok) {
     return res.status(403).json({ message: verdict.message });
   }
+  const loginBefore = { role: user.role, active: user.active, email: user.email };
 
   const nextEmail = req.body.email == null
     ? user.email
@@ -520,6 +545,7 @@ export const updateUser = async (req, res) => {
   }
 
   await user.save();
+  await logLogin(req, user, 'login changed', loginBefore, nextPassword.length > 0 ? 'password changed' : '');
 
   try {
     await syncUserToEmployee(user);
@@ -563,7 +589,7 @@ export const deleteUser = async (req, res) => {
     return res.status(400).json({ message: 'You cannot delete your own account' });
   }
 
-  const target = await User.findById(req.params.id).select('role managedBy');
+  const target = await User.findById(req.params.id).select('name email role active employeeId managedBy');
   if (!target) {
     return res.status(404).json({ message: 'User not found' });
   }
@@ -574,6 +600,7 @@ export const deleteUser = async (req, res) => {
   }
 
   await User.findByIdAndDelete(target._id);
+  await logLogin(req, target, 'login deleted', { role: target.role, active: target.active, email: target.email });
 
   return res.json({ message: 'User deleted successfully', id: req.params.id });
 };
@@ -661,12 +688,12 @@ export const provisionEmployeeLogin = async (req, res) => {
     const roleDoc = await Role.findOne({ key: role });
     if (!roleDoc) return res.status(400).json({ message: `Unknown role "${role}".` });
     if (!mayGiveRole(req.user, role)) {
-      return res.status(403).json({ message: 'Only an administrator can create the CEO account.' });
+      return res.status(403).json({ message: 'Only an administrator can create an admin, manager, CEO or Executive Director account.' });
     }
 
     let user = await User.findOne({ email }).select('+passwordSetupToken +passwordSetupExpires');
-    if (user && String(user.role).trim().toLowerCase() === 'ceo' && !mayGiveRole(req.user, 'ceo')) {
-      return res.status(403).json({ message: 'Only an administrator can change the CEO account.' });
+    if (user && !mayGiveRole(req.user, user.role)) {
+      return res.status(403).json({ message: 'Only an administrator can change an admin, manager, CEO or Executive Director account.' });
     }
     let created = false;
     if (user) {
@@ -696,6 +723,7 @@ export const provisionEmployeeLogin = async (req, res) => {
     }
 
     const raw = await issueSetupToken(user); // persists the user
+    await logLogin(req, user, created ? 'login created' : 'login re-issued', null, 'set-password link issued');
 
     try {
       await syncUserToEmployee(user);

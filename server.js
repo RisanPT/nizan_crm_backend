@@ -84,6 +84,7 @@ import enquiryCountRoutes from './routes/enquiryCountRoutes.js';
 import goalRoutes from './routes/goalRoutes.js';
 import slotRoutes from './routes/slotRoutes.js';
 import ceoRoutes from './routes/ceoRoutes.js';
+import decisionRoutes, { policyRouter as decisionPolicyRoutes } from './routes/decisionRoutes.js';
 import monthlyObjectiveRoutes from './routes/monthlyObjectiveRoutes.js';
 import bankAccountRoutes from './routes/bankAccountRoutes.js';
 import cashTransactionRoutes from './routes/cashTransactionRoutes.js';
@@ -308,6 +309,8 @@ app.use('/api/goals', goalRoutes); // Company day / week / month goals + day-wis
 app.use('/api/slots', slotRoutes);                // Day-wise booking slot capacity
 app.use('/api/monthly-objectives', monthlyObjectiveRoutes); // Company Projects → Monthly objectives per department
 app.use('/api/ceo', ceoRoutes);                  // CEO home: decisions inbox + watch list
+app.use('/api/decisions', decisionRoutes);        // CEO / Executive Director desk: what waits for them, deciding
+app.use('/api/decision-policy', decisionPolicyRoutes); // what is escalated to them (limits set by hand)
 app.use('/api/bank-accounts', bankAccountRoutes); // Manual bank balances (Finance)
 app.use('/api/cash-transactions', cashTransactionRoutes); // Accounts' Cash In / Out / Transfer entries
 app.use('/api/booking-advances', bookingAdvanceRoutes); // Accounts verifies booking advances

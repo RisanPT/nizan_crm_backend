@@ -109,30 +109,39 @@ test('ids may be ObjectId-like', () => {
   assert.equal(ok(u(oid('S'), 'sales', { isDepartmentHead: true }), u(oid('X'), 'artist', { managedBy: oid('Q') })), false);
 });
 
-// ── the CEO account ──────────────────────────────────────────────────────────
+// ── the leadership accounts (CEO, Executive Director) and the admin / manager accounts ──────────────────────
 
-test('only an administrator may create, change or remove the CEO account — a manager may not', () => {
-  const ceo = u('C', 'ceo');
-  assert.equal(ok(admin, ceo), true);
-  assert.equal(ok(manager, ceo), false);
-  assert.equal(authorizeUserChange(manager, ceo).message, 'Only an administrator can change the CEO account.');
-  assert.equal(ok(salesHead, ceo), false);
-  assert.equal(ok(artist, ceo), false);
+test('only an administrator may create, change or remove the CEO or Executive Director account — a manager may not', () => {
+  for (const role of ['ceo', 'executive_director']) {
+    const leader = u('C', role);
+    assert.equal(ok(admin, leader), true, role);
+    assert.equal(ok(manager, leader), false, role);
+    assert.equal(authorizeUserChange(manager, leader).message, 'Only an administrator can change the CEO or Executive Director account.');
+    assert.equal(ok(salesHead, leader), false, role);
+    assert.equal(ok(artist, leader), false, role);
+  }
 });
 
-test('only an administrator may give someone the CEO role', () => {
+test('only an administrator may give someone the CEO or Executive Director role', () => {
   const target = u('X', 'artist');
-  assert.equal(ok(admin, target, { nextRole: 'ceo' }), true);
-  assert.equal(ok(manager, target, { nextRole: 'ceo' }), false);
-  assert.match(authorizeUserChange(manager, target, { nextRole: 'ceo' }).message, /administrator can give the admin, manager or CEO role/);
-  assert.equal(ok(salesHead, target, { nextRole: 'ceo' }), false);
-  // leaving a CEO as CEO (the app re-sends the unchanged role on every save) is not a change of role
+  for (const role of ['ceo', 'executive_director']) {
+    assert.equal(ok(admin, target, { nextRole: role }), true, role);
+    assert.equal(ok(manager, target, { nextRole: role }), false, role);
+    assert.match(authorizeUserChange(manager, target, { nextRole: role }).message, /administrator can give the admin, manager, CEO or Executive Director role/);
+    assert.equal(ok(salesHead, target, { nextRole: role }), false, role);
+  }
+  // leaving a leader as they are (the app re-sends the unchanged role on every save) is not a change of role
   assert.equal(ok(admin, u('C', 'ceo'), { nextRole: 'ceo' }), true);
+  assert.equal(ok(admin, u('D', 'executive_director'), { nextRole: 'executive_director' }), true);
 });
 
-test('mayGiveRole: creating or provisioning a CEO is for an administrator only; every other role is unaffected', () => {
-  assert.equal(mayGiveRole(admin, 'ceo'), true);
-  assert.equal(mayGiveRole(admin, ' CEO '), true);
-  for (const who of [manager, salesHead, fleet, artist, undefined]) assert.equal(mayGiveRole(who, 'ceo'), false);
-  for (const role of ['artist', 'sales', 'accounts', 'employee', 'manager', 'admin']) assert.equal(mayGiveRole(manager, role), true, role);
+test('mayGiveRole: admin, manager, CEO and Executive Director accounts are an administrator\'s to create; every other role is open as before', () => {
+  for (const role of ['ceo', ' CEO ', 'executive_director', 'Executive_Director', 'admin', 'manager']) assert.equal(mayGiveRole(admin, role), true, role);
+  // the gap that was there: a manager or any department head could create an admin, a manager, a CEO…
+  for (const who of [manager, salesHead, fleet, artist, undefined]) {
+    for (const role of ['ceo', 'executive_director', 'admin', 'manager']) assert.equal(mayGiveRole(who, role), false, `${who?.role} → ${role}`);
+  }
+  for (const who of [admin, manager, salesHead, fleet]) {
+    for (const role of ['artist', 'sales', 'accounts', 'employee', 'driver', 'finance_head', 'artist_head']) assert.equal(mayGiveRole(who, role), true, `${who?.role} → ${role}`);
+  }
 });

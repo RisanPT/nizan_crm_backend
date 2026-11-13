@@ -47,6 +47,11 @@ export const NOTIFICATION_TYPES = {
   MANPOWER_REQUEST: 'manpower_request',
   MANPOWER_UPDATE: 'manpower_update',
   MANPOWER_RELEASE: 'manpower_release',
+  // The CEO / Executive Director: something needs their decision / it was decided / it was withdrawn / the rules for what reaches them changed.
+  DECISION_REQUEST: 'decision_request',
+  DECISION_RESULT: 'decision_result',
+  DECISION_WITHDRAWN: 'decision_withdrawn',
+  POLICY_CHANGED: 'policy_changed',
   CONSULTATION_ASSIGNED: 'consultation_assigned',
   CONSULTATION_CHANGED: 'consultation_changed',
   CONSULTATION_REMINDER: 'consultation_reminder',

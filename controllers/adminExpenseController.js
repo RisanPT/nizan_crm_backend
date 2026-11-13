@@ -5,6 +5,8 @@ import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 import { ADMIN_PAYMENT_METHODS, EXPENSE_HEADS } from '../models/AdminExpense.js';
 import ChartOfAccount from '../models/ChartOfAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
+import { needsLeadership } from '../utils/decisionRules.js';
+import { escalate, getPolicy, supersedeFor, withdrawFor } from '../services/decisions.js';
 
 // Expense heads = active expense ledgers in the Chart of Accounts (plus the
 // Sales Return contra head). The original seeded heads keep their flags.
@@ -35,6 +37,40 @@ const headView = (a, used) => {
 };
 
 const HEAD_FIELDS = 'code name group status isSystem jobLinked recurring foreign';
+
+// ── the CEO / Executive Director's limit ─────────────────────────────────────
+// An expense ABOVE the limit set in Decision rules is not approved by Accounts alone: Accounts' approval is the CHECK, and the expense
+// then waits (pending, out of the books) for the CEO / Executive Director. Nothing is held while no limit is set.
+
+/// Does approving [expense] at [amount] have to go to the CEO / Executive Director? (Not an HRA mirror, and not one they already approved at this amount.)
+const mustGoToLeadership = async (expense, amount) => {
+  if (expense.source === 'hra') return false;
+  if (expense.leadership?.state === 'approved' && Number(expense.leadership.amount) === Number(amount)) return false;
+  return needsLeadership(await getPolicy(), 'spend_expense', amount);
+};
+
+/// Keep [expense] out of the books and ask the leaders. → true when it is with them; false when there is nobody to decide (the caller approves it then).
+const holdForLeadership = async (expense, user, note = '') => {
+  expense.status = 'pending';
+  expense.approvedBy = null;
+  expense.approvedAt = null;
+  await expense.save();
+  const out = await escalate({ kind: 'spend_expense', source: expense, checker: user, checkNote: note });
+  if (out.escalated) {
+    if (expense.createdBy && String(expense.createdBy) !== String(user?._id)) {
+      await notify({
+        recipients: [expense.createdBy],
+        type: 'expense_recorded',
+        title: 'Expense checked — with the CEO / Executive Director',
+        body: `Your ${expense.department} expense "${expense.title}" (₹${(Number(expense.amount) || 0).toLocaleString('en-IN')}) is above the limit, so it waits for their decision.`,
+        link: '/accounts/admin-expenses',
+        createdBy: user?._id ?? null,
+        excludeUserId: user?._id ?? null,
+      });
+    }
+  }
+  return out.escalated;
+};
 
 // @desc    The expense heads. The form's dropdown gets the active ones; ?all=1 (approvers, for managing
 //          them) also gets the archived ones and how many expenses use each.
@@ -206,6 +242,7 @@ const checkHead = async (code) => {
 };
 import { applyMoneyAccount } from '../utils/moneyAccount.js';
 import { isApprover, resolveUserDeptName } from '../utils/departmentScope.js';
+import { isLeadership } from '../utils/leadership.js';
 import { prepareCharge, overBudgetGate, afterSpendChange } from '../services/projectSpend.js';
 
 // Treat user search text literally — an unescaped "(" or "*" would otherwise
@@ -280,9 +317,9 @@ export const getAdminExpenses = async (req, res) => {
       .lean();
 
     // Payroll rows are sensitive — only approvers get the auto-integrated
-    // salary lines merged in.
+    // salary lines merged in, and never the CEO / Executive Director (one line per person is pay; they get the totals below).
     let salaries = [];
-    if (approver && (!category || category === 'All' || category === 'other')) {
+    if (approver && !isLeadership(req.user) && (!category || category === 'All' || category === 'other')) {
       const salaryFilter = { status: 'paid' };
       
       if (department && department !== 'All') {
@@ -485,7 +522,10 @@ export const createAdminExpense = async (req, res) => {
     const headErr = await checkHead(expenseHead);
     if (headErr) return res.status(400).json({ message: headErr });
 
-    const status = approver ? 'approved' : 'pending';
+    let status = approver ? 'approved' : 'pending';
+    // Above the CEO / Executive Director's limit: filed as pending and sent to them once saved (Accounts' filing it is the check).
+    const toLeadership = approver && (await mustGoToLeadership({ source: 'manual' }, amountNum));
+    if (toLeadership) status = 'pending';
 
     // Charged to a project: it must be one that can take expenses (its cost approved). One that takes it past the approved
     // budget still goes in — pending, and flagged — but cannot be approved on the spot except by the finance head.
@@ -521,8 +561,8 @@ export const createAdminExpense = async (req, res) => {
       notes: notes || '',
       createdBy: req.user?._id || null,
       status,
-      approvedBy: approver ? req.user?._id || null : null,
-      approvedAt: approver ? new Date() : null,
+      approvedBy: approver && !toLeadership ? req.user?._id || null : null,
+      approvedAt: approver && !toLeadership ? new Date() : null,
       projectId: charge ? charge.project._id : null,
       projectName: charge ? charge.project.name : '',
       overBudgetReason: reasonForOver,
@@ -530,16 +570,30 @@ export const createAdminExpense = async (req, res) => {
 
     await expense.save();
 
+    // With the leaders — or, if there is nobody to decide, approved as it would have been
+    let withLeadership = false;
+    if (toLeadership) {
+      withLeadership = await holdForLeadership(expense, req.user, 'Filed by Accounts');
+      if (!withLeadership) {
+        expense.status = 'approved';
+        expense.approvedBy = req.user?._id || null;
+        expense.approvedAt = new Date();
+        await expense.save();
+      }
+    }
+
     await notifyRoles({
       roles: ['accounts', 'finance_head', 'admin'],
       type: 'expense_recorded',
-      title: approver
+      title: approver && !withLeadership
         ? 'New Administrative Expense'
         : charge?.check.over
           ? 'Department expense over a project\'s budget'
           : 'Department expense awaiting approval',
-      body: approver
+      body: approver && !withLeadership
         ? `₹${amountNum.toLocaleString('en-IN')} for "${title}" (${deptForExpense}) recorded.`
+        : withLeadership
+          ? `₹${amountNum.toLocaleString('en-IN')} for "${title}" (${deptForExpense}) is above the limit, so it waits for the CEO / Executive Director.`
         : `${deptForExpense}: ₹${amountNum.toLocaleString('en-IN')} for "${title}" submitted for approval${charge?.check.over ? `. It takes ${charge.project.name} over its approved budget — only the finance head can approve it.` : '.'}`,
       link: '/accounts/admin-expenses',
       createdBy: req.user?._id ?? null,
@@ -548,7 +602,7 @@ export const createAdminExpense = async (req, res) => {
 
     // Only APPROVED expenses hit the books. A pending departmental submission
     // is NOT posted until Accounts approves it.
-    if (status === 'approved') {
+    if (expense.status === 'approved') {
       await safePost(() => postDoc('AdminExpense', expense.toObject(), req.user?._id || null));
     }
 
@@ -556,7 +610,8 @@ export const createAdminExpense = async (req, res) => {
 
     const populated = await AdminExpense.findById(expense._id).populate(expensePopulate);
     // a pending expense that takes the project over its budget is filed, with the warning beside it
-    res.status(201).json(charge?.check.over && !approver ? { ...populated.toObject(), warning: { code: 'OVER_BUDGET', ...charge.check } } : populated);
+    if (charge?.check.over && !approver) return res.status(201).json({ ...populated.toObject(), warning: { code: 'OVER_BUDGET', ...charge.check } });
+    res.status(201).json(withLeadership ? { ...populated.toObject(), awaitingLeadership: true } : populated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -615,7 +670,14 @@ export const updateAdminExpense = async (req, res) => {
     const oldProject = expense.projectId;
     const nextAmount = amount !== undefined ? Number(amount) || 0 : expense.amount;
     const nextProject = projectId !== undefined ? projectId || null : expense.projectId;
-    const nextStatus = approver && status !== undefined ? status : expense.status;
+    let nextStatus = approver && status !== undefined ? status : expense.status;
+    // Approving it (or changing its amount while it is approved) above the limit: Accounts' approval is the check; the leaders decide.
+    const oldAmount = expense.amount;
+    const toLeadership =
+      approver &&
+      nextStatus === 'approved' &&
+      (expense.status !== 'approved' || (amount !== undefined && Number(nextAmount) !== Number(oldAmount))) &&
+      (await mustGoToLeadership(expense, nextAmount));
     let charge = null;
     if (nextProject && nextStatus !== 'rejected') {
       const changed = projectId !== undefined || amount !== undefined || nextStatus !== expense.status;
@@ -660,8 +722,28 @@ export const updateAdminExpense = async (req, res) => {
     if (invoiceNumber !== undefined) expense.invoiceNumber = invoiceNumber;
     if (notes !== undefined) expense.notes = notes;
     if (approver && status !== undefined) expense.status = status;
+    let withLeadership = false;
+    if (toLeadership) {
+      expense.status = 'pending'; // out of the books until a leader decides
+      expense.approvedBy = null;
+      expense.approvedAt = null;
+    }
 
     await expense.save();
+
+    // An expense that was with the leaders and was changed (or taken back / rejected) is not what they were asked about.
+    if (toLeadership) {
+      withLeadership = await holdForLeadership(expense, req.user, 'Approved by Accounts');
+      if (!withLeadership) {
+        expense.status = 'approved';
+        expense.approvedBy = req.user?._id || null;
+        expense.approvedAt = new Date();
+        await expense.save();
+      }
+    } else if (expense.leadership?.state === 'awaiting') {
+      if (expense.status === 'rejected') await withdrawFor('spend_expense', expense._id, { user: req.user, reason: 'Accounts rejected it' });
+      else await supersedeFor('spend_expense', expense, { user: req.user });
+    }
 
     // what the project(s) have spent has changed
     if (oldProject) await afterSpendChange(oldProject);
@@ -676,7 +758,7 @@ export const updateAdminExpense = async (req, res) => {
     }
 
     const populated = await AdminExpense.findById(expense._id).populate(expensePopulate);
-    res.json(populated);
+    res.json(withLeadership ? { ...populated.toObject(), awaitingLeadership: true } : populated);
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -713,6 +795,7 @@ export const verifyAdminExpense = async (req, res) => {
       }
     }
 
+    const wasWithLeadership = expense.leadership?.state === 'awaiting';
     expense.status = status;
     expense.approvedBy = req.user?._id || null;
     expense.approvedAt = status !== 'pending' ? new Date() : null;
@@ -726,7 +809,25 @@ export const verifyAdminExpense = async (req, res) => {
       if (err) return res.status(400).json({ message: err });
     }
 
+    // Above the CEO / Executive Director's limit: this approval is the CHECK; the expense waits for their decision, out of the books.
+    if (status === 'approved' && (await mustGoToLeadership(expense, expense.amount))) {
+      if (await holdForLeadership(expense, req.user, String(req.body.note ?? '').trim().slice(0, 500))) {
+        if (expense.projectId) await afterSpendChange(expense.projectId);
+        await safePost(() => unpostDoc('AdminExpense', expense._id));
+        const held = await AdminExpense.findById(expense._id).populate(expensePopulate);
+        return res.json({ ...held.toObject(), awaitingLeadership: true });
+      }
+      // nobody to decide: approve it as before
+      expense.status = status;
+      expense.approvedBy = req.user?._id || null;
+      expense.approvedAt = new Date();
+    }
+
     await expense.save();
+    // rejected or sent back while it was with the leaders: take it off their desk
+    if (wasWithLeadership && status !== 'approved') {
+      await withdrawFor('spend_expense', expense._id, { user: req.user, reason: status === 'rejected' ? 'Accounts rejected it' : 'Accounts sent it back' });
+    }
     if (expense.projectId) await afterSpendChange(expense.projectId);
 
     // Post to the books on approval; pull it back out on reject / send-back.
@@ -764,6 +865,7 @@ export const deleteAdminExpense = async (req, res) => {
     }
 
     await expense.deleteOne();
+    await withdrawFor('spend_expense', expense._id, { user: req.user, reason: 'The expense was deleted' }).catch(() => null);
     if (expense.projectId) await afterSpendChange(expense.projectId);
     await safePost(() => unpostDoc('AdminExpense', expense._id));
     res.json({ message: 'Expense deleted successfully' });

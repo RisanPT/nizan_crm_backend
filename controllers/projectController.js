@@ -21,15 +21,17 @@ import {
   notifyInvitationReminder,
   notifyDepartmentResponse,
   notifyProposal,
-  notifyDecision,
   notifyCostRequest,
-  notifyCostDecision,
 } from '../services/projectNotify.js';
 import { resolveCost, mayStart, describeCostChange, checkDecision, cleanAmount, money, canSeeCostAmounts, spendingLimit } from '../utils/projectCost.js';
-import { spendMap, spendFor, afterSpendChange } from '../services/projectSpend.js';
+import { spendMap, spendFor } from '../services/projectSpend.js';
 import { expenseRow } from '../utils/projectSpend.js';
 import AdminExpense from '../models/AdminExpense.js';
 import { isApprover } from '../utils/departmentScope.js';
+import { decideProposal as decideProposalAtomic, applyCostDecision } from '../services/projectDecisions.js';
+import { mirrorProposal, settleProposalRequest, escalate, supersedeFor, withdrawFor, getPolicy } from '../services/decisions.js';
+import { needsLeadership, budgetIncrease } from '../utils/decisionRules.js';
+import { isLeadershipRole, leadershipTitle } from '../utils/leadership.js';
 
 const POPULATE = [
   { path: 'managerId', select: 'name email role category' },
@@ -256,8 +258,15 @@ export const createProject = async (req, res) => {
     await project.save();
 
     // A proposal goes to its department head first; the finance head hears about it once the head has approved.
-    if (project.status === 'proposed') await notifyProposal(project, req.user);
-    else await notifyCostRequest(project, req.user);
+    if (project.status === 'proposed') {
+      await notifyProposal(project, req.user);
+      // the CEO / Executive Director see it on their desk too (nothing is held: the department head still decides in parallel)
+      try {
+        await mirrorProposal(project);
+      } catch (err) {
+        console.error('[decisions] could not show the proposal to the leaders:', err.message);
+      }
+    } else await notifyCostRequest(project, req.user);
     await notifyInvited(project, added, req.user);
 
     const found = await loadOne(project._id);
@@ -420,6 +429,18 @@ export const resendInvitation = async (req, res) => {
   }
 };
 
+/// 409 for a proposal somebody has decided already: who, what, when, why.
+const alreadyDecided = async (res, project) => {
+  const by = project.decidedBy ? await User.findById(project.decidedBy).select('name role').lean() : null;
+  const verb = project.status === 'cancelled' ? 'not approved' : project.status === 'proposed' ? 'still waiting' : 'approved';
+  const who = by ? ` by ${by.name}${isLeadershipRole(by.role) ? ` (${leadershipTitle(by.role)})` : ''}` : '';
+  const note = String(project.decisionNote ?? '').trim();
+  return fail(res, 409, by ? `Already ${verb}${who}${note ? `: “${note}”` : '.'}` : 'This project is not waiting for a decision.', {
+    code: by ? 'ALREADY_DECIDED' : 'NOT_WAITING',
+    decision: by ? { by: { id: String(by._id), name: by.name, role: by.role }, at: project.decidedAt ?? null, note, outcome: verb } : null,
+  });
+};
+
 const decide = (approve) => async (req, res) => {
   try {
     const found = await loadOne(req.params.id);
@@ -427,20 +448,19 @@ const decide = (approve) => async (req, res) => {
     const project = found.doc;
     const ctx = await loadAccessContext(req.user);
 
-    if (project.status !== 'proposed') return fail(res, 409, 'This project is not waiting for a decision.');
+    if (project.status !== 'proposed') return alreadyDecided(res, project);
     if (!ctx.full && !isOwnerHead(project, ctx)) {
       return fail(res, 403, `Only the head of ${project.targetDepartment} or an administrator can decide on this proposal.`);
     }
 
-    project.status = approve ? 'planning' : 'cancelled';
-    project.decidedBy = req.user._id;
-    project.decidedAt = new Date();
-    project.decisionNote = String(req.body?.note ?? '').trim().slice(0, 500);
-    recordActivity(project, 'decision', approve ? 'Project approved' : 'Project not approved', req.user, project.decidedAt);
-    await project.save();
-
-    await notifyDecision(project, approve, req.user);
-    if (approve && project.costStatus === 'pending') await notifyCostRequest(project, req.user);
+    // one decision wins: if a department head and a leader click together, the second gets the 409 below
+    const decided = await decideProposalAtomic(project._id, { approve, note: req.body?.note, user: req.user });
+    if (!decided) return alreadyDecided(res, (await Project.findById(project._id)) ?? project);
+    try {
+      await settleProposalRequest(decided, { approve, user: req.user, note: decided.decisionNote });
+    } catch (err) {
+      console.error('[decisions] could not close the leaders\' request:', err.message); // the repair sweep closes it
+    }
     const fresh = await loadOne(project._id);
     res.json(await decorateOne(fresh.doc, fresh.tasks, ctx));
   } catch (error) {
@@ -501,6 +521,10 @@ export const updateCost = async (req, res) => {
       req.user,
     );
     await project.save();
+    // a cost that was with the CEO / Executive Director is not what they were asked about any more: it goes back to the finance head
+    if (project.costLeadership?.state === 'awaiting') {
+      await supersedeFor('project_budget', project, { user: req.user, reason: 'The cost was changed, so the finance head checks it again', force: true });
+    }
 
     if (resubmit && !['proposed', 'cancelled'].includes(project.status)) await notifyCostRequest(project, req.user, { change: status === 'approved' });
     const fresh = await loadOne(project._id);
@@ -534,22 +558,34 @@ export const decideCost = async (req, res) => {
     if (decision.error) return fail(res, 400, decision.error, { code: decision.code });
 
     const approve = decision.decision === 'approve';
-    project.costStatus = approve ? 'approved' : 'returned';
-    if (approve) project.approvedBudget = decision.amount;
-    project.costDecidedBy = req.user._id;
-    project.costDecidedByName = req.user.name ?? '';
-    project.costDecidedAt = new Date();
-    project.costDecisionNote = decision.note;
-    recordActivity(
-      project,
-      'cost',
-      approve ? `Cost approved: ${money(decision.amount)}${decision.amount !== project.budget ? ` (asked ${money(project.budget)})` : ''}` : 'Cost sent back for changes',
-      req.user,
-    );
-    await project.save();
 
-    await notifyCostDecision(project, approve, req.user);
-    if (approve) await afterSpendChange(project);
+    // With the CEO / Executive Director already: it cannot be approved twice; sending it back takes it off their desk.
+    if (project.costLeadership?.state === 'awaiting') {
+      if (approve) return fail(res, 409, 'This cost is already with the CEO / Executive Director.', { code: 'AWAITING_LEADERSHIP' });
+      await withdrawFor('project_budget', project._id, { user: req.user, reason: 'The finance head sent it back' });
+    }
+    // Above the limit set in Decision rules: the finance head's approval is the CHECK; the CEO / Executive Director decides.
+    if (approve) {
+      const increase = budgetIncrease({ proposed: decision.amount, previousApproved: spendingLimit(project) });
+      if (needsLeadership(await getPolicy(), 'project_budget', increase)) {
+        const held = await escalate({
+          kind: 'project_budget',
+          source: project,
+          checker: req.user,
+          checkNote: decision.note,
+          payload: { amount: decision.amount, note: decision.note, increase },
+        });
+        if (held.escalated) {
+          const stamped = await Project.findById(project._id);
+          recordActivity(stamped, 'cost', `Cost ${money(decision.amount)} checked by the finance head and sent to the CEO / Executive Director`, req.user);
+          await stamped.save();
+          const fresh = await loadOne(project._id);
+          return res.json(await decorateOne(fresh.doc, fresh.tasks, ctx));
+        }
+      }
+    }
+
+    await applyCostDecision(project, { approve, amount: decision.amount, note: decision.note, user: req.user });
     const fresh = await loadOne(project._id);
     res.json(await decorateOne(fresh.doc, fresh.tasks, ctx));
   } catch (error) {
@@ -676,6 +712,9 @@ export const deleteProject = async (req, res) => {
     await project.deleteOne();
     // Cascade: remove the project's tasks so they aren't orphaned.
     await ITTask.deleteMany({ projectId: req.params.id });
+    for (const kind of ['project_proposal', 'project_budget']) {
+      await withdrawFor(kind, project._id, { user: req.user, reason: 'The project was deleted' }).catch(() => null);
+    }
     res.json({ message: 'Project deleted' });
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -2,9 +2,10 @@ import mongoose from 'mongoose';
 
 // HR / payroll change log (audit trail). One row per create / update / status
 // change of an Employee pay record, Salary slip, payroll month lock or applied
-// compensation revision. Only changed fields are stored; bank account / PAN
-// values are masked to their last 4 characters before they are written.
-export const AUDIT_ENTITIES = ['Employee', 'Salary', 'PayrollLock', 'CompensationRevision'];
+// compensation revision — and of a top-level LOGIN ('User': an admin, manager, CEO or
+// Executive Director account created, re-roled, deactivated or deleted). Only changed
+// fields are stored; bank account / PAN values are masked to their last 4 characters.
+export const AUDIT_ENTITIES = ['Employee', 'Salary', 'PayrollLock', 'CompensationRevision', 'User', 'DecisionPolicy'];
 
 const changeSchema = new mongoose.Schema(
   {

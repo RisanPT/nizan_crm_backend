@@ -11,8 +11,9 @@ import ITTask from '../models/ITTask.js';
 import DepartmentReport, { DEPARTMENT_KEYS } from '../models/DepartmentReport.js';
 import { round2 } from './accountingController.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo']; // + 'ceo': read-only, enforced in middleware/ceoGuard.js
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', ...LEADERSHIP_ROLES]; // + leadership (CEO, Executive Director): read-only, enforced in middleware/ceoGuard.js
 const canView = (u) => FINANCE_ROLES.includes(u?.role);
 
 const DEAD_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];

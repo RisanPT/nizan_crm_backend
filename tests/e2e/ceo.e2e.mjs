@@ -99,7 +99,8 @@ await check('the CEO role is seeded: home /ceo, view-and-decide permissions, not
   assert.ok(role, 'seeded');
   assert.equal(role.homeRoute, '/ceo');
   for (const p of ['ceo', 'dashboard', 'planning.manage', 'payables.dashboard', 'company_finance.month_end', 'hr_analytics']) assert.ok(role.permissions.includes(p), p);
-  for (const parent of ['staff', 'payables', 'company_finance', 'it', 'settings', 'finance', 'compensation']) assert.ok(!role.permissions.includes(parent), `must not carry the whole "${parent}" module`);
+  // ('finance' itself is in the seed — it is the Accounts menu and opens no pay route on the server — so it is not on this list)
+  for (const parent of ['staff', 'payables', 'company_finance', 'it', 'settings', 'compensation']) assert.ok(!role.permissions.includes(parent), `must not carry the whole "${parent}" module`);
   for (const sub of ['staff.salaries', 'payables.admin_salaries', 'payables.operations_salaries', 'payables.hra', 'company_finance.bank_balance']) assert.ok(!role.permissions.includes(sub), sub);
 });
 

@@ -2,8 +2,9 @@ import TaxFiling, { FILING_LABELS } from '../models/TaxFiling.js';
 import ChartOfAccount from '../models/ChartOfAccount.js';
 import { accountMovements, round2 } from './accountingController.js';
 import { istMonthBounds } from '../utils/istDate.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', ...LEADERSHIP_ROLES];
 const canManage = (u) => FINANCE_ROLES.includes(String(u?.role ?? '').trim().toLowerCase());
 
 const d = (y, m, day) => new Date(y, m - 1, day); // m is 1-based

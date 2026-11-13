@@ -1,7 +1,8 @@
 import Asset, { ASSET_TYPES, ASSET_STATUSES, DEPRECIATION_METHODS } from '../models/Asset.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
 // Finance section is management + accounts territory.
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo'];
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', ...LEADERSHIP_ROLES];
 const canManageFinance = (user) => FINANCE_ROLES.includes(String(user?.role ?? '').trim().toLowerCase());
 
 const toDate = (v) => {

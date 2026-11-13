@@ -9,6 +9,8 @@ import HiringPlan from '../models/HiringPlan.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import { getHrScope, deptNameFilter, isHrWide } from '../utils/hrDeptScope.js';
+import { needsLeadership } from '../utils/decisionRules.js';
+import { escalate, getPolicy, hasLeadership, supersedeFor, withdrawFor } from '../services/decisions.js';
 
 // Department-head scoping (owner decision 2026-11-06): HR-wide callers see and
 // manage everything; a department head only their own department's job posts,
@@ -978,6 +980,18 @@ const getHiringPlans = asyncHandler(async (req, res) => {
   res.json(plans);
 });
 
+// ── the CEO / Executive Director and hiring plans ────────────────────────────
+// When Decision rules says hiring plans need them, HR's approval is the VET and the plan then waits for their decision. A plan is
+// then never "approved" by HR alone — also not by setting status:'approved' through create / edit.
+
+/// Do plans go to the CEO / Executive Director (and is there somebody to decide)?
+const plansNeedLeadership = async () => needsLeadership(await getPolicy(), 'hiring_plan') && (await hasLeadership());
+
+const NEEDS_LEADERSHIP = {
+  code: 'NEEDS_LEADERSHIP',
+  message: 'Hiring plans are approved by the CEO / Executive Director. Use "Vet and send" so they can decide.',
+};
+
 const createHiringPlan = asyncHandler(async (req, res) => {
   guard(req, res);
   const designation = String(req.body.designation || '').trim();
@@ -987,6 +1001,7 @@ const createHiringPlan = asyncHandler(async (req, res) => {
     throw new Error('Please provide designation and department');
   }
   await assertDeptInScope(req, res, department);
+  if (req.body.status === 'approved' && (await plansNeedLeadership())) return res.status(409).json(NEEDS_LEADERSHIP);
   const plan = await HiringPlan.create({
     roleId: req.body.roleId || null,
     designation,
@@ -1012,6 +1027,7 @@ const updateHiringPlan = asyncHandler(async (req, res) => {
   const b = req.body;
   await assertDeptInScope(req, res, plan.department);
   if (b.department !== undefined) await assertDeptInScope(req, res, b.department);
+  if (b.status === 'approved' && plan.status !== 'approved' && (await plansNeedLeadership())) return res.status(409).json(NEEDS_LEADERSHIP);
   if (b.designation !== undefined) plan.designation = String(b.designation).trim();
   if (b.department !== undefined) plan.department = String(b.department).trim();
   if (b.openings !== undefined) plan.openings = Number(b.openings) || 1;
@@ -1024,6 +1040,11 @@ const updateHiringPlan = asyncHandler(async (req, res) => {
   if (b.competencies !== undefined) plan.competencies = String(b.competencies).trim();
   if (b.status !== undefined) plan.status = b.status;
   await plan.save();
+  // it was with the leaders: taken back / rejected → off their desk; edited → the vet is done again
+  if (plan.leadership?.state === 'awaiting') {
+    if (!['draft', 'raised'].includes(plan.status)) await withdrawFor('hiring_plan', plan._id, { user: req.user, reason: `The plan was marked ${plan.status}` });
+    else await supersedeFor('hiring_plan', plan, { user: req.user });
+  }
   res.json(plan);
 });
 
@@ -1035,6 +1056,7 @@ const raiseHiringPlan = asyncHandler(async (req, res) => {
   plan.status = 'raised';
   plan.raisedAt = new Date();
   await plan.save();
+  if (plan.leadership?.state === 'awaiting') await supersedeFor('hiring_plan', plan, { user: req.user, reason: 'The plan was raised again, so HR vets it again', force: true });
   res.json(plan);
 });
 
@@ -1048,6 +1070,14 @@ const approveHiringPlan = asyncHandler(async (req, res) => {
   if (!isAdmin && plan.createdBy && req.user?._id && String(plan.createdBy) === String(req.user._id)) {
     res.status(403);
     throw new Error('You cannot approve a hiring plan you raised');
+  }
+  // HR's approval is the vet; above that the CEO / Executive Director decide
+  if (plan.status !== 'approved' && (await plansNeedLeadership())) {
+    const out = await escalate({ kind: 'hiring_plan', source: plan, checker: req.user, checkNote: String(req.body?.note ?? '').trim().slice(0, 500) });
+    if (out.escalated) {
+      const held = await HiringPlan.findById(plan._id);
+      return res.json({ ...held.toObject(), awaitingLeadership: true });
+    }
   }
   plan.status = 'approved';
   plan.approvedAt = new Date();
@@ -1064,6 +1094,7 @@ const rejectHiringPlan = asyncHandler(async (req, res) => {
   plan.status = 'rejected';
   plan.rejectionReason = String(req.body.reason || 'Rejected during review').trim();
   await plan.save();
+  if (plan.leadership?.state === 'awaiting') await withdrawFor('hiring_plan', plan._id, { user: req.user, reason: 'HR rejected the plan' });
   res.json(plan);
 });
 
@@ -1073,6 +1104,7 @@ const deleteHiringPlan = asyncHandler(async (req, res) => {
   if (existingPlan) await assertDeptInScope(req, res, existingPlan.department);
   const plan = await HiringPlan.findByIdAndDelete(req.params.id);
   if (!plan) { res.status(404); throw new Error('Hiring plan not found'); }
+  await withdrawFor('hiring_plan', plan._id, { user: req.user, reason: 'The plan was deleted' }).catch(() => null);
   res.json({ message: 'Hiring plan removed', id: req.params.id });
 });
 

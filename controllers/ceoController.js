@@ -1,7 +1,8 @@
 import { loadCeoInbox, loadCeoSignals } from '../services/ceoInbox.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
 // The CEO home. Everyone who may open the CEO screen sees the same company-wide numbers.
-const VIEW_ROLES = ['ceo', 'admin', 'manager'];
+const VIEW_ROLES = [...LEADERSHIP_ROLES, 'admin', 'manager'];
 const canView = (u) => VIEW_ROLES.includes(String(u?.role ?? '').trim().toLowerCase());
 
 // @desc    What needs the CEO, and what is waiting (and for how long) with the team
