@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+export const LEAD_PRIORITIES = ['Hot', 'Warm', 'Nurture', 'Cold'];
+
 const leadSchema = mongoose.Schema(
   {
     name: {
@@ -101,6 +103,22 @@ const leadSchema = mongoose.Schema(
     },
     region: { type: String, default: '' },
     district: { type: String, default: '' },
+    // ── Marketing details (all optional; rules in utils/marketGeo.js, applied by services/leadMarkets.js) ──
+    // Where the bride is: Country → City from the marketing list. The names are copied from the list on every save, so a rename of a
+    // country / city is cascaded to its leads (controllers/countryController.js) and a lead never names a place its ids do not.
+    countryId: { type: mongoose.Schema.Types.ObjectId, ref: 'Country', default: null },
+    country: { type: String, default: '' },
+    cityId: { type: mongoose.Schema.Types.ObjectId, ref: 'City', default: null },
+    city: { type: String, default: '' },
+    // WhatsApp number when it is not the phone number ('' = the same as the phone).
+    whatsapp: { type: String, default: '', trim: true },
+    // What she can spend, in `budgetCurrency` (the country's currency unless set). null = not asked / not told.
+    budget: { type: Number, default: null, min: 0 },
+    budgetCurrency: { type: String, default: '', trim: true },
+    language: { type: String, default: '', trim: true },
+    // Who referred her (free text until the Partner CRM exists) and the ad creative she came from (e.g. "Reel #17").
+    referralPartner: { type: String, default: '', trim: true },
+    creative: { type: String, default: '', trim: true },
     // Date + time for follow-up reminder (only when status is Follow-up)
     followUpDate: {
       type: Date,
@@ -148,9 +166,11 @@ const leadSchema = mongoose.Schema(
     },
     // How likely this lead is to close — tracked separately from the pipeline
     // stage so a lead can be, say, "Follow-up" AND "Hot" at the same time.
+    // Nurture = interested but a long way off (keep in touch). The Marketing
+    // screens read a lead with no priority as "Not rated" (utils/marketingLeadStages.js).
     priority: {
       type: String,
-      enum: ['Hot', 'Warm', 'Cold'],
+      enum: LEAD_PRIORITIES,
       default: 'Warm',
     },
     reason: {
@@ -208,6 +228,15 @@ const leadSchema = mongoose.Schema(
     },
     // Append-only trail of notable actions on this lead (lost requested,
     // approved, rejected, …) for the acceptance-criteria audit log.
+    // Where the lead came in from on its own — '' = typed in by staff. Speed to lead is measured on these (utils/leadResponse.js).
+    origin: { type: String, enum: ['', 'meta_lead_ads', 'website', 'whatsapp'], default: '' },
+    // The first contact: the first call / message / follow-up logged on it, or its first move out of New. Set once, by the server.
+    firstContactAt: { type: Date, default: null },
+    firstContactBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    firstContactByName: { type: String, default: '' },
+    firstContactVia: { type: String, default: '' },
+    // The "a new lead is waiting" alert went out (once per lead).
+    responseAlertAt: { type: Date, default: null },
     auditLog: [
       {
         action: { type: String, default: '' },
@@ -223,6 +252,9 @@ const leadSchema = mongoose.Schema(
     timestamps: true,
   }
 );
+
+// the waiting-lead check: new leads not yet contacted, newest first
+leadSchema.index({ status: 1, firstContactAt: 1, createdAt: -1 });
 
 const Lead = mongoose.model('Lead', leadSchema);
 

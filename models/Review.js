@@ -87,6 +87,25 @@ const reviewSchema = mongoose.Schema(
     // A staff member pressed "Send Review" (WhatsApp click-to-chat). The
     // automatic next-day send skips a review once this is set.
     manualSentAt: { type: Date, default: null },
+    // who sent it by hand (`sentBy` above is whoever made the review — often the person who completed the booking)
+    manualSentBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    manualSentByName: { type: String, default: '' },
+    // every change staff made to the flags below: { field, value, by, byName, at }
+    flagHistory: {
+      type: [
+        new mongoose.Schema(
+          {
+            field: { type: String, default: '' },
+            value: { type: Boolean, default: false },
+            by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+            byName: { type: String, default: '' },
+            at: { type: Date, default: Date.now },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
 
     // Automatic next-day send through TeamN Chat (services/reviewAutoSend.js).
     //   ''       not attempted yet

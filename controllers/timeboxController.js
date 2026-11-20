@@ -254,26 +254,97 @@ export const getTimeboxDays = async (req, res) => {
 // ── POST /api/timebox/sync-employees ─────────────────────────────────────────
 /**
  * Core synchronization worker.
- * Scan all Timebox employees, find matching CRM employee records by email or
- * name, and write back the `timeboxEmployeeId` + `timeboxName` onto the CRM
- * Employee document so future payroll runs use the permanent integer ID match.
+ * Scan all Timebox employees, find the matching CRM employee (by the Timebox id
+ * it was linked to before, then email, then name — like matchCrm), and write
+ * back the `timeboxEmployeeId` + `timeboxName` onto the CRM Employee document so
+ * future payroll runs use the permanent integer ID match. A Timebox person with
+ * no CRM record is created as an administrative Employee.
  *
- * Safe to run multiple times (idempotent).
- * Returns a summary: { ok, mode, created, synced, alreadySynced, unmatched, conflictCount, conflicts, results, message }
+ * It runs after every employee creation, on boot, every 30 minutes and on
+ * "Sync now", so calls overlap. performTimeboxEmployeeSync() therefore runs ONE
+ * sync at a time in this server: a call made while one is running waits for it
+ * and then shares a single fresh run (which sees whoever was just added). Two
+ * syncs working from the same picture of the CRM would each import the same
+ * Timebox person.
+ *
+ * Safe to run multiple times (idempotent). One person that cannot be saved is
+ * reported and skipped; it does not stop the others.
+ * Returns a summary: { ok, mode, created, synced, alreadySynced, unmatched, failed, conflictCount, conflicts, results, message }
  */
-export async function performTimeboxEmployeeSync() {
+let syncRunning = null; // the sync in progress
+let syncQueued = null; // the one run after it, shared by every call made meanwhile
+
+export function performTimeboxEmployeeSync() {
+  if (!syncRunning) {
+    syncRunning = runTimeboxEmployeeSync().finally(() => {
+      syncRunning = null;
+    });
+    return syncRunning;
+  }
+  if (!syncQueued) {
+    syncQueued = syncRunning
+      .catch(() => {})
+      .then(() => {
+        syncQueued = null;
+        return performTimeboxEmployeeSync();
+      });
+  }
+  return syncQueued;
+}
+
+/** Resolves once no sync is running or waiting (tests, a clean shutdown). Never rejects. */
+export async function timeboxSyncIdle() {
+  while (syncRunning || syncQueued) await (syncQueued || syncRunning).catch(() => {});
+}
+
+/**
+ * Start a sync and do not wait for it. Whatever happens is logged, never thrown:
+ * the request that asked for it (e.g. creating an employee) must not fail because of it.
+ */
+export function syncTimeboxInBackground(after) {
+  const log = (err) => console.error(`[Timebox] Background sync after ${after} failed:`, err?.message || err);
+  try {
+    performTimeboxEmployeeSync().catch(log);
+  } catch (err) {
+    log(err);
+  }
+}
+
+const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/** The CRM record for a Timebox person as the database has it NOW (the run's picture may be minutes old): id, then email, then name. */
+async function findCrmNow({ id, email, name }) {
+  const exactly = (s) => new RegExp(`^\\s*${escapeRegex(String(s).trim())}\\s*$`, 'i');
+  const or = [{ timeboxEmployeeId: id }];
+  if (email) or.push({ email: exactly(email) });
+  if (norm(name)) or.push({ name: exactly(name) });
+  const found = await Employee.find({ $or: or }).limit(50).lean();
+  return matchCrm(
+    {
+      byTimeboxId: new Map(found.filter((e) => e.timeboxEmployeeId != null).map((e) => [Number(e.timeboxEmployeeId), e])),
+      byEmail: new Map(found.filter((e) => e.email).map((e) => [norm(e.email), e])),
+      byName: new Map(found.filter((e) => e.name).map((e) => [norm(e.name), e])),
+    },
+    { id, email, name }
+  );
+}
+
+/** A problem with one person's record (skip them, carry on) — as opposed to losing the database (stop the run). */
+const isRecordError = (err) =>
+  err?.code === 11000 || ['ValidationError', 'CastError', 'StrictModeError', 'VersionError', 'DocumentNotFoundError'].includes(err?.name);
+
+async function runTimeboxEmployeeSync() {
   const empRes = await timeboxFetch('employees');
   const tbEmployees = empRes.data || [];
 
-  // Build a fresh CRM index (by email + name — NOT by timeboxId yet, since
-  // this is the sync that establishes those bindings).
-  const crmEmps = await Employee.find({}).lean();
-  const byEmail = new Map();
-  const byName = new Map();
-  for (const e of crmEmps) {
-    if (e.email) byEmail.set(norm(e.email), e);
-    if (e.name) byName.set(norm(e.name), e);
-  }
+  // Picture of the CRM for this run, kept up to date as the run creates and links people.
+  const index = { byTimeboxId: new Map(), byEmail: new Map(), byName: new Map() };
+  const remember = (e) => {
+    if (e.timeboxEmployeeId != null) index.byTimeboxId.set(Number(e.timeboxEmployeeId), e);
+    if (e.email) index.byEmail.set(norm(e.email), e);
+    if (e.name) index.byName.set(norm(e.name), e);
+  };
+  for (const e of await Employee.find({}).lean()) remember(e);
 
   // Map a Timebox department name → our Department entity id (by name or key).
   const departments = await Department.find({}).lean();
@@ -288,22 +359,16 @@ export async function performTimeboxEmployeeSync() {
   let created = 0;
   let alreadySynced = 0;
   let unmatched = 0;
+  let failed = 0;
   const conflicts = [];
   const results = [];
 
-  for (const tb of tbEmployees) {
-    const tbId = Number(tb.id);
-    const tbEmail = norm(tb.email || '');
-    const tbName = tb.full_name || tb.name || '';
+  const syncOne = async (tb, tbId, tbEmail, tbName) => {
+    let { crm: crmMatch, matchedBy } = matchCrm(index, { id: tbId, email: tbEmail, name: tbName });
 
-    // Attempt match: email first, then name
-    let crmMatch = tbEmail ? byEmail.get(tbEmail) : null;
-    let matchedBy = crmMatch ? 'email' : null;
-
-    if (!crmMatch && tbName) {
-      crmMatch = byName.get(norm(tbName));
-      if (crmMatch) matchedBy = 'name';
-    }
+    // Not in this run's picture — but someone may have added them since it was taken (HR, the associate quick-add, another
+    // server). Look again right before creating, so the same person is never saved twice.
+    if (!crmMatch) ({ crm: crmMatch, matchedBy } = await findCrmNow({ id: tbId, email: tbEmail, name: tbName }));
 
     // No CRM match → CREATE the Timebox person as an administrative Employee,
     // slotted into their department. This is how Timebox staff are saved into
@@ -321,6 +386,7 @@ export async function performTimeboxEmployeeSync() {
         timeboxEmployeeId: tbId,
         timeboxName: tbName,
       });
+      remember(newEmp.toObject());
       created += 1;
       results.push({
         timeboxId: tbId,
@@ -331,7 +397,7 @@ export async function performTimeboxEmployeeSync() {
         action: 'created',
         department: newEmp.department,
       });
-      continue;
+      return;
     }
 
     // Check for conflicts: two Timebox employees binding to the same CRM employee
@@ -350,7 +416,7 @@ export async function performTimeboxEmployeeSync() {
         matched: false,
         reason: 'conflict',
       });
-      continue;
+      return;
     }
 
     // Already synced with the same ID — backfill department if unset and sync active status.
@@ -377,7 +443,7 @@ export async function performTimeboxEmployeeSync() {
         matchedBy,
         action: 'already_synced',
       });
-      continue;
+      return;
     }
 
     // Write the binding back to CRM (+ slot into their department if unset and sync active status).
@@ -391,6 +457,8 @@ export async function performTimeboxEmployeeSync() {
       if (crmMatch.status !== tbStatus) patch.status = tbStatus;
     }
     await Employee.findByIdAndUpdate(crmMatch._id, patch);
+    // now linked: a second Timebox record matching the same person is a conflict, not a silent re-link
+    remember({ ...crmMatch, ...patch });
 
     synced += 1;
     results.push({
@@ -402,6 +470,20 @@ export async function performTimeboxEmployeeSync() {
       matchedBy,
       action: 'synced',
     });
+  };
+
+  for (const tb of tbEmployees) {
+    const tbId = Number(tb.id);
+    const tbEmail = norm(tb.email || '');
+    const tbName = tb.full_name || tb.name || '';
+    try {
+      await syncOne(tb, tbId, tbEmail, tbName);
+    } catch (err) {
+      if (!isRecordError(err)) throw err;
+      failed += 1;
+      console.error(`[Timebox] sync: could not save Timebox #${tbId} (${tbName}):`, err?.message || err);
+      results.push({ timeboxId: tbId, timeboxName: tbName, matched: false, reason: 'error' });
+    }
   }
 
   return {
@@ -411,10 +493,11 @@ export async function performTimeboxEmployeeSync() {
     synced,
     alreadySynced,
     unmatched,
+    failed,
     conflictCount: conflicts.length,
     conflicts,
     results,
-    message: `Imported ${created} new staff, linked ${synced}, ${alreadySynced} already up to date${conflicts.length ? `, ${conflicts.length} conflicts` : ''}.`,
+    message: `Imported ${created} new staff, linked ${synced}, ${alreadySynced} already up to date${conflicts.length ? `, ${conflicts.length} conflicts` : ''}${failed ? `, ${failed} could not be saved` : ''}.`,
   };
 }
 

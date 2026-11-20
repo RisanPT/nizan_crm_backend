@@ -45,6 +45,7 @@ const DENY = [
   /^\/api\/letters(\/|$)/,
   /^\/api\/backup(\/|$)/,
   /^\/api\/roles(\/|$)/,
+  /^\/api\/meta\/webhook(\/|$)/, // Meta's own call (no login); a person never needs it
   // routes that carry pay although their name does not say so (found by looking at what each response holds):
   /^\/api\/audit(\/|$)/, // the audit log keeps every salary change as from → to
   /^\/api\/employees\/[^/]+\/increments(\/|$)/, // previous and new salary
@@ -134,7 +135,7 @@ export const scrubPayText = (value) => {
 // Refused outright (GET included):
 export const LEADERSHIP_DENIED_MOUNTS = [
   '/api/salaries', '/api/hra', '/api/compensation', '/api/bank-accounts', '/api/employee-documents', '/api/letters',
-  '/api/backup', '/api/roles', '/api/audit',
+  '/api/backup', '/api/roles', '/api/audit', '/api/meta/webhook',
 ];
 
 // Readable (the guard still refuses every write except the decisions below, and strips or scrubs pay where a response carries it).
@@ -142,18 +143,18 @@ export const LEADERSHIP_DENIED_MOUNTS = [
 // fields on every record), /api/offboarding (settlement), /api/recruitment (offers), /api/timebox (payroll).
 export const LEADERSHIP_READ_OK_MOUNTS = [
   '/api', '/api/account-reports', '/api/accounting', '/api/addon-services', '/api/admin-expenses', '/api/app-clients',
-  '/api/approvals', '/api/artist-payouts', '/api/assets', '/api/attendances', '/api/auth', '/api/blocked-dates',
+  '/api/approvals', '/api/artist-payouts', '/api/assets', '/api/associate-works', '/api/attendances', '/api/auth', '/api/blocked-dates',
   '/api/booking-advances', '/api/bookings', '/api/budgets', '/api/cash-transactions', '/api/ceo', '/api/chat', '/api/client',
-  '/api/client/auth', '/api/collections', '/api/company-reports', '/api/consultations', '/api/content', '/api/customers',
+  '/api/client/auth', '/api/collections', '/api/company-reports', '/api/consultations', '/api/content', '/api/countries', '/api/crm', '/api/customers',
   '/api/dashboard', '/api/decision-policy', '/api/decisions', '/api/departments', '/api/designations', '/api/districts', '/api/employee-assets', '/api/employees',
   '/api/engagement', '/api/enquiry-counts', '/api/expense-categories', '/api/expenses', '/api/fleet',
   '/api/fleet/availability', '/api/fleet/gps-km', '/api/food-allowances', '/api/fuel-expenses', '/api/fuel-prices', '/api/geo',
   '/api/goals', '/api/grievances', '/api/help', '/api/hr', '/api/hr-analytics', '/api/inventory', '/api/it-tasks',
-  '/api/leads', '/api/leave', '/api/lms', '/api/manpower', '/api/marketing', '/api/marketing/eod', '/api/monthly-objectives',
+  '/api/leads', '/api/leave', '/api/lms', '/api/manpower', '/api/marketing', '/api/marketing/campaign-hub', '/api/marketing/coordinations', '/api/marketing/eod', '/api/marketing/lead-report', '/api/marketing/portfolio', '/api/marketing/socials', '/api/marketing/strategies', '/api/marketing/weekly', '/api/marketing/reports', '/api/marketing/media', '/api/marketing/team', '/api/meta', '/api/monthly-objectives',
   '/api/notifications', '/api/offboarding', '/api/okrs', '/api/onboarding', '/api/packages', '/api/performance',
   '/api/pincodes', '/api/project-docs', '/api/projects', '/api/recruitment', '/api/regions', '/api/regularizations',
   '/api/reimbursements', '/api/reports', '/api/reviews', '/api/sales-reports', '/api/sales-returns', '/api/sales-targets',
   '/api/shifts', '/api/slots', '/api/states', '/api/strategic-vision', '/api/stylist-clients', '/api/subscriptions',
   '/api/tax-filings', '/api/tickets', '/api/time-blocks', '/api/timebox', '/api/timesheets', '/api/travel',
-  '/api/trial-packages', '/api/trials', '/api/upload', '/api/vehicles', '/api/whatsapp', '/api/work-profit', '/api/zones',
+  '/api/trial-packages', '/api/trials', '/api/upload', '/api/vehicles', '/api/whatsapp', '/api/work-footage', '/api/work-profit', '/api/zones',
 ];

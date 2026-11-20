@@ -268,6 +268,27 @@ const settleAndTell = async (open, status, { user, reason }) => {
   return settled;
 };
 
+/**
+ * A proposal's project was already decided (by its department head, an administrator, or the other leader): settle the request with THAT
+ * decision — who, when, why — instead of calling it "superseded". → the settled request, or null when the project is still waiting.
+ */
+const settleFromProject = async (request, now = new Date()) => {
+  const project = await Project.findById(request.refId).select('status decidedBy decidedAt decisionNote').lean();
+  if (!project || project.status === 'proposed') return null;
+  const approve = project.status !== 'cancelled';
+  const decider = project.decidedBy ? await User.findById(project.decidedBy).select('name role').lean() : null;
+  const note = clip(project.decisionNote, 500);
+  return DecisionRequest.findOneAndUpdate(
+    { _id: request._id },
+    {
+      $set: { status: approve ? 'approved' : 'rejected', decidedBy: decider ? personOf(decider) : null, decidedAt: project.decidedAt ?? now, note, appliedAt: now },
+      $unset: { open: 1 },
+      $push: { history: { at: now, by: decider ? personOf(decider) : {}, action: approve ? 'approved' : 'rejected', note, meta: { by: 'decided on the project' } } },
+    },
+    { new: true },
+  );
+};
+
 /// A project proposal was decided by its department head / an administrator: close the leaders' request with their decision.
 export const settleProposalRequest = async (project, { approve, user, note = '' }) => {
   const now = new Date();
@@ -359,6 +380,10 @@ const finishApply = async (request, { action, user, note, now, replay = false })
     return { request: failed ?? request, applied: false };
   }
   if (outcome.result === 'source_changed') {
+    if (request.kind === 'project_proposal') {
+      const settled = await settleFromProject(request, now);
+      if (settled) throw new DecisionError(409, conflictBody(settled));
+    }
     await DecisionRequest.updateOne(
       { _id: request._id },
       {
@@ -399,6 +424,10 @@ export const decide = async ({ id, user, input, now = new Date() }) => {
     throw await conflict(request._id);
   }
   if (isMaterialChange(request.kind, request.payload?.snapshot, h.snapshot(source)) || !h.stillHeld(source, request)) {
+    if (request.kind === 'project_proposal') {
+      const settled = await settleFromProject(request, now);
+      if (settled) throw new DecisionError(409, conflictBody(settled));
+    }
     await settleOpen({ _id: request._id }, 'superseded', { note: 'Changed after it was checked', now });
     throw sourceChanged();
   }

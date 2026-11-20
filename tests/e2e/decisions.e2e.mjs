@@ -689,6 +689,22 @@ await check('a department head and a leader deciding together: exactly one decis
   assert.equal(await DecisionRequest.countDocuments({ refId: r.body._id, status: { $in: ['approved', 'rejected'] } }), 1);
 });
 
+await check('a proposal decided on the project while its card was still open: the leader is told who decided, and the card shows that decision (not "superseded")', async () => {
+  const r = await api('POST', '/projects', staff.token, { name: 'Decided elsewhere', targetDepartment: 'Marketing', budget: 40_000 });
+  const req = await reqFor('project_proposal', r.body._id);
+  // the department head decided; the card was left open (as if their request closed too late, or not at all)
+  await Project.updateOne({ _id: r.body._id }, { $set: { status: 'planning', decidedBy: mhead.id, decidedAt: new Date(), decisionNote: 'Good fit' } });
+  const late = await decide(req._id, ceo, { action: 'reject', note: 'Not now' });
+  assert.equal(late.status, 409);
+  assert.equal(late.body.code, 'ALREADY_DECIDED');
+  assert.equal(late.body.decision.by.name, 'mhead');
+  assert.equal(late.body.decision.note, 'Good fit');
+  const settled = await DecisionRequest.findById(req._id).lean();
+  assert.equal(settled.status, 'approved');
+  assert.equal(settled.decidedBy.name, 'mhead');
+  assert.equal((await Project.findById(r.body._id)).status, 'planning', 'the project is as the head left it');
+});
+
 await check('deleting a proposal withdraws it', async () => {
   const r = await api('POST', '/projects', staff.token, { name: 'Dropped idea', targetDepartment: 'Marketing', budget: 10_000 });
   const req = await reqFor('project_proposal', r.body._id);

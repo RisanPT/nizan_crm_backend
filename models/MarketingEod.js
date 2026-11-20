@@ -120,6 +120,8 @@ const marketingEodEntrySchema = new mongoose.Schema(
     notes: { type: String, default: '', trim: true },
     checkStatus: { type: String, enum: ['OK', 'WARNING'], default: 'OK' },
     checkMessage: { type: String, default: '' },
+    // 'logs': this day is the roll-up of the member's Log Activity entries (services/marketingRollup.js) — edit the logs, not this row.
+    source: { type: String, enum: ['manual', 'logs'], default: 'manual' },
     values: [
       {
         metricId: { type: mongoose.Schema.Types.ObjectId, ref: 'MarketingMetric', required: true },

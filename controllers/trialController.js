@@ -101,6 +101,9 @@ export const createTrial = async (req, res) => {
       trialItems: normalizeTrialItems(trialItems),
       assignedStaff: normalizeAssigned(assignedStaff),
       bookingId: bookingId || null,
+      // who booked it, for the CRM figures
+      createdBy: req.user?._id ?? null,
+      createdByName: req.user?.name ?? '',
     });
 
     const saved = await trial.save();

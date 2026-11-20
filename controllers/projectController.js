@@ -23,13 +23,16 @@ import {
   notifyProposal,
   notifyCostRequest,
 } from '../services/projectNotify.js';
-import { resolveCost, mayStart, describeCostChange, checkDecision, cleanAmount, money, canSeeCostAmounts, spendingLimit } from '../utils/projectCost.js';
+import { resolveCost, mayStart, checkDecision, cleanAmount, money, canSeeCostAmounts, spendingLimit, toPaise } from '../utils/projectCost.js';
 import { spendMap, spendFor } from '../services/projectSpend.js';
+import { submitCostChange } from '../services/projectCostRequest.js';
+import { taskPlanSummary } from '../services/taskCost.js';
+import { planCeiling, raiseCost as raiseCostPlan, taskCostLines } from '../utils/taskCost.js';
 import { expenseRow } from '../utils/projectSpend.js';
 import AdminExpense from '../models/AdminExpense.js';
 import { isApprover } from '../utils/departmentScope.js';
 import { decideProposal as decideProposalAtomic, applyCostDecision } from '../services/projectDecisions.js';
-import { mirrorProposal, settleProposalRequest, escalate, supersedeFor, withdrawFor, getPolicy } from '../services/decisions.js';
+import { mirrorProposal, settleProposalRequest, escalate, withdrawFor, getPolicy } from '../services/decisions.js';
 import { needsLeadership, budgetIncrease } from '../utils/decisionRules.js';
 import { isLeadershipRole, leadershipTitle } from '../utils/leadership.js';
 
@@ -49,7 +52,7 @@ const PROJECT_FIELDS = [
 ];
 const pick = (obj, keys) => Object.fromEntries(keys.filter((k) => obj && k in obj).map((k) => [k, obj[k]]));
 
-const TASK_FIELDS = 'percentComplete parentTaskId departmentName status assignedTo';
+const TASK_FIELDS = 'percentComplete parentTaskId departmentName status assignedTo plannedCost';
 
 const fail = (res, status, message, extra = {}) => res.status(status).json({ message, ...extra });
 
@@ -76,6 +79,8 @@ const decorate = (doc, tasks, ctx, spend = null) => {
           // what has been charged to the project: approved (spent) and waiting for approval (committed)
           spent: spend?.spent ?? 0,
           committed: spend?.committed ?? 0,
+          // what the project's tasks add up to against the budget (utils/taskCost.js)
+          taskPlan: taskPlanSummary({ ...project, budget, approvedBudget }, tasks),
           note: costDecisionNote ?? '',
           changes: [...(costChanges ?? [])].slice(-20).reverse(),
         }
@@ -160,7 +165,7 @@ export const getProjects = async (req, res) => {
         $lookup: {
           from: 'ittasks',
           let: { pid: '$_id' },
-          pipeline: [{ $match: { $expr: { $eq: ['$projectId', '$$pid'] } } }, { $project: { percentComplete: 1, parentTaskId: 1, departmentName: 1, status: 1, assignedTo: 1 } }],
+          pipeline: [{ $match: { $expr: { $eq: ['$projectId', '$$pid'] } } }, { $project: { percentComplete: 1, parentTaskId: 1, departmentName: 1, status: 1, assignedTo: 1, plannedCost: 1 } }],
           as: 'tasks',
         },
       },
@@ -486,51 +491,46 @@ export const updateCost = async (req, res) => {
     const cost = resolveCost({ budget: req.body?.budget, costPlan: req.body?.costPlan });
     if (cost.error) return fail(res, 400, cost.error, { code: cost.code });
 
-    const status = project.costStatus ?? 'none';
-    const before = { budget: project.budget ?? 0, plan: (project.costPlan ?? []).map((l) => ({ category: l.category, amount: l.amount })) };
-    const lines = describeCostChange(before, { budget: cost.budget, plan: cost.plan });
-    // Nothing to change: leave it where it is (and do not bother the finance head).
-    if (lines.length === 0 && (status === 'pending' || status === 'approved')) {
-      return res.json(await decorateOne(project, found.tasks, ctx));
-    }
-
-    const now = new Date();
-    if (status === 'approved') {
-      // It was approved: a change needs a reason, is logged, and goes back to the finance head. Until it is approved the
-      // earlier approved amount stays the limit, so the project is not stopped meanwhile.
-      const reason = String(req.body?.reason ?? '').trim().slice(0, 300);
-      if (reason.length < 3) return fail(res, 400, 'Say why the cost is changing.', { code: 'CHANGE_NEEDS_REASON' });
-      project.costChanges.push({ at: now, byName: req.user.name ?? '', reason, lines });
-    }
-    const resubmit = status !== 'pending';
-    project.budget = cost.budget;
-    project.costPlan = cost.plan;
-    project.costStatus = 'pending';
-    if (resubmit) {
-      project.costRequestedAt = now;
-      project.costDecisionNote = '';
-    }
-    recordActivity(
-      project,
-      'cost',
-      status === 'approved'
-        ? `Cost change to ${money(cost.budget)} sent to the finance head`
-        : status === 'pending'
-          ? `Estimated cost updated to ${money(cost.budget)}`
-          : `Estimated cost ${money(cost.budget)} sent to the finance head for approval`,
-      req.user,
-    );
-    await project.save();
-    // a cost that was with the CEO / Executive Director is not what they were asked about any more: it goes back to the finance head
-    if (project.costLeadership?.state === 'awaiting') {
-      await supersedeFor('project_budget', project, { user: req.user, reason: 'The cost was changed, so the finance head checks it again', force: true });
-    }
-
-    if (resubmit && !['proposed', 'cancelled'].includes(project.status)) await notifyCostRequest(project, req.user, { change: status === 'approved' });
+    // Nothing to change: leave it where it is (and do not bother the finance head). After approval a change needs a reason.
+    const sent = await submitCostChange(project, { budget: cost.budget, plan: cost.plan }, { reason: req.body?.reason, user: req.user });
+    if (sent.error) return fail(res, 400, sent.error, { code: sent.code });
+    if (sent.unchanged) return res.json(await decorateOne(project, found.tasks, ctx));
     const fresh = await loadOne(project._id);
     res.json(await decorateOne(fresh.doc, fresh.tasks, ctx));
   } catch (error) {
     res.status(error.name === 'ValidationError' ? 400 : 500).json({ message: error.message });
+  }
+};
+
+// @desc    Ask the finance head for MORE: raise the project's cost to a new total, with the reason. The same flow as changing the cost,
+//          for someone who knows the total they need but not the breakdown (the plan wizard, before it makes many priced tasks at once):
+//          when the cost has a breakdown the extra goes on an "other" line ("Task plan"), so the lines still add up.
+// @route   POST /api/projects/:id/cost/raise   { amount, reason }
+export const raiseProjectCost = async (req, res) => {
+  try {
+    const found = await loadOne(req.params.id);
+    if (!found) return fail(res, 404, 'Project not found');
+    const project = found.doc;
+    const ctx = await loadAccessContext(req.user);
+    if (ctx.viewOnly || !(ctx.full || isProjectManager(project, ctx) || isOwnerHead(project, ctx))) {
+      return fail(res, 403, 'Only the project manager or the head of the owning department can ask for a bigger budget.');
+    }
+    if (planCeiling(project) <= 0) {
+      return fail(res, 400, 'This project has no budget yet. Set its cost first; then it can be raised.', { code: 'NO_BUDGET_YET' });
+    }
+    const amount = cleanAmount(req.body?.amount);
+    if (amount === null || amount <= 0) return fail(res, 400, 'Enter the new total as an amount above zero.', { code: 'AMOUNT_INVALID' });
+    if (toPaise(amount) <= toPaise(project.budget ?? 0)) {
+      return fail(res, 400, `Ask for more than the current ${money(project.budget ?? 0)}.`, { code: 'NOT_MORE' });
+    }
+    const raised = raiseCostPlan({ budget: project.budget, plan: (project.toObject().costPlan ?? []) }, amount);
+    if (raised.error) return fail(res, 400, raised.error, { code: raised.code });
+    const sent = await submitCostChange(project, { budget: raised.budget, plan: raised.costPlan }, { reason: req.body?.reason, user: req.user });
+    if (sent.error) return fail(res, 400, sent.error, { code: sent.code });
+    const fresh = await loadOne(project._id);
+    res.json(await decorateOne(fresh.doc, fresh.tasks, ctx));
+  } catch (error) {
+    res.status(500).json({ message: error.message });
   }
 };
 
@@ -605,9 +605,15 @@ export const getPendingCosts = async (req, res) => {
       .lean();
     const creators = await User.find({ _id: { $in: projects.map((p) => p.createdBy).filter(Boolean) } }).select('name').lean();
     const nameOf = new Map(creators.map((u) => [String(u._id), u.name]));
+    // what each project's tasks add up to, so the finance head sees the plan behind a request
+    const taskRows = await ITTask.find({ projectId: { $in: projects.map((p) => p._id) } }).sort({ order: 1, createdAt: 1 }).select('projectId parentTaskId title plannedCost departmentName').lean();
+    const tasksOf = new Map();
+    for (const t of taskRows) tasksOf.set(String(t.projectId), [...(tasksOf.get(String(t.projectId)) ?? []), t]);
     res.json(
       projects.map((p) => {
         const last = (p.costChanges ?? []).slice(-1)[0] ?? null;
+        const plan = taskPlanSummary(p, tasksOf.get(String(p._id)) ?? []);
+        const behind = taskCostLines(tasksOf.get(String(p._id)) ?? [], { ownerDepartment: p.targetDepartment });
         return {
           id: String(p._id),
           name: p.name,
@@ -625,6 +631,13 @@ export const getPendingCosts = async (req, res) => {
           isChange: (p.approvedBudget ?? 0) > 0,
           changeReason: last?.reason ?? '',
           changeLines: last?.lines ?? [],
+          // the tasks add up to this much (leaf tasks that have a cost); how many leaf tasks still have none
+          taskPlanned: plan.planned,
+          taskUnpriced: plan.unpriced,
+          taskCount: plan.leaves,
+          // the tasks behind that figure, one line each (the biggest first), so the finance head decides knowing the plan
+          taskLines: behind.lines,
+          taskLinesMore: behind.more,
           canDecide: !!ctx.financeHead,
         };
       }),

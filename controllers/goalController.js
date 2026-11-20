@@ -5,7 +5,8 @@ import Trial from '../models/Trial.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { isSale, orderValue } from './dashboardController.js';
-import { istDayKey, istEnd, istStart, isDay, parseDayParam, todayIst } from '../utils/istDate.js';
+import { addDays, istDayKey, istEnd, istStart, isDay, parseDayParam, todayIst } from '../utils/istDate.js';
+import { resolveReportPeriod } from '../utils/reportPeriod.js';
 import {
   METRICS,
   PERIOD_TYPES,
@@ -176,11 +177,14 @@ export const saveGoals = async (req, res) => {
 const LABELS = { leads: 'Leads', bookings: 'Bookings', revenue: 'Revenue', trials: 'Trial bookings' };
 
 // @route GET /api/goals/report?granularity=day|week|month&date=&basis=added|event
-// The period containing `date`: Target vs Actual per metric, plus a row per day
-// (whose sum is the period total — they cannot disagree).
+//        GET /api/goals/report?from=YYYY-MM-DD&to=YYYY-MM-DD&basis=added|event      (any days between two dates, at most a year)
+// The period containing `date` (or the days between from and to): Target vs Actual per metric, plus a row per day
+// (whose sum is the period total — they cannot disagree). No goal is stored for an arbitrary stretch of days, so its target is what
+// the days in it were given (a metric with no day goal set in it has no target).
 export const getGoalReport = async (req, res) => {
   if (deny(req, res)) return;
   try {
+    if ((req.query.from ?? '') !== '' || (req.query.to ?? '') !== '') return await getGoalRangeReport(req, res);
     const granularity = PERIOD_TYPES.includes(req.query.granularity) ? req.query.granularity : 'day';
     const basis = basisOf(req.query);
     const p = periodOf(granularity, anchorOf(req.query.date));
@@ -212,6 +216,29 @@ export const getGoalReport = async (req, res) => {
   } catch (error) {
     sendError(res, error);
   }
+};
+
+const getGoalRangeReport = async (req, res) => {
+  const period = resolveReportPeriod(req.query, { maxDays: 366 });
+  if (period.error) return res.status(400).json({ message: period.error, code: period.code });
+  const basis = basisOf(req.query);
+  const dayList = Array.from({ length: period.days }, (_, i) => addDays(period.from, i));
+  const [byDay, dayGoals] = await Promise.all([actualsByDay(req.user, period.from, period.to, basis), goalMap('day', dayList)]);
+  const days = fillDays(dayList, byDay);
+  const totals = sumDays(days);
+  const target = {};
+  for (const key of METRICS) {
+    const given = dayList.map((d) => dayGoals.get(`${key}|${d}`)).filter((v) => v != null);
+    target[key] = given.length ? given.reduce((a, b) => a + b, 0) : null;
+  }
+  res.json({
+    granularity: 'range',
+    basis,
+    period: { start: period.from, end: period.to, days: period.days },
+    metrics: METRICS.map((key) => ({ key, label: LABELS[key], actual: totals[key], target: target[key], pct: pct(totals[key], target[key] ?? 0) })),
+    days: days.map((d) => ({ ...d, targets: goalsFor(dayGoals, d.day) })),
+    canEdit: canSetGoals(req.user),
+  });
 };
 
 // @route GET /api/goals/mtd?date=&basis=

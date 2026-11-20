@@ -37,6 +37,11 @@ export const LEADERSHIP_PERMISSIONS = [
   'staff.evaluation',
 ];
 
+// What the CRM team (and the CRM Head) can open.
+const CRM_PERMISSIONS = ['clients', 'calendar', 'bookings', 'trials'];
+// What the default CRM role was first seeded with — `staff` included. Only a role still EXACTLY like this loses `staff` on boot.
+const CRM_OLD_DEFAULT = [...CRM_PERMISSIONS, 'staff'];
+
 // Mirrors the hard-coded matrix that used to live in app_role.dart, so seeding
 // reproduces today's behaviour exactly and nothing changes until an admin
 // edits a role.
@@ -48,11 +53,21 @@ const DEFAULT_ROLES = [
     homeRoute: '/clients',
     permissions: ALL.filter((p) => p !== 'dashboard'),
   },
+  // The CRM team. `staff` is NOT given: it opens every employee's pay and bank details (utils/hrAccess.js). The CRM Head
+  // manages their own team through department-head scoping instead.
   {
     key: 'crm',
     label: 'CRM',
     homeRoute: '/booking/requests',
-    permissions: ['clients', 'calendar', 'bookings', 'trials', 'staff'],
+    permissions: CRM_PERMISSIONS,
+  },
+  // The CRM Head: assigns the team's work and sees everyone's figures (utils/crmAccess.js). The home stays the booking requests,
+  // so an older app that does not know the CRM dashboard never lands on a page it cannot open — the newer app sends the head on.
+  {
+    key: 'crm_manager',
+    label: 'CRM Head',
+    homeRoute: '/booking/requests',
+    permissions: CRM_PERMISSIONS,
   },
   {
     key: 'sales',
@@ -220,6 +235,8 @@ const slugify = (value = '') =>
 
 /// Creates any missing default roles. Safe to call repeatedly — it never
 /// overwrites permissions an admin has already customised.
+export { CRM_PERMISSIONS, CRM_OLD_DEFAULT };
+
 export const ensureDefaultRoles = async () => {
   for (const def of DEFAULT_ROLES) {
     const existing = await Role.findOne({ key: def.key });
@@ -234,6 +251,12 @@ export const ensureDefaultRoles = async () => {
   const hadBanned = (await Role.find({ key: { $in: LEADERSHIP_ROLES }, permissions: { $in: LEADERSHIP_BANNED_PERMISSIONS } }).select('key').lean()).map((r) => r.key);
   await Role.updateMany({ key: { $in: LEADERSHIP_ROLES } }, { $pull: { permissions: { $in: LEADERSHIP_BANNED_PERMISSIONS } } });
   if (hadBanned.length) await Role.updateMany({ key: { $in: hadBanned } }, { $addToSet: { permissions: { $each: LEADERSHIP_PERMISSIONS } } });
+  // The CRM role used to carry `staff`, which let every CRM login see all employees' pay and bank details. Taken off the untouched
+  // default only (exactly the keys it was seeded with): a role an admin has edited keeps what the admin chose.
+  await Role.updateOne(
+    { key: 'crm', permissions: { $size: CRM_OLD_DEFAULT.length, $all: CRM_OLD_DEFAULT } },
+    { $pull: { permissions: 'staff' } }
+  );
   // One-time nudge: point the Sales role at the new personal dashboard, but only
   // if it's still the previous default (never override an admin's custom home).
   await Role.updateOne(

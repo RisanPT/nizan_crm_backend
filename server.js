@@ -20,6 +20,7 @@ import bookingRoutes from './routes/bookingRoutes.js';
 import foodAllowanceRoutes from './routes/foodAllowanceRoutes.js';
 import packageRoutes from './routes/packageRoutes.js';
 import regionRoutes from './routes/regionRoutes.js';
+import countryRoutes from './routes/countryRoutes.js';
 import zoneRoutes from './routes/zoneRoutes.js';
 import stateRoutes from './routes/stateRoutes.js';
 import districtRoutes from './routes/districtRoutes.js';
@@ -31,10 +32,12 @@ import fuelExpenseRoutes from './routes/fuelExpenseRoutes.js';
 import fuelPriceRoutes from './routes/fuelPriceRoutes.js';
 import fleetAvailabilityRoutes from './routes/fleetAvailabilityRoutes.js';
 import workProfitRoutes from './routes/workProfitRoutes.js';
+import associateWorksRoutes from './routes/associateWorksRoutes.js';
 import collectionRoutes from './routes/collectionRoutes.js';
 import artistPayoutRoutes from './routes/artistPayoutRoutes.js';
 import expenseRoutes from './routes/expenseRoutes.js';
 import reportRoutes from './routes/reportRoutes.js';
+import workFootageRoutes from './routes/workFootageRoutes.js';
 import uploadRoutes from './routes/uploadRoutes.js';
 import projectRoutes from './routes/projectRoutes.js';
 import manpowerRoutes from './routes/manpowerRoutes.js';
@@ -49,6 +52,17 @@ import gpsKmRoutes from './routes/gpsKmRoutes.js';
 import inventoryRoutes from './routes/inventoryRoutes.js';
 import marketingRoutes from './routes/marketingRoutes.js';
 import marketingEodRoutes from './routes/marketingEodRoutes.js';
+import marketingTeamRoutes from './routes/marketingTeamRoutes.js';
+import marketingSocialsRoutes from './routes/marketingSocialsRoutes.js';
+import marketingPortfolioRoutes from './routes/marketingPortfolioRoutes.js';
+import marketingLeadReportRoutes from './routes/marketingLeadReportRoutes.js';
+import marketingCampaignHubRoutes from './routes/marketingCampaignHubRoutes.js';
+import marketingCoordinationsRoutes from './routes/marketingCoordinationsRoutes.js';
+import marketingStrategiesRoutes from './routes/marketingStrategiesRoutes.js';
+import marketingWeeklyRoutes from './routes/marketingWeeklyRoutes.js';
+import marketingReportsRoutes from './routes/marketingReportsRoutes.js';
+import marketingMediaRoutes from './routes/marketingMediaRoutes.js';
+import { startMarketingReportScheduler } from './services/marketingReportScheduler.js';
 import { seedMarketingMasterData } from './utils/seedMarketingMaster.js';
 import { startMarketingEodReminders } from './services/marketingEodReminders.js';
 import { startReviewAutoSend } from './services/reviewAutoSend.js';
@@ -65,6 +79,14 @@ import clientAuthRoutes from './routes/clientAuthRoutes.js';
 import clientRoutes from './routes/clientRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import staffClientRoutes from './routes/staffClientRoutes.js';
+import crmRoutes from './routes/crmRoutes.js';
+import metaWebhookRoutes from './routes/metaWebhookRoutes.js';
+import metaLeadRoutes from './routes/metaLeadRoutes.js';
+import { startMetaLeadRetries } from './services/metaLeads.js';
+import { startMetaAdsSync } from './services/metaAdsSync.js';
+import { startMetaCapi } from './services/metaCapi.js';
+import { startMetaIgSync } from './services/metaIgSync.js';
+import { startLeadResponseWatch } from './services/leadResponse.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import salaryRoutes from './routes/salaryRoutes.js';
 import salesReturnRoutes from './routes/salesReturnRoutes.js';
@@ -218,6 +240,8 @@ app.options('*', cors());
 // A GPS km report can run to a few thousand rows — more than the default 100 kb body limit —
 // so this one route reads its own, larger body before the global parser below.
 app.use('/api/fleet/gps-km', express.json({ limit: '4mb' }), gpsKmRoutes);
+// Meta Lead Ads webhook: Meta signs the RAW body, so it is read as bytes here, before the JSON parser. No login (Meta calls it).
+app.use('/api/meta/webhook', express.raw({ type: () => true, limit: '1mb' }), metaWebhookRoutes);
 app.use(express.json());
 
 // Routes
@@ -232,6 +256,7 @@ app.use('/api/attendances', attendanceRoutes);
 app.use('/api/bookings', bookingRoutes);
 app.use('/api/packages', packageRoutes);
 app.use('/api/regions', regionRoutes);
+app.use('/api/countries', countryRoutes); // marketing geography: Country → City (a lead is placed in one)
 app.use('/api/zones', zoneRoutes);
 app.use('/api/states', stateRoutes);
 app.use('/api/districts', districtRoutes);
@@ -243,6 +268,7 @@ app.use('/api/fuel-expenses', fuelExpenseRoutes);
 app.use('/api/fuel-prices', fuelPriceRoutes);
 app.use('/api/fleet/availability', fleetAvailabilityRoutes);
 app.use('/api/work-profit', workProfitRoutes);
+app.use('/api/associate-works', associateWorksRoutes); // the Associate Works report
 app.use('/api/collections', collectionRoutes);
 app.use('/api/artist-payouts', artistPayoutRoutes);
 app.use('/api/expenses', expenseRoutes);
@@ -262,8 +288,19 @@ app.use('/api/time-blocks', timeBlockRoutes);
 app.use('/api/budgets', budgetRoutes);
 app.use('/api/fleet', fleetRoutes);
 app.use('/api/inventory', inventoryRoutes);
+app.use('/api/marketing/media', marketingMediaRoutes); // gallery videos played through our server (BEFORE /api/marketing: the stream needs no login)
 app.use('/api/marketing', marketingRoutes);
 app.use('/api/marketing/eod', marketingEodRoutes);
+app.use('/api/marketing/team', marketingTeamRoutes); // Team Dashboard + Log Activity
+app.use('/api/marketing/lead-report', marketingLeadReportRoutes); // Lead Report: overview, leads, stages, sources, follow-ups, conversion, reports
+app.use('/api/marketing/campaign-hub', marketingCampaignHubRoutes); // Campaigns hub: overview, performance, creatives, budget, leads & conversions, reports
+app.use('/api/marketing/coordinations', marketingCoordinationsRoutes); // Coordinations: requests, handovers, approvals, meetings, follow-ups
+app.use('/api/marketing/strategies', marketingStrategiesRoutes); // Strategies & Developments: plans, projects, roadmap, initiatives, research, reviews
+app.use('/api/marketing/weekly', marketingWeeklyRoutes); // Marketing Weekly Report
+app.use('/api/marketing/reports', marketingReportsRoutes); // Saved + scheduled reports (Team Dashboard, Campaigns, Lead Report)
+app.use('/api/marketing/portfolio', marketingPortfolioRoutes); // Creative Portfolio: shoot planner, production calendar, shoot reports
+app.use('/api/work-footage', workFootageRoutes); // footage from works: the artists' Dropbox links / upload page → Creative Portfolio → Footage
+app.use('/api/marketing/socials', marketingSocialsRoutes); // Socials module: overview, calendar, assets, accounts, performance, reports
 app.use('/api/trials', trialRoutes);
 app.use('/api/consultations', consultationRoutes);       // Stylist video consultations (SRS v1.2)
 app.use('/api/stylist-clients', stylistClientRoutes);    // Stylist client files (Team N + Nizan)
@@ -323,6 +360,8 @@ app.use('/api/client/auth', clientAuthRoutes);        // Client app: phone-OTP /
 app.use('/api/client', clientRoutes);                 // Client app: my-profile / my-bookings (protectClient)
 app.use('/api/chat', chatRoutes);                     // Concierge chat (client + staff)
 app.use('/api/app-clients', staffClientRoutes);       // Staff: view bridal app clients (brides)
+app.use('/api/meta', metaLeadRoutes);                  // Meta: Lead Ads (who gets leads, missed-lead check) + the ad spend sync (/ads); the webhook is above
+app.use('/api/crm', crmRoutes);                       // CRM team: queue, assigning work, cases, re-engagement, settings
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });
@@ -355,7 +394,13 @@ const startServer = async () => {
     await migrateAndSyncAll();
     await seedMarketingMasterData();
     startMarketingEodReminders();
+    startMarketingReportScheduler(); // scheduled marketing reports (off with MARKETING_REPORT_SCHEDULER=off)
     startReviewAutoSend(); // off unless REVIEW_AUTO_SEND_FROM is set
+    startMetaLeadRetries(); // Meta Lead Ads: off unless META_APP_SECRET, META_ACCESS_TOKEN and META_WEBHOOK_VERIFY_TOKEN are set
+    startMetaAdsSync(); // Meta ad spend sync: off unless META_APP_SECRET, META_ACCESS_TOKEN and META_AD_ACCOUNTS are set
+    startMetaCapi(); // lead results back to Meta: off unless META_CAPI_DATASET_ID is set AND switched on in the app
+    startMetaIgSync(); // Instagram insights → Socials: off unless META_APP_SECRET, META_ACCESS_TOKEN and META_IG_ACCOUNTS are set
+    startLeadResponseWatch(); // speed to lead: a lead from a form left waiting past the alert time tells its salesperson and the sales managers
 
     // Auto-sync Timebox employees on server boot
     performTimeboxEmployeeSync()

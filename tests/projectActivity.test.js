@@ -72,10 +72,26 @@ test('answers are lines of their own, with who answered', () => {
   );
 });
 
-test("the saver's own department is accepted on the spot: no invitation, no answer", () => {
+test('a department put straight onto the project (joined at once) reads as added — no invitation, no answer', () => {
   const same = at('10:25');
   const p = { ...base, departments: [...base.departments, dept('Finance', { status: 'accepted', invitedAt: same, respondedAt: same })] };
-  assert.deepEqual(buildActivityFeed(p, nameOf).map((e) => e.text), ['Project created']);
+  assert.deepEqual(buildActivityFeed(p, nameOf).map((e) => e.text), ['Project created', 'Finance added to the project']);
+});
+
+test('departments added in the same save are one line; one still invited from before keeps its invitation', () => {
+  const same = at('10:26');
+  const later = at('15:00');
+  const p = {
+    ...base,
+    departments: [
+      ...base.departments,
+      dept('Accounts', { status: 'accepted', invitedAt: same, respondedAt: same }),
+      dept('Finance', { status: 'accepted', invitedAt: same, respondedAt: same }),
+      dept('HR', { status: 'accepted', invitedAt: same, respondedAt: same }),
+      dept('Sales', { status: 'invited', invitedAt: later }),
+    ],
+  };
+  assert.deepEqual(buildActivityFeed(p, nameOf).map((e) => e.text), ['Project created', '3 departments added to the project', 'Invitation sent to Sales']);
 });
 
 test('stored events (status change, reminder) are woven in by time, oldest first', () => {

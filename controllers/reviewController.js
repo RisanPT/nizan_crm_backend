@@ -3,6 +3,11 @@ import Review from '../models/Review.js';
 import Booking from '../models/Booking.js';
 import { notify, NOTIFICATION_TYPES, getUserIdsByRoles } from '../utils/notify.js';
 import { TEAM_N_LOGO } from '../assets/teamNLogo.js';
+import { CRM_HEAD_ROLE, isCrmRole } from '../utils/crmAccess.js';
+import { npsOf } from '../utils/nps.js';
+import { flippedCaseKinds, reviewCaseKinds } from '../utils/crmCaseRules.js';
+import { openReviewCases } from '../services/crmCases.js';
+import { getCrmSettings } from '../services/crmSettings.js';
 
 // ── Snapshot helpers ─────────────────────────────────────────────────────────
 
@@ -144,6 +149,9 @@ export const createReviewForBooking = async (req, res) => {
     const review = await ensureReviewForBooking(booking, req.user);
     if (req.body?.markSent === true && !review.manualSentAt && review.autoSendStatus !== 'sent') {
       review.manualSentAt = new Date();
+      // who sent it, for the CRM figures
+      review.manualSentBy = req.user?._id ?? null;
+      review.manualSentByName = req.user?.name ?? '';
       await review.save();
     }
     res.json({ reviewUrl: reviewFormUrl(req, review.token), token: review.token });
@@ -239,9 +247,17 @@ export const submitReview = async (req, res) => {
     review.submittedAt = new Date();
     await review.save();
 
+    // An unhappy client (or a follow-up asked for) becomes a CRM case — once per review and kind (services/crmCases.js).
+    try {
+      const settings = await getCrmSettings();
+      await openReviewCases(review, reviewCaseKinds(review, { lowNps: settings.lowNps }));
+    } catch (e) {
+      console.error('crm case from review failed:', e.message);
+    }
+
     // Notify CRM + management that a review came in.
     try {
-      const ids = await getUserIdsByRoles(['crm', 'manager', 'admin']);
+      const ids = await getUserIdsByRoles(['crm', CRM_HEAD_ROLE, 'manager', 'admin']);
       await notify({
         recipients: ids,
         type: NOTIFICATION_TYPES.REVIEW_SUBMITTED,
@@ -321,14 +337,10 @@ export const getReviewAnalytics = async (req, res) => {
       return round1(vals.reduce((s, v) => s + v, 0) / vals.length);
     };
 
-    // NPS: promoters (9-10), passives (7-8), detractors (0-6).
-    const withNps = reviews.filter((r) => r.nps != null);
-    const promoters = withNps.filter((r) => r.nps >= 9).length;
-    const passives = withNps.filter((r) => r.nps >= 7 && r.nps <= 8).length;
-    const detractors = withNps.filter((r) => r.nps <= 6).length;
-    const nps = withNps.length
-      ? Math.round(((promoters - detractors) / withNps.length) * 100)
-      : 0;
+    // NPS: promoters (9-10), passives (7-8), detractors (0-6) — utils/nps.js. This screen has always shown 0 with no answers
+    // (the app reads a number), so it still does; the CRM figures say "—".
+    const { nps: npsScore, promoters, passives, detractors, responses: npsResponses } = npsOf(reviews.map((r) => r.nps));
+    const nps = npsScore ?? 0;
 
     // Per-artist leaderboard.
     const byArtist = {};
@@ -372,7 +384,7 @@ export const getReviewAnalytics = async (req, res) => {
       promoters,
       passives,
       detractors,
-      npsResponses: withNps.length,
+      npsResponses,
       complaints: reviews.filter((r) => r.complaint).length,
       followUps: reviews.filter((r) => r.followUpRequired).length,
       testimonialsAvailable: reviews.filter(
@@ -448,7 +460,7 @@ export const getReviewById = async (req, res) => {
 // @route PUT /api/reviews/:id  (auth) — edit the internal management block only.
 export const updateReview = async (req, res) => {
   try {
-    if (!isFullAccess(req.user) && !['crm', 'accounts', 'finance_head'].includes(String(req.user?.role))) {
+    if (!isFullAccess(req.user) && !isCrmRole(req.user) && !['accounts', 'finance_head'].includes(String(req.user?.role))) {
       return res.status(403).json({ message: 'Not authorized to edit reviews' });
     }
     const review = await Review.findById(req.params.id);
@@ -462,12 +474,24 @@ export const updateReview = async (req, res) => {
       'reviewPosted',
       'referralOpportunity',
     ];
+    const before = { complaint: review.complaint, followUpRequired: review.followUpRequired };
+    const now = new Date();
     for (const f of boolFields) {
-      if (b[f] !== undefined) review[f] = b[f] === true || b[f] === 'true';
+      if (b[f] === undefined) continue;
+      const next = b[f] === true || b[f] === 'true';
+      // every flag a person switches, and who did it (the app re-sends unchanged flags: those are not recorded)
+      if (Boolean(review[f]) !== next) review.flagHistory.push({ field: f, value: next, by: req.user?._id ?? null, byName: req.user?.name ?? '', at: now });
+      review[f] = next;
     }
     if (b.managerComments !== undefined) review.managerComments = String(b.managerComments);
 
     await review.save();
+    // a complaint / follow-up just switched on becomes a CRM case (once per review and kind)
+    try {
+      await openReviewCases(review, flippedCaseKinds(before, review), req.user);
+    } catch (e) {
+      console.error('crm case from review failed:', e.message);
+    }
     res.json(review);
   } catch (error) {
     res.status(500).json({ message: error.message });

@@ -11,7 +11,7 @@ import { transporter, sendMail } from '../utils/mailer.js';
 import {
   loginEmailFor, loginIdOf, expiryFromDay, loginExpired, canReuseDriverAccount, phoneDigits, EXPIRED_MESSAGE,
 } from '../utils/driverLogin.js';
-import { canManageUsers, authorizeUserChange, mayGiveRole } from '../utils/userAccess.js';
+import { canManageUsers, authorizeUserChange, mayGiveRole, mayMarkDepartmentHead, roleGrantRefusal } from '../utils/userAccess.js';
 import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 import { logChange } from '../utils/audit.js';
 
@@ -269,7 +269,7 @@ export const createUser = async (req, res) => {
     return res.status(400).json({ message: `Unknown role "${role}".` });
   }
   if (!mayGiveRole(req.user, role)) {
-    return res.status(403).json({ message: 'Only an administrator can create an admin, manager, CEO or Executive Director account.' });
+    return res.status(403).json({ message: roleGrantRefusal(req.user, role) });
   }
 
   if (!name || !email || !password) {
@@ -291,7 +291,8 @@ export const createUser = async (req, res) => {
     active: Boolean(active),
     inventoryAccess: Boolean(req.body.inventoryAccess),
     inventoryManage: Boolean(req.body.inventoryManage),
-    isDepartmentHead: Boolean(req.body.isDepartmentHead),
+    // a department head is named by management (a head never makes another head)
+    isDepartmentHead: mayMarkDepartmentHead(req.user) && Boolean(req.body.isDepartmentHead),
     artistHead: Boolean(req.body.artistHead),
     countInSalesTotals: req.body.countInSalesTotals !== false,
     departmentId: req.body.departmentId || null,
@@ -506,7 +507,8 @@ export const updateUser = async (req, res) => {
   if (req.body.inventoryManage !== undefined) {
     user.inventoryManage = Boolean(req.body.inventoryManage);
   }
-  if (req.body.isDepartmentHead !== undefined) {
+  // a department head is named by management; a head re-saving a team member's form leaves the flag as it was
+  if (req.body.isDepartmentHead !== undefined && mayMarkDepartmentHead(req.user)) {
     user.isDepartmentHead = Boolean(req.body.isDepartmentHead);
   }
   if (req.body.artistHead !== undefined) {
@@ -688,7 +690,7 @@ export const provisionEmployeeLogin = async (req, res) => {
     const roleDoc = await Role.findOne({ key: role });
     if (!roleDoc) return res.status(400).json({ message: `Unknown role "${role}".` });
     if (!mayGiveRole(req.user, role)) {
-      return res.status(403).json({ message: 'Only an administrator can create an admin, manager, CEO or Executive Director account.' });
+      return res.status(403).json({ message: roleGrantRefusal(req.user, role) });
     }
 
     let user = await User.findOne({ email }).select('+passwordSetupToken +passwordSetupExpires');

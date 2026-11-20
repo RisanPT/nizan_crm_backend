@@ -1,16 +1,18 @@
+import mongoose from 'mongoose';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
 import { notify, getUserIdsByRoles, NOTIFICATION_TYPES } from '../utils/notify.js';
 import { uploadChatFiles, previewFor } from '../utils/chatMedia.js';
+import { CRM_HEAD_ROLE, isCrmRole } from '../utils/crmAccess.js';
 
-const CHAT_STAFF_ROLES = ['crm', 'sales', 'accounts', 'manager'];
+const CHAT_STAFF_ROLES = ['crm', CRM_HEAD_ROLE, 'sales', 'accounts', 'manager'];
 
 // Staff who may use the client-chat inbox (mirrors the Flutter sidebar guard
 // isFullAccess || crm || accounts || canSeeSales).
 export const canSeeClientChat = (user) => {
   const role = String(user?.role || '').toLowerCase();
   if (role === 'admin' || role === 'manager') return true;
-  if (['crm', 'accounts', 'sales'].includes(role)) return true;
+  if (isCrmRole(user) || ['accounts', 'sales'].includes(role)) return true;
   const perms = user?.permissions || [];
   return perms.includes('sales') || perms.some((p) => String(p).startsWith('sales.')) || perms.includes('payables');
 };
@@ -37,6 +39,10 @@ const conversationView = (c) => ({
   lastMessageSenderType: c.lastMessageSenderType || '',
   unreadForStaff: c.unreadForStaff || 0,
   unreadForClient: c.unreadForClient || 0,
+  // who owns the chat, and since when the client has been waiting for an answer (null = nobody waiting)
+  assignedStaffId: c.assignedStaffId ? String(c.assignedStaffId) : null,
+  assignedStaffName: c.assignedStaffName || '',
+  awaitingSince: c.awaitingSince ?? null,
 });
 
 const getOrCreateClientConversation = async (client) => {
@@ -104,6 +110,8 @@ export const postClientMessage = async (req, res) => {
     convo.lastMessagePreview = preview;
     convo.lastMessageSenderType = 'client';
     convo.unreadForStaff = (convo.unreadForStaff || 0) + 1;
+    // the client is now waiting — from their FIRST message since the last answer
+    if (!convo.awaitingSince) convo.awaitingSince = convo.lastMessageAt;
     await convo.save();
 
     // Surface in the CRM notification stream for client-facing staff.
@@ -167,6 +175,11 @@ export const getConversations = async (req, res) => {
     // the inbox until someone says something.
     const filter = { lastMessageSenderType: { $nin: ['', null] } };
     if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
+    // whose chats: ?assignee=me | unassigned | <user id>
+    const assignee = String(req.query.assignee || '').trim();
+    if (assignee === 'me') filter.assignedStaffId = req.user._id;
+    else if (assignee === 'unassigned') filter.assignedStaffId = null;
+    else if (mongoose.isValidObjectId(assignee)) filter.assignedStaffId = assignee;
     const q = String(req.query.search || '').trim();
     if (q) {
       filter.$or = [
@@ -218,7 +231,16 @@ export const postStaffMessage = async (req, res) => {
     convo.lastMessagePreview = previewFor(text, attachments);
     convo.lastMessageSenderType = 'staff';
     convo.unreadForClient = (convo.unreadForClient || 0) + 1;
-    if (!convo.assignedStaffId) convo.assignedStaffId = req.user._id;
+    // answered: nobody is waiting any more (and the next wait may be alerted again)
+    convo.awaitingSince = null;
+    convo.awaitingNotifiedAt = null;
+    // the first to answer owns the chat, unless the CRM Head has given it to someone
+    if (!convo.assignedStaffId) {
+      convo.assignedStaffId = req.user._id;
+      convo.assignedStaffName = req.user.name || '';
+      convo.assignedAt = convo.lastMessageAt;
+      convo.assignedVia = 'first_reply';
+    }
     await convo.save();
 
     res.status(201).json(messageView(msg));

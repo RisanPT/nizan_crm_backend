@@ -4,23 +4,20 @@ import Booking from '../models/Booking.js';
 import Lead from '../models/Lead.js';
 import SalesReturn from '../models/SalesReturn.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
-import PDFDocument from 'pdfkit';
-import { Parser } from 'json2csv';
+import { followingPeriod, resolveReportPeriod } from '../utils/reportPeriod.js';
+import { computeAllocations } from '../services/mealAllocation.js';
+import { buildFinanceRows } from '../utils/financeReportRows.js';
+import { financeCsv, financeXlsx, newFinancePdf, writeFinancePdf } from '../services/financeReportFiles.js';
 
 export const getFinanceReport = async (req, res) => {
   try {
-    const { month, year, employeeId, format } = req.query;
-    const m = Number(month);
-    const y = Number(year);
-    if (!Number.isInteger(m) || m < 1 || m > 12 || !Number.isInteger(y) || y < 2000 || y > 2100) {
-      return res.status(400).json({ message: 'A valid month (1-12) and year are required' });
-    }
-
-    const startDate = new Date(year, month - 1, 1);
-    const endDate = new Date(year, month, 0, 23, 59, 59, 999);
+    const { employeeId, format } = req.query;
+    // the dates: from + to (IST days, both inclusive), or the older month + year
+    const period = resolveReportPeriod(req.query);
+    if (period.error) return res.status(400).json({ message: period.error, code: period.code });
 
     const filter = {
-      date: { $gte: startDate, $lte: endDate },
+      date: { $gte: period.start, $lte: period.end },
     };
 
     if (employeeId && employeeId !== 'all') {
@@ -29,16 +26,43 @@ export const getFinanceReport = async (req, res) => {
 
     const collections = await Collection.find(filter)
       .populate('employeeId', 'name')
-      .populate('bookingId', 'bookingNumber customerName');
-    
-    const expenses = await Expense.find(filter)
-      .populate('employeeId', 'name');
+      .populate('bookingId', 'bookingNumber customerName serviceStart')
+      .populate('trialId', 'trialNumber clientName')
+      .lean();
 
-    if (format === 'csv') {
-      return generateCSV(res, collections, expenses, month, year);
-    } else {
-      return generatePDF(res, collections, expenses, month, year);
+    const expenses = await Expense.find(filter)
+      .populate('employeeId', 'name')
+      .populate('bookingId', 'bookingNumber customerName service serviceStart serviceEnd travelDistanceKm bookingItems.travelDistanceKm')
+      .lean();
+
+    // Which work each expense belongs to — the artist's own pick, else placed by the time of the meal: the
+    // same answer the By Work screen gives. If it cannot be worked out the report still comes, with the
+    // works the artists tied their expenses to themselves.
+    let allocation;
+    try {
+      allocation = await computeAllocations(expenses);
+    } catch (err) {
+      console.error('finance report: could not place expenses under works:', err.message);
     }
+    const rows = buildFinanceRows({ collections, expenses, allocation });
+
+    // what the file is called and says: the dates for a range, "month_year" as before for a month
+    const named = period.custom ? { tag: period.tag, label: period.label } : { tag: `${period.month}_${period.year}`, label: `${period.month}/${period.year}` };
+    if (format === 'csv') {
+      res.header('Content-Type', 'text/csv');
+      res.attachment(`Finance_Report_${named.tag}.csv`);
+      return res.send(financeCsv(rows));
+    }
+    if (format === 'xlsx' || format === 'excel') {
+      res.attachment(`Finance_Report_${named.tag}.xlsx`);
+      return res.send(await financeXlsx(rows, named));
+    }
+    const doc = newFinancePdf();
+    res.header('Content-Type', 'application/pdf');
+    res.attachment(`Finance_Report_${named.tag}.pdf`);
+    doc.pipe(res);
+    writeFinancePdf(doc, rows, named);
+    doc.end();
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -58,23 +82,12 @@ const balanceOf = (b) =>
 
 export const getFinancialAnalystReport = async (req, res) => {
   try {
-    const monthStr = String(req.query.month ?? '').trim();
-    let year;
-    let month; // 1-12
-    if (/^\d{4}-\d{2}$/.test(monthStr)) {
-      const parts = monthStr.split('-');
-      year = Number(parts[0]);
-      month = Number(parts[1]);
-    } else {
-      const n = new Date();
-      year = n.getFullYear();
-      month = n.getMonth() + 1;
-    }
-
-    const start = new Date(year, month - 1, 1, 0, 0, 0, 0);
-    const end = new Date(year, month, 0, 23, 59, 59, 999);
-    const nextStart = new Date(year, month, 1, 0, 0, 0, 0);
-    const nextEnd = new Date(year, month + 1, 0, 23, 59, 59, 999);
+    // the dates: from + to (IST days, both inclusive), or `month=YYYY-MM` (this month when neither is given)
+    const period = resolveReportPeriod(req.query, { monthIsText: true, defaultToThisMonth: true });
+    if (period.error) return res.status(400).json({ message: period.error, code: period.code });
+    const { start, end } = period;
+    // "forward" bookings: the stretch of the same length that follows (next month, for a month)
+    const { start: nextStart, end: nextEnd } = followingPeriod(period);
     const now = new Date();
 
     // ── Bookings whose event falls in the month ──
@@ -227,7 +240,9 @@ export const getFinancialAnalystReport = async (req, res) => {
     }
 
     res.json({
-      month: `${year}-${String(month).padStart(2, '0')}`,
+      month: period.from.slice(0, 7),
+      // what the report covers: a month, or any days between two dates
+      period: { from: period.from, to: period.to, days: period.days, label: period.label, custom: period.custom },
       generatedAt: now.toISOString(),
       sales: {
         packageBreakdown,
@@ -257,87 +272,4 @@ export const getFinancialAnalystReport = async (req, res) => {
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
-};
-
-const generateCSV = (res, collections, expenses, month, year) => {
-  const fields = ['Type', 'Date', 'Artist', 'Client/Category', 'Amount', 'Status', 'Notes'];
-  
-  const data = [
-    ...collections.map(c => ({
-      Type: 'Collection',
-      Date: c.date.toDateString(),
-      Artist: c.employeeId?.name || 'Unknown',
-      'Client/Category': c.bookingId?.customerName || 'N/A',
-      Amount: c.amount,
-      Status: c.status,
-      Notes: c.notes,
-    })),
-    ...expenses.map(e => ({
-      Type: 'Expense',
-      Date: e.date.toDateString(),
-      Artist: e.employeeId?.name || 'Unknown',
-      'Client/Category': e.category,
-      Amount: e.amount,
-      Status: e.status,
-      Notes: e.notes,
-    }))
-  ];
-
-  const parser = new Parser({ fields });
-  const csv = parser.parse(data);
-
-  res.header('Content-Type', 'text/csv');
-  res.attachment(`Finance_Report_${month}_${year}.csv`);
-  return res.send(csv);
-};
-
-const generatePDF = (res, collections, expenses, month, year) => {
-  const doc = new PDFDocument({ margin: 30, size: 'A4' });
-  
-  res.header('Content-Type', 'application/pdf');
-  res.attachment(`Finance_Report_${month}_${year}.pdf`);
-  doc.pipe(res);
-
-  // Header
-  doc.fontSize(20).text('Team N ERP - Finance Report', { align: 'center' });
-  doc.fontSize(12).text(`Period: ${month}/${year}`, { align: 'center' });
-  doc.moveDown();
-
-  // Collections Table
-  doc.fontSize(14).fillColor('#2c3e50').text('Fund Collections', { underline: true });
-  doc.moveDown(0.5);
-  
-  doc.fontSize(10).fillColor('black');
-  collections.forEach((c, i) => {
-    doc.text(`${i + 1}. ${c.date.toDateString()} | ${c.employeeId?.name || 'Unknown'} | ₹${c.amount} | ${c.status}`);
-    doc.fontSize(8).text(`   Client: ${c.bookingId?.customerName || 'N/A'} | Notes: ${c.notes}`, { color: 'grey' });
-    doc.moveDown(0.5);
-    doc.fontSize(10);
-  });
-
-  doc.moveDown();
-
-  // Expenses Table
-  doc.fontSize(14).fillColor('#c0392b').text('Expense Claims', { underline: true });
-  doc.moveDown(0.5);
-
-  doc.fontSize(10).fillColor('black');
-  expenses.forEach((e, i) => {
-    doc.text(`${i + 1}. ${e.date.toDateString()} | ${e.employeeId?.name || 'Unknown'} | ₹${e.amount} | ${e.status}`);
-    doc.fontSize(8).text(`   Category: ${e.category} | Notes: ${e.notes}`, { color: 'grey' });
-    doc.moveDown(0.5);
-    doc.fontSize(10);
-  });
-
-  // Summary
-  doc.moveDown();
-  const totalColl = collections.reduce((sum, c) => sum + c.amount, 0);
-  const totalExp = expenses.reduce((sum, e) => sum + e.amount, 0);
-  
-  doc.fontSize(12).fillColor('black').text('-----------------------------------');
-  doc.text(`Total Collections: ₹${totalColl}`);
-  doc.text(`Total Expenses: ₹${totalExp}`);
-  doc.text(`Net Balance: ₹${totalColl - totalExp}`, { bold: true });
-
-  doc.end();
 };

@@ -105,16 +105,18 @@ const pid = made.body._id;
 await Project.updateOne({ _id: pid }, { costStatus: 'approved', approvedBudget: 50000 });
 
 // ── the feed ────────────────────────────────────────────────────────────────
-await check('a new project: created (by whom), then ONE line for the three invitations', async () => {
+// Departments are put straight onto a project (utils/projectDepartments.js — no invitation to answer), so they read as ADDED.
+await check('a new project: created (by whom), then ONE line for the three departments added', async () => {
   const r = await get(pid, mira.token);
   assert.equal(r.status, 200);
-  assert.deepEqual(feedOf(r), ['Project created', 'Invitations sent to 3 departments']);
+  assert.deepEqual(feedOf(r), ['Project created', '3 departments added to the project']);
+  assert.deepEqual(r.body.departments.map((d) => [d.name, d.status]), [['Marketing', 'accepted'], ['Accounts', 'accepted'], ['Finance', 'accepted'], ['HR', 'accepted']], 'they joined at once');
   assert.equal(r.body.activity[0].by, 'boss');
   assert.ok(!Number.isNaN(Date.parse(r.body.activity[0].at)));
 });
 
 await check('the create response already carries the feed', async () => {
-  assert.deepEqual(feedOf(made), ['Project created', 'Invitations sent to 3 departments']);
+  assert.deepEqual(feedOf(made), ['Project created', '3 departments added to the project']);
 });
 
 await check('the project LIST does not carry it (nor the stored raw events)', async () => {
@@ -153,6 +155,24 @@ await check('a project saved before any of this (no activity, no departments) st
 
 // ── resend ──────────────────────────────────────────────────────────────────
 const remindersFor = (user) => Notification.find({ recipient: user.id, title: /^Reminder:/ }).lean();
+
+await check('a department that joined at once has nothing to be reminded about (409)', async () => {
+  const r = await resend(pid, 'Accounts', mira.token);
+  assert.equal(r.status, 409);
+  assert.match(r.body.message, /already joined/);
+  assert.equal((await remindersFor(accountsHead)).length, 0);
+});
+
+// Reminders are for invitations sent before departments joined directly and still waiting for an answer: the live data still has
+// some, and the reminder button works for them. This project's three departments are set back to that state.
+await Project.collection.updateOne(
+  { _id: new mongoose.Types.ObjectId(pid) },
+  { $set: { 'departments.$[p].status': 'invited', 'departments.$[p].respondedAt': null } },
+  { arrayFilters: [{ 'p.role': 'participant' }] },
+);
+await check('an invitation from before, still waiting: the feed shows it as sent', async () => {
+  assert.deepEqual(feedOf(await get(pid, mira.token)).filter((t) => !t.startsWith('Project moved')), ['Project created', 'Invitations sent to 3 departments']);
+});
 
 await check('the manager reminds Accounts: its head is told, and the feed says so', async () => {
   const r = await resend(pid, 'Accounts', mira.token);
@@ -238,7 +258,8 @@ await check('approving or rejecting a proposal is recorded in the feed', async (
   const approved = await api('POST', `/projects/${a}/approve`, marketingHead.token, {});
   assert.equal(approved.status, 200, JSON.stringify(approved.body));
   assert.deepEqual(feedOf(approved), ['Project proposed', 'Project approved']);
-  assert.equal(approved.body.activity[1].by, 'mhead');
+  // the proposal also sent its estimated cost to the finance head (another line, by the proposer): find the decision itself
+  assert.equal(approved.body.activity.find((e) => e.text === 'Project approved')?.by, 'mhead');
 
   const b = await mk('Proposal B');
   const rejected = await api('POST', `/projects/${b}/reject`, marketingHead.token, { note: 'Not this year' });

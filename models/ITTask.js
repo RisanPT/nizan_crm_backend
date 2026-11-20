@@ -127,6 +127,30 @@ const itTaskSchema = mongoose.Schema(
       type: Number,
       default: 0,
     },
+    // PLANNED COST (rules in utils/taskCost.js). '' = none given · amount = `costAmount` typed in ₹ · rate = estimatedHours × `costRate`
+    // (₹ per hour). `plannedCost` is worked out by the server on every save and is never taken from a client. Only leaf tasks (no
+    // sub-tasks) carry cost: a phase shows the sum of its leaves, and a task that gains its first sub-task gives its own cost up.
+    costMode: { type: String, enum: ['', 'amount', 'rate'], default: '' },
+    costAmount: { type: Number, default: 0, min: 0 },
+    costRate: { type: Number, default: 0, min: 0 },
+    plannedCost: { type: Number, default: 0, min: 0 },
+    // EXTENSIONS of the due date, oldest first, for good: nothing here is ever edited or removed, and a client can never send it (rules in
+    // utils/taskExtension.js). `from` is the due date before, `to` the new one, `overdueDays` how late the task already was, `viaEdit` that
+    // it came from an ordinary edit of the date rather than the "extend" action.
+    extensions: [
+      {
+        at: { type: Date, default: Date.now },
+        by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+        byName: { type: String, default: '' },
+        from: { type: Date },
+        to: { type: Date },
+        days: { type: Number, default: 0 },
+        reason: { type: String, default: '' },
+        overdueDays: { type: Number, default: 0 },
+        viaEdit: { type: Boolean, default: false },
+        _id: false,
+      },
+    ],
     // Set when the task is moved to 'completed' (updateITTask writes it; without
     // this field Mongoose strict mode silently discarded the completion time).
     completedAt: {

@@ -3,6 +3,7 @@ import Expense from '../models/Expense.js';
 import { notifyRoles } from '../utils/notify.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 import { applyMoneyAccount } from '../utils/moneyAccount.js';
+import { planApproval, planRejection } from '../utils/expenseApproval.js';
 import { runFinanceList } from '../services/financeList.js';
 import { isNewStyleQuery, QueryError } from '../utils/financeListQuery.js';
 import { cleanMeals, canonicalMeals, mealsOf, mealsText, singleMeal } from '../utils/mealAllocation.js';
@@ -185,7 +186,15 @@ export const updateExpense = async (req, res) => {
       const sent = meals !== undefined || meal !== undefined;
       Object.assign(expense, mealFields(sent ? meals : mealsOf(expense), sent ? meal : '', expense.category));
     }
-    if (amount !== undefined) expense.amount = Number(amount) || 0;
+    if (amount !== undefined) {
+      expense.amount = Number(amount) || 0;
+      // An approval that reduced the amount keeps the logged one beside it. Editing the amount up to
+      // (or past) what was logged means it is no longer "reduced": drop the kept original and the note.
+      if (expense.loggedAmount != null && expense.amount >= expense.loggedAmount) {
+        expense.loggedAmount = null;
+        expense.approvalNote = '';
+      }
+    }
     if (date !== undefined) expense.date = date;
     if (notes !== undefined) expense.notes = notes ?? '';
     if (receiptImage !== undefined) expense.receiptImage = receiptImage ?? '';
@@ -220,9 +229,20 @@ export const verifyExpense = async (req, res) => {
       return res.status(400).json({ message: 'Invalid status' });
     }
 
+    // The amount that counts. Approving may set a SMALLER approved amount (the logged one is kept
+    // beside it); only that is posted and taken out of the account. Rejecting pays nothing, so the
+    // expense goes back to what was logged.
+    const plan = status === 'verified'
+      ? planApproval(expense, { approvedAmount: req.body.approvedAmount, note: req.body.approvalNote })
+      : planRejection(expense);
+    if (plan.error) return res.status(400).json({ message: plan.error });
+
     expense.status = status;
     expense.verifiedBy = verifiedBy;
     expense.verifiedAt = verifiedAt ? new Date(verifiedAt) : new Date();
+    expense.amount = plan.amount;
+    expense.loggedAmount = plan.loggedAmount;
+    expense.approvalNote = plan.approvalNote;
 
     // How it was paid back (approval popup). Only expenses verified with an
     // account post to the ledger.

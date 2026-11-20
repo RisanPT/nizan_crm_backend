@@ -20,6 +20,8 @@ const ACCOUNTS_ROLES = new Set(['accounts', 'finance_head', 'admin']);
 const EXPORT_CAP = 5000;
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 const CATEGORIES = ['food', 'travel', 'stay', 'materials', 'fuel', 'other'];
+const UNPLACED_PAGE_CAP = 200; // how many not-tied-to-a-work entries one (non-export) response lists
+const zeroByCategory = () => Object.fromEntries(CATEGORIES.map((c) => [c, 0]));
 
 const bad = (message, status = 400) => Object.assign(new Error(message), { status });
 const fail = (res, err) => res.status(err.status ?? 500).json({ message: err.message });
@@ -230,7 +232,12 @@ const parseStatuses = (raw) => {
  *            travelDistanceKm (0 = not recorded),
  *            allowance: { meals: [{ meal (key: 'lunch' or 'breakfast+lunch+dinner'), meals, actual, allowancePerHead, allowed, over, status }], allowed, actual, over, hasOver, noMeal } }],
  *            page, limit, totalItems, totalPages,
- *            totals: { food, other, total, unplaced, unplacedCount }, truncated }
+ *            totals: { food, other, total, unplaced, unplacedCount, overAllowanceCount, overAllowanceAmount,
+ *                      byCategory: { food, travel, stay, materials, fuel, other }   (what is under a work),
+ *                      unplacedByCategory: { …same keys… }                          (what is not tied to a work) },
+ *            unplaced: [{ expenseId, category, at, amount, status, notes, artist, employeeId, reason }]  (the entries not
+ *              under any work — fuel / travel with no booking chosen — so Accounts can see WHAT they are),
+ *            unplacedTruncated, truncated }
  */
 export const getWorkCosts = async (req, res) => {
   try {
@@ -258,14 +265,26 @@ export const getWorkCosts = async (req, res) => {
     const { byExpense, bookings } = await computeAllocations(expenses);
 
     const works = new Map(); // bookingId → row
-    const totals = { food: 0, other: 0, total: 0, unplaced: 0, unplacedCount: 0, overAllowanceCount: 0, overAllowanceAmount: 0 };
+    const totals = {
+      food: 0, other: 0, total: 0, unplaced: 0, unplacedCount: 0, overAllowanceCount: 0, overAllowanceAmount: 0,
+      byCategory: zeroByCategory(),
+      unplacedByCategory: zeroByCategory(),
+    };
+    const unplacedLines = [];
     const rules = await FoodAllowance.find({ active: true }).lean();
     for (const e of expenses) {
       const alloc = byExpense.get(String(e._id));
       const shares = alloc?.shares ?? [];
+      const cat = CATEGORIES.includes(e.category) ? e.category : 'other';
       if (shares.length === 0) {
         totals.unplaced = round2(totals.unplaced + e.amount);
         totals.unplacedCount += 1;
+        totals.unplacedByCategory[cat] = round2(totals.unplacedByCategory[cat] + e.amount);
+        unplacedLines.push({
+          ...expenseLine(e, alloc),
+          artist: e.employeeId?.name ?? '',
+          employeeId: String(e.employeeId?._id ?? e.employeeId ?? ''),
+        });
         continue;
       }
       for (const s of shares) {
@@ -280,8 +299,8 @@ export const getWorkCosts = async (req, res) => {
           });
         }
         const row = works.get(s.bookingId);
-        const cat = CATEGORIES.includes(e.category) ? e.category : 'other';
         row[cat] = round2(row[cat] + s.amount);
+        totals.byCategory[cat] = round2(totals.byCategory[cat] + s.amount);
         row.total = round2(row.total + s.amount);
         row.expenseCount += 1;
         if (e.status === 'pending') row.pendingCount += 1;
@@ -330,7 +349,7 @@ export const getWorkCosts = async (req, res) => {
     items.sort((a, b) => new Date(b.serviceStart ?? 0) - new Date(a.serviceStart ?? 0) || String(a.bookingId).localeCompare(String(b.bookingId)));
 
     const truncated = count > EXPORT_CAP;
-    if (req.query.export === '1') return res.json({ items, totalItems: items.length, totals, truncated });
+    if (req.query.export === '1') return res.json({ items, totalItems: items.length, totals, unplaced: unplacedLines, unplacedTruncated: false, truncated });
     const limit = Math.min(100, Math.max(1, Number.parseInt(req.query.limit, 10) || 20));
     const page = Math.max(1, Number.parseInt(req.query.page, 10) || 1);
     res.json({
@@ -340,6 +359,8 @@ export const getWorkCosts = async (req, res) => {
       totalItems: items.length,
       totalPages: Math.max(1, Math.ceil(items.length / limit)),
       totals,
+      unplaced: unplacedLines.slice(0, UNPLACED_PAGE_CAP),
+      unplacedTruncated: unplacedLines.length > UNPLACED_PAGE_CAP,
       truncated,
     });
   } catch (err) {

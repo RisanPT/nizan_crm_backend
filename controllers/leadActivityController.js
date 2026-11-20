@@ -1,6 +1,14 @@
-import LeadActivity from '../models/LeadActivity.js';
+import LeadActivity, { FOLLOWUP_CHANNELS } from '../models/LeadActivity.js';
 import Lead from '../models/Lead.js';
 import { applyLostRequest } from './leadController.js';
+import { stampFirstContact } from '../services/leadResponse.js';
+
+/** The follow-up channel as sent: '' when not given, the lower-case key when it is one of the list, null when it is not. */
+export const channelOf = (v) => {
+  if (v === undefined || v === null || v === '') return '';
+  const k = String(v).trim().toLowerCase();
+  return FOLLOWUP_CHANNELS.includes(k) ? k : null;
+};
 
 // Get all activities for a lead
 export const getLeadActivities = async (req, res) => {
@@ -27,6 +35,12 @@ export const createLeadActivity = async (req, res) => {
       }
     }
 
+    // How a follow-up is done (call / WhatsApp / visit / meeting / other) — optional; anything else is refused in plain words.
+    const channel = channelOf(req.body.channel);
+    if (channel === null) {
+      return res.status(400).json({ message: `Choose how the follow-up is done: ${FOLLOWUP_CHANNELS.join(', ')}.`, field: 'channel' });
+    }
+
     // Don't create orphan log entries for a lead that doesn't exist.
     const lead = await Lead.findById(req.params.leadId);
     if (!lead) {
@@ -45,9 +59,13 @@ export const createLeadActivity = async (req, res) => {
 
     const activity = await LeadActivity.create({
       ...req.body,
+      channel,
       leadId: req.params.leadId,
       createdBy: req.user._id,
     });
+
+    // speed to lead: the first call / message / follow-up logged is the lead's first contact (stamped once)
+    await stampFirstContact(req.params.leadId, { at: activity.createdAt ?? new Date(), user: req.user, via: channel || req.body.type || 'activity' });
 
     if (wantsLost) {
       const text = String(req.body.reason ?? req.body.remark ?? '').trim();
@@ -87,6 +105,13 @@ export const createLeadActivity = async (req, res) => {
 // Update an activity (e.g. mark follow-up as Completed)
 export const updateLeadActivity = async (req, res) => {
   try {
+    if (req.body.channel !== undefined) {
+      const channel = channelOf(req.body.channel);
+      if (channel === null) {
+        return res.status(400).json({ message: `Choose how the follow-up is done: ${FOLLOWUP_CHANNELS.join(', ')}.`, field: 'channel' });
+      }
+      req.body.channel = channel;
+    }
     const activity = await LeadActivity.findByIdAndUpdate(
       req.params.id,
       req.body,

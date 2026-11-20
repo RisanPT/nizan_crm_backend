@@ -21,6 +21,7 @@ import {
 } from '../utils/hrAccess.js';
 import { getHrScope, canManageEmployee } from '../utils/hrDeptScope.js';
 import { isLeadership } from '../utils/leadership.js';
+import { addAssociate } from '../controllers/associateController.js';
 
 const router = express.Router();
 
@@ -100,6 +101,8 @@ const payInScope = async (req, res, next) => {
 router.route('/').get(getEmployees).post(employeeWriteGuard, createEmployee);
 // Declared before '/:id' so 'org-tree' isn't captured as an :id.
 router.get('/org-tree', getOrgTree);
+// Operations adds an outside associate artist while assigning a work (its own guard: whoever works with bookings, not only HR).
+router.post('/associates', addAssociate);
 router
   .route('/:id')
   .get(getEmployee)

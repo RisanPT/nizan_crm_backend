@@ -24,6 +24,7 @@ import {
   MANAGER_AND_ADMIN_ROLES,
   NOTIFICATION_TYPES,
 } from '../utils/notify.js';
+import { creationAudit, recordStatusChange } from '../utils/crmBookingAudit.js';
 
 const EXTRA_DATE_AMOUNT = 3000;
 
@@ -1508,6 +1509,8 @@ export const createBooking = async (req, res) => {
       pocPhone: pocPhone ?? '',
       createdBy: req.user?._id ?? null,
       createdByName: req.user?.name ?? '',
+      // where it came from and its first status, for the CRM figures (utils/crmBookingAudit.js)
+      ...creationAudit({ status: normalizedStatus, user: req.user }),
     });
 
     // A booking for a known lead's number converts that lead automatically.
@@ -1855,6 +1858,8 @@ export const updateBooking = async (req, res) => {
     booking.pocName = pocName ?? booking.pocName;
     booking.pocPhone = pocPhone ?? booking.pocPhone;
 
+    // every status change, and the first decision on a request, for the CRM figures (utils/crmBookingAudit.js)
+    recordStatusChange(booking, { from: previousStatus, to: booking.status, user: req.user });
     let updatedBooking = await booking.save();
     if (bookedAtOverride) {
       await Booking.collection.updateOne(

@@ -5,7 +5,7 @@ import Designation from '../models/Designation.js';
 import SalaryIncrement from '../models/SalaryIncrement.js';
 import mongoose from 'mongoose';
 import { flatGeoMatch, isFullGeoAccess } from '../utils/geoScope.js';
-import { performTimeboxEmployeeSync } from './timeboxController.js';
+import { syncTimeboxInBackground } from './timeboxController.js';
 import { redactEmployee } from '../utils/hrAccess.js';
 import { getHrScope } from '../utils/hrDeptScope.js';
 import { logChange, snapshot } from '../utils/audit.js';
@@ -340,6 +340,15 @@ export const createEmployee = async (req, res) => {
     if (probationEndDate) employeeData.probationEndDate = new Date(probationEndDate);
     if (emergencyContact) employeeData.emergencyContact = emergencyContact;
 
+    if (req.body.isAssociate === true) {
+      // an associate is an outside artist paid per work — never on payroll
+      if (type && type !== 'outsource') {
+        return res.status(400).json({ message: 'An associate is an outside artist: set the type to Outsource.' });
+      }
+      employeeData.isAssociate = true;
+      employeeData.type = 'outsource';
+      employeeData.salaryType = 'per_booking';
+    }
     const employee = await Employee.create(employeeData);
     await logChange({
       req, entity: 'Employee', entityId: employee._id, employeeId: employee._id,
@@ -353,10 +362,8 @@ export const createEmployee = async (req, res) => {
       .populate('districtId', 'name status')
       .populate('pincodeId', 'code status');
 
-    // Trigger async Timebox sync so any matching Timebox profile is bound immediately
-    performTimeboxEmployeeSync().catch((err) =>
-      console.error('[Timebox] Background sync after employee creation failed:', err?.message || err)
-    );
+    // Trigger async Timebox sync so any matching Timebox profile is bound immediately (never waited on, never fails this request)
+    syncTimeboxInBackground('employee creation');
 
     res.status(201).json(populatedEmployee);
   } catch (error) {
@@ -428,6 +435,12 @@ export const updateEmployee = async (req, res) => {
     const effectiveSpecialization =
       normalizedSpecialization || normalizedWorks[0] || '';
 
+    const wantsAssociate = req.body.isAssociate === undefined ? employee.isAssociate === true : req.body.isAssociate === true;
+    if (wantsAssociate && (type ?? employee.type) !== 'outsource') {
+      return res.status(400).json({ message: 'An associate is an outside artist: set the type to Outsource.' });
+    }
+    employee.isAssociate = wantsAssociate;
+    if (wantsAssociate) employee.salaryType = 'per_booking';
     employee.name = name ?? employee.name;
     employee.email =
       email != null ? normalizedEmail : employee.email;

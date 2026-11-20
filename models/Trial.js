@@ -119,6 +119,17 @@ const trialSchema = new mongoose.Schema(
       ref: 'Booking',
       default: null,
     },
+    // ── CRM: who booked the trial, who owns it, and the booking it turned into ──
+    // Never filled in for the past: a trial from before this has none of it, and the CRM figures say "—" per person.
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    createdByName: { type: String, default: '' },
+    // The CRM team member following the trial up — set by the CRM Head (POST /api/crm/assign).
+    crmOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    crmOwnerName: { type: String, default: '' },
+    crmAssignedAt: { type: Date, default: null },
+    crmAssignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    // The booking this trial's client went on to make (set when the CRM team links it; the figures also match by phone).
+    convertedBookingId: { type: mongoose.Schema.Types.ObjectId, ref: 'Booking', default: null },
   },
   { timestamps: true }
 );

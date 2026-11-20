@@ -2,6 +2,9 @@ import mongoose from 'mongoose';
 import BankAccount from '../models/BankAccount.js';
 import ChartOfAccount, { resolveAccountType, nextAccountCode } from '../models/ChartOfAccount.js';
 import JournalEntry from '../models/JournalEntry.js';
+import { anchorAt, anchorsOf, balanceAt, facetsOf, matchesRow, pageOf, parseStatementQuery, rangeOf, totalsOf, withRunningBalance } from '../utils/bankStatement.js';
+import { describeTransactions } from '../services/bankTransactionDetails.js';
+import { addDays, istEnd, todayIst } from '../utils/istDate.js';
 
 // Finance staff manage bank balances.
 const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
@@ -66,6 +69,26 @@ const withLiveBalance = async (a) => {
   };
 };
 
+// What the account held at instant [at]: the manual balance in force then, plus the ledger's receipts and
+// payments since its day. Null when no balance had been entered by then (nothing to compare with).
+const balanceAtInstant = async (obj, at) => {
+  const anchor = anchorAt(anchorsOf(obj), at);
+  if (!anchor) return null;
+  const ledgerId = obj.ledger && obj.ledger._id ? obj.ledger._id : obj.ledger;
+  if (!ledgerId) return round2(anchor.balance);
+  const id = new mongoose.Types.ObjectId(String(ledgerId));
+  const [m] = await JournalEntry.aggregate([
+    { $match: { status: 'posted', 'lines.account': id, date: { $gt: anchor.cutoff, $lte: at } } },
+    { $unwind: '$lines' },
+    { $match: { 'lines.account': id } },
+    { $group: { _id: null, in: { $sum: '$lines.debit' }, out: { $sum: '$lines.credit' } } },
+  ]);
+  return round2(anchor.balance + (m?.in || 0) - (m?.out || 0));
+};
+
+/// The last day of the month before this one (IST): 'YYYY-MM-DD'.
+const lastDayOfPreviousMonth = () => addDays(`${todayIst().slice(0, 7)}-01`, -1);
+
 // A ledger can back a bank/cash account when it is an active Cash or Bank type
 // and isn't already linked to a different account.
 const checkLinkable = async (ledgerId, selfId = null) => {
@@ -123,14 +146,27 @@ export const getBankAccounts = async (req, res) => {
       .populate('ledger', 'code name')
       .sort({ kind: 1, name: 1 })
       .lean();
-    const accounts = await Promise.all(raw.map(withLiveBalance));
+    // …and what each held at the end of last month, for "vs last month" (null = no balance entered by then)
+    const previousDay = lastDayOfPreviousMonth();
+    const previousAt = istEnd(previousDay);
+    const accounts = await Promise.all(
+      raw.map(async (a) => ({ ...(await withLiveBalance(a)), previousBalance: await balanceAtInstant(a, previousAt) })),
+    );
     const active = accounts.filter((a) => a.active);
     const sum = (list) => round2(list.reduce((s, a) => s + (a.currentBalance || 0), 0));
+    // a total can only be compared when every account in it has a figure for that day
+    const previousSum = (list) => (list.length > 0 && list.every((a) => a.previousBalance !== null) ? round2(list.reduce((s, a) => s + a.previousBalance, 0)) : null);
     res.json({
       accounts,
       totalBalance: sum(active),
       bankTotal: sum(active.filter((a) => a.kind !== 'cash')),
       cashTotal: sum(active.filter((a) => a.kind === 'cash')),
+      previous: {
+        asOf: previousDay,
+        total: previousSum(active),
+        bank: previousSum(active.filter((a) => a.kind !== 'cash')),
+        cash: previousSum(active.filter((a) => a.kind === 'cash')),
+      },
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -250,44 +286,84 @@ export const getLedgerOptions = async (req, res) => {
   }
 };
 
-// @route GET /api/bank-accounts/:id/transactions  — ledger receipts and
-// payments since the last manual balance, with a running balance.
+/// How many vouchers one statement reads at most.
+const STATEMENT_CAP = 5000;
+
+// @route GET /api/bank-accounts/:id/transactions
+// The account's statement: every receipt and payment on its ledger, each with the balance after it and
+// WHAT IT WAS FOR (who, which work, category, notes… — services/bankTransactionDetails.js).
+//   ?from= &to=      IST days, inclusive. Neither = since the last manual balance (what the live balance is made of).
+//   ?direction=in|out  ?group=  ?person=  ?search=      (the keys of group / person come from `facets`)
+//   ?page= &limit=   a page, newest first:  { rows, page, limit, totalItems, totalPages, totals, facets, … }
+//   ?export=1        every match, newest first
+//   (no page / export: every row, OLDEST first — the shape older apps expect)
+// Always: since, opening (the balance before the first row), closing (after the last), range, truncated.
 export const getTransactions = async (req, res) => {
   if (!canManage(req.user)) return res.status(403).json({ message: 'Only finance staff can view this' });
   try {
+    const query = parseStatementQuery(req.query);
     const doc = await BankAccount.findById(req.params.id).lean();
     if (!doc) return res.status(404).json({ message: 'Account not found' });
-    if (!doc.ledger) return res.json({ since: doc.asOf || null, opening: round2(doc.balance), rows: [], closing: round2(doc.balance) });
 
-    const id = String(doc.ledger);
-    const entries = await JournalEntry.find(movementMatch(id, doc.asOf))
-      .select('date voucherNo voucherType narration lines source')
-      .sort({ date: 1, createdAt: 1 })
-      .limit(1000)
-      .lean();
-    let running = round2(doc.balance);
-    const rows = [];
-    for (const e of entries) {
-      for (const l of e.lines) {
-        if (String(l.account) !== id) continue;
-        const inAmt = round2(l.debit);
-        const outAmt = round2(l.credit);
-        running = round2(running + inAmt - outAmt);
-        rows.push({
-          date: e.date,
-          voucherNo: e.voucherNo,
-          voucherType: e.voucherType,
-          narration: l.narration || e.narration || '',
-          source: e.source?.model || '',
-          in: inAmt,
-          out: outAmt,
-          balance: running,
+    const anchors = anchorsOf(doc);
+    const current = anchors[anchors.length - 1];
+    const { start, end } = rangeOf(query);
+    // what is shown starts at the chosen day, else just after the balance in force now
+    const viewStart = start ?? new Date(current.cutoff.getTime() + 1);
+    const before = new Date(viewStart.getTime() - 1);
+    const range = query.from || query.to ? { from: query.from, to: query.to } : null;
+
+    let lines = [];
+    let truncated = false;
+    if (doc.ledger) {
+      const id = String(doc.ledger);
+      // read from the manual balance in force at the start, so every row's balance can be worked out
+      const base = anchorAt(anchors, before);
+      const entries = await JournalEntry.find({
+        status: 'posted',
+        'lines.account': new mongoose.Types.ObjectId(id),
+        date: { $gt: base ? base.cutoff : before, ...(end ? { $lte: end } : {}) },
+      })
+        .select('date voucherNo voucherType narration lines source')
+        .sort({ date: 1, createdAt: 1 })
+        .limit(STATEMENT_CAP + 1)
+        .lean();
+      truncated = entries.length > STATEMENT_CAP;
+      for (const e of entries.slice(0, STATEMENT_CAP)) {
+        e.lines.forEach((l, i) => {
+          if (String(l.account) !== id) return;
+          lines.push({
+            id: `${e._id}:${i}`,
+            date: e.date,
+            voucherNo: e.voucherNo,
+            voucherType: e.voucherType,
+            narration: l.narration || e.narration || '',
+            source: e.source?.model || '',
+            sourceId: e.source?.id ? String(e.source.id) : '',
+            against: e.lines.filter((x) => String(x.account) !== id).map((x) => String(x.account)),
+            in: round2(l.debit),
+            out: round2(l.credit),
+          });
         });
       }
+      lines = withRunningBalance(anchors, lines);
     }
-    res.json({ since: doc.asOf || null, opening: round2(doc.balance), rows, closing: running });
+
+    const opening = doc.ledger ? balanceAt(anchors, lines, before) : anchorAt(anchors, before)?.balance ?? null;
+    const shown = lines.filter((l) => l.date >= viewStart);
+    const closing = shown.length > 0 ? shown[shown.length - 1].balance : opening;
+    const described = await describeTransactions(shown);
+    const head = { since: range ? null : doc.asOf || null, opening, closing, range, truncated };
+
+    if (query.legacy) return res.json({ ...head, rows: described });
+
+    const matched = described.filter((r) => matchesRow(r, query)).reverse(); // newest first
+    const extra = { totals: totalsOf(matched), allTotals: totalsOf(described), facets: facetsOf(described) };
+    if (query.export) return res.json({ ...head, ...extra, rows: matched, totalItems: matched.length });
+    const page = pageOf(matched, query.page, query.limit);
+    res.json({ ...head, ...extra, rows: page.items, page: page.page, limit: page.limit, totalItems: page.totalItems, totalPages: page.totalPages });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    res.status(error.status ?? 500).json({ message: error.message });
   }
 };
 

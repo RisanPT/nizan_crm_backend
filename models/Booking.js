@@ -371,6 +371,19 @@ const bookingSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // Set when the names typed in temporaryStaffDetails were reviewed and turned into registered associates (Associate Works → "Convert old
+    // temporary staff"). `text` is what the box said then, so a later edit brings the booking back for review. Nothing else reads this.
+    tempStaffConverted: {
+      type: new mongoose.Schema(
+        {
+          at: { type: Date },
+          by: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+          text: { type: String, default: '' },
+        },
+        { _id: false }
+      ),
+      default: undefined,
+    },
     staffInstructions: {
       type: String,
       default: '',
@@ -474,6 +487,38 @@ const bookingSchema = mongoose.Schema(
       type: String,
       default: '',
     },
+    // ── CRM: where a request came from, who decided it, who owns it (utils/crmBookingAudit.js) ──
+    // Never filled in for the past — a booking from before this has none of it, and the CRM figures say "—".
+    // '' = from before this was recorded; 'public' = a request from the public booking form; 'staff' = made in the app.
+    origin: { type: String, enum: ['', 'public', 'staff'], default: '' },
+    statusHistory: {
+      type: [
+        new mongoose.Schema(
+          {
+            status: { type: String, default: '' },
+            from: { type: String, default: '' },
+            at: { type: Date, default: Date.now },
+            by: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+            byName: { type: String, default: '' },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
+    // The FIRST decision on a request (it left `pending`): what it became, when, by whom, and who owned it then (the credit).
+    requestDecision: { type: String, default: '' },
+    requestDecidedAt: { type: Date, default: null },
+    requestDecidedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    requestDecidedByName: { type: String, default: '' },
+    decidedOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    // The CRM team member who owns this booking — set by the CRM Head (POST /api/crm/assign), never by the booking form.
+    crmOwnerId: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    crmOwnerName: { type: String, default: '' },
+    crmAssignedAt: { type: Date, default: null },
+    crmAssignedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    // When the owner and the head were told this request is overdue (once — utils/crmSweep.js).
+    crmOverdueNotifiedAt: { type: Date, default: null },
     // ── Advance received at booking, verified by Accounts ──────────────────
     // '' = booked before advance verification existed (not tracked);
     // pending → verified posts a receipt for the advance into the chosen bank /
@@ -535,6 +580,15 @@ bookingSchema.pre('validate', async function assignBookingNumber(next) {
 
   next();
 });
+
+// The CRM queue and figures: requests by status and age, and each owner's open work.
+bookingSchema.index({ status: 1, createdAt: -1 });
+bookingSchema.index({ crmOwnerId: 1, status: 1 });
+// The CRM figures: requests that arrived, and requests decided, in a period.
+bookingSchema.index({ origin: 1, createdAt: -1 });
+bookingSchema.index({ origin: 1, requestDecidedAt: 1 });
+// Marketing outcomes (utils/marketingOutcomes.js): the Lead Report, Campaigns hub and Weekly Report find a lead's booking by Booking.leadId.
+bookingSchema.index({ leadId: 1 });
 
 const Booking = mongoose.model('Booking', bookingSchema);
 

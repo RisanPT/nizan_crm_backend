@@ -26,6 +26,8 @@ const messageSchema = new mongoose.Schema(
 );
 
 messageSchema.index({ conversationId: 1, createdAt: 1 });
+// the CRM chat figures read the messages of a period (utils/crmStats.js chatEpisodes)
+messageSchema.index({ createdAt: 1 });
 
 const Message = mongoose.model('Message', messageSchema);
 export default Message;

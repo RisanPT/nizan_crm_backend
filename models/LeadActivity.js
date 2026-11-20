@@ -1,5 +1,7 @@
 import mongoose from 'mongoose';
 
+export const FOLLOWUP_CHANNELS = ['call', 'whatsapp', 'visit', 'meeting', 'other'];
+
 const leadActivitySchema = mongoose.Schema(
   {
     leadId: {
@@ -30,6 +32,13 @@ const leadActivitySchema = mongoose.Schema(
       type: String,
       enum: ['Pending', 'Completed', 'Cancelled'],
       default: 'Pending',
+    },
+    // How a follow-up is (to be) done: a call, a WhatsApp message, a visit, a meeting, something else.
+    // '' = not said (follow-ups logged before this existed). Shown on the Lead Report's Follow-ups.
+    channel: {
+      type: String,
+      enum: ['', ...FOLLOWUP_CHANNELS],
+      default: '',
     },
     callResponse: {
       type: String,

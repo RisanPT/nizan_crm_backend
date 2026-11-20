@@ -19,6 +19,13 @@ const ALL_PROJECT_ROLE_KEYS = new Set([
   ...LEADERSHIP_ROLES,
 ]);
 
+/// The projects a finance head may LOOK at without being on them: those that have a cost to decide on or that was decided, and only
+/// "managed" ones — on a managed project someone who is not on it can change nothing (an "open" project lets everyone who sees it edit
+/// it, so it is not shown). A proposal is the owning department's head's to decide first.
+export const FINANCE_VISIBLE_COST_STATES = ['pending', 'approved', 'returned'];
+export const financeMaySee = (project) =>
+  editModeOf(project) === 'managed' && FINANCE_VISIBLE_COST_STATES.includes(project?.costStatus ?? 'none') && project?.status !== 'proposed';
+
 export const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const eqCI = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
 
@@ -46,6 +53,10 @@ export const buildProjectScope = async (u) => {
     const taskProjectIds = await ITTask.distinct('projectId', { assignedTo: empId });
     or.push({ managerId: empId }, { members: empId }, { _id: { $in: taskProjectIds } });
   }
+  // the finance head sees the projects that have a cost to look at (read-only: see financeMaySee)
+  if (String(u?.role ?? '').trim().toLowerCase() === 'finance_head') {
+    or.push({ editMode: 'managed', costStatus: { $in: FINANCE_VISIBLE_COST_STATES }, status: { $ne: 'proposed' } });
+  }
   if (u?.isDepartmentHead) {
     const dept = await resolveUserDeptName(u);
     if (dept) {
@@ -70,6 +81,8 @@ export const loadAccessContext = async (u) => ({
   // the finance head decides a project's cost; Accounts can see it
   financeHead: ['finance_head', 'admin'].includes(String(u?.role ?? '').trim().toLowerCase()),
   finance: ['finance_head', 'accounts', 'admin'].includes(String(u?.role ?? '').trim().toLowerCase()),
+  // the finance head sees the projects whose budget they decide on (see financeMaySee) — to look, never to plan
+  financeViewer: String(u?.role ?? '').trim().toLowerCase() === 'finance_head',
   // a leadership login (CEO, Executive Director) looks and decides; it does not plan (no managing, no adding or changing tasks)
   viewOnly: isLeadership(u),
   empId: u?.employeeId ? String(u.employeeId) : '',
@@ -112,6 +125,7 @@ export const canViewProject = async (u, project, ctx = null) => {
   const c = ctx ?? (await loadAccessContext(u));
   if (c.full || isProjectManager(project, c) || isOwnerHead(project, c)) return true;
   if (departmentsLedBy(project, c).length > 0) return true;
+  if (c.financeViewer && financeMaySee(project)) return true;
   if (c.empId) {
     const isMember = (project.members || []).some((m) => idStr(m) === c.empId);
     if (isMember) return true;

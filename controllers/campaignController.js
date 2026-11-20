@@ -2,10 +2,12 @@ import Campaign from '../models/Campaign.js';
 import Lead from '../models/Lead.js';
 import Booking from '../models/Booking.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
+import { DEFAULT_CAMPAIGN_BRAND } from '../utils/marketingCampaignInput.js';
+import { CRM_HEAD_ROLE } from '../utils/crmAccess.js';
 
 const MARKETING_ROLES = ['admin', 'manager', 'marketing_admin'];
 const DEAD_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
-const READ_ROLES = [...MARKETING_ROLES, 'accounts', 'finance_head', 'crm'];
+const READ_ROLES = [...MARKETING_ROLES, 'accounts', 'finance_head', 'crm', CRM_HEAD_ROLE];
 const canManage = (u) => MARKETING_ROLES.includes(u?.role);
 const canRead = (u) => READ_ROLES.includes(u?.role);
 
@@ -147,7 +149,8 @@ export const createCampaign = async (req, res) => {
     if (!canManage(req.user)) return res.status(403).json({ message: 'Not authorized' });
     const data = clean(req.body);
     if (!data.title) return res.status(400).json({ message: 'A campaign title is required.' });
-    const doc = await Campaign.create({ ...data, createdBy: req.user?._id ?? null });
+    // this screen knows nothing of brands: a new campaign is Kerala (the ads run only on the Kerala account) — the Campaigns hub can change it
+    const doc = await Campaign.create({ ...data, brand: DEFAULT_CAMPAIGN_BRAND, createdBy: req.user?._id ?? null });
     res.status(201).json(withMetrics(doc.toObject()));
   } catch (error) {
     res.status(500).json({ message: error.message });

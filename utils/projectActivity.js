@@ -1,7 +1,7 @@
 // The "Project Activity" list on a project's Overview: what has happened to it, oldest first.
 //
 // Most of it is worked out from timestamps a project already keeps — when it was created, when each
-// department was invited and when it answered — so a project from before this existed shows its
+// department was added (or, before departments joined directly, invited and when it answered) — so a project from before this existed shows its
 // history straight away. Only what has no timestamp of its own is stored (Project.activity): a change
 // of status, a decision on a proposal, a reminder sent to a department.
 //
@@ -42,24 +42,23 @@ export const buildActivityFeed = (project, nameOf = () => '') => {
 
   add('created', project?.proposedBy ? 'Project proposed' : 'Project created', project?.createdAt, nameOf(project?.createdBy));
 
-  // A participant that is the saver's own department is accepted on the spot (invitedAt == respondedAt):
-  // nobody was invited and nobody answered, so it makes no line.
-  const participants = (project?.departments ?? []).filter(
-    (d) => d?.name && d.role !== 'owner' && d.invitedAt && !(d.respondedAt && ms(d.respondedAt) === ms(d.invitedAt)),
-  );
-
-  // Invitations sent together read as one line.
-  const byTime = [...participants].sort((a, b) => ms(a.invitedAt) - ms(b.invitedAt));
-  for (let i = 0; i < byTime.length; ) {
-    const start = ms(byTime[i].invitedAt);
-    const batch = [];
-    while (i < byTime.length && ms(byTime[i].invitedAt) - start <= SAME_BATCH_MS) batch.push(byTime[i++]);
-    add(
-      'invited',
-      batch.length === 1 ? `Invitation sent to ${batch[0].name}` : `Invitations sent to ${batch.length} departments`,
-      batch[0].invitedAt,
-    );
-  }
+  // Departments are put straight onto a project when it is saved (utils/projectDepartments.js: no invitation to answer) — invitedAt ==
+  // respondedAt. Those read as ADDED. A department invited before that change and still to answer (or that answered later) keeps the
+  // invitation lines. Departments added or invited in the same save read as one line.
+  const all = (project?.departments ?? []).filter((d) => d?.name && d.role !== 'owner' && d.invitedAt);
+  const direct = (d) => d.status === 'accepted' && d.respondedAt && ms(d.respondedAt) === ms(d.invitedAt);
+  const participants = all.filter((d) => !direct(d));
+  const batches = (list, kind, one, many) => {
+    const byTime = [...list].sort((a, b) => ms(a.invitedAt) - ms(b.invitedAt));
+    for (let i = 0; i < byTime.length; ) {
+      const start = ms(byTime[i].invitedAt);
+      const batch = [];
+      while (i < byTime.length && ms(byTime[i].invitedAt) - start <= SAME_BATCH_MS) batch.push(byTime[i++]);
+      add(kind, batch.length === 1 ? one(batch[0].name) : many(batch.length), batch[0].invitedAt);
+    }
+  };
+  batches(all.filter(direct), 'added', (n) => `${n} added to the project`, (k) => `${k} departments added to the project`);
+  batches(participants, 'invited', (n) => `Invitation sent to ${n}`, (k) => `Invitations sent to ${k} departments`);
 
   for (const d of participants) {
     if (d.status === 'accepted') add('joined', `${d.name} joined the project`, d.respondedAt, nameOf(d.respondedBy));

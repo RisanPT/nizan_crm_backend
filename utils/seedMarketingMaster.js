@@ -11,6 +11,45 @@ import {
 } from '../models/MarketingEod.js';
 import User from '../models/User.js';
 
+// The log types of the EOD document's Strategies area — the work a strategy goes through, counted from the Log Activity form and shown per
+// initiative and development project (Strategies & Developments). Not part of "Total Output" (they are steps, not deliverables).
+export const STRATEGY_GROUP = 'Strategies';
+export const STRATEGY_METRICS = [
+  { code: 22, name: 'Strategy projects worked on', sortOrder: 22 },
+  { code: 23, name: 'First drafts prepared', sortOrder: 23 },
+  { code: 24, name: 'Strategy meetings held', sortOrder: 24 },
+  { code: 25, name: 'Final drafts completed', sortOrder: 25 },
+  { code: 26, name: 'Executions done', sortOrder: 26 },
+];
+// who counts them: the roles that plan and run strategies (others can still be given them in EOD → Setup)
+const STRATEGY_ROLES = ['Marketing Manager', 'Marketing Executive'];
+
+/**
+ * Create the Strategies group and its five log types, once. Safe to run on every start: a type is found by its name inside the group
+ * (so one renamed or re-coded in EOD → Setup is not made again), and a code already used by another activity is never taken — the
+ * next free one is. → { groupId, metricIds }
+ */
+export const seedStrategyMetrics = async () => {
+  let group = await MarketingGroup.findOne({ name: STRATEGY_GROUP });
+  if (!group) group = await MarketingGroup.create({ name: STRATEGY_GROUP, sortOrder: 6 });
+  const metricIds = [];
+  for (const def of STRATEGY_METRICS) {
+    let metric = await MarketingMetric.findOne({ groupId: group._id, name: def.name });
+    if (!metric) {
+      const taken = await MarketingMetric.exists({ code: def.code });
+      const code = taken ? ((await MarketingMetric.findOne().sort({ code: -1 }).select('code').lean())?.code ?? 0) + 1 : def.code;
+      metric = await MarketingMetric.create({ groupId: group._id, code, name: def.name, unitType: 'count', inTotalOutput: false, sortOrder: def.sortOrder, isActive: true });
+    }
+    metricIds.push(metric._id);
+  }
+  for (const roleName of STRATEGY_ROLES) {
+    const role = await MarketingRole.findOne({ name: roleName });
+    if (!role) continue;
+    for (const metricId of metricIds) await MarketingRoleMetric.findOneAndUpdate({ roleId: role._id, metricId }, { roleId: role._id, metricId }, { upsert: true });
+  }
+  return { groupId: group._id, metricIds };
+};
+
 export const seedMarketingMasterData = async () => {
   try {
     // ── 1. Seed Groups ───────────────────────────────────────────────────────
@@ -79,6 +118,7 @@ export const seedMarketingMasterData = async () => {
     }
 
     // ── 3. Seed Roles ────────────────────────────────────────────────────────
+    // (the Strategies log types are seeded after the roles, below, so the role profiles can take them)
     const roleDefs = [
       { name: 'Marketing Manager', sortOrder: 1 },
       { name: 'Marketing Executive', sortOrder: 2 },
@@ -121,6 +161,9 @@ export const seedMarketingMasterData = async () => {
         }
       }
     }
+
+    // ── 4b. The Strategies log types (idempotent; added to the planning roles' profiles) ──
+    await seedStrategyMetrics();
 
     // ── 5. Seed Team Members (Section 2.2) ────────────────────────────────────
     const teamDefs = [

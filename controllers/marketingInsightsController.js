@@ -6,9 +6,13 @@ import BlockedDate from '../models/BlockedDate.js';
 import { slotHalf, consumesSlot, dayKey } from '../utils/slots.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { LEADERSHIP_ROLES } from '../utils/leadership.js';
+import { CRM_HEAD_ROLE } from '../utils/crmAccess.js';
+// Booking.status is free text in mixed casing (and old imports carry spaces): NON_REVENUE_FILTER matches any casing / padding of a
+// cancelled, rejected, lost or draft booking.
+import { NON_REVENUE_FILTER, reEngagementCutoff, reEngagementList } from '../utils/reEngagement.js';
 
 // Marketing intelligence is read by the marketing team + full-access managers.
-const READ_ROLES = ['admin', 'manager', 'marketing_admin', 'crm', ...LEADERSHIP_ROLES]; // + leadership: read-only, enforced in middleware/ceoGuard.js
+const READ_ROLES = ['admin', 'manager', 'marketing_admin', 'crm', CRM_HEAD_ROLE, ...LEADERSHIP_ROLES]; // + leadership: read-only, enforced in middleware/ceoGuard.js
 const canRead = (u) => READ_ROLES.includes(u?.role);
 
 // The Sales Calendar is shared with the Sales team too (it's a booking-volume
@@ -17,22 +21,6 @@ const canRead = (u) => READ_ROLES.includes(u?.role);
 const CALENDAR_READ_ROLES = [...READ_ROLES, 'sales', 'sales_manager', 'regional_manager'];
 const canReadCalendar = (u) =>
   CALENDAR_READ_ROLES.includes(u?.role) || u?.isDepartmentHead === true;
-
-const NON_REVENUE = ['cancelled', 'canceled', 'rejected', 'lost', 'draft'];
-
-// Booking.status is free-text (no enum), and the data holds mixed casing —
-// 'Cancelled' and 'Rejected' as well as the lower-case forms, which is why
-// bookingController/customerController/reportController all list both spellings
-// explicitly. A plain `$nin` is case-sensitive, so a capitalised 'Cancelled'
-// slipped through and was counted as a live booking (the sales calendar showed
-// works on days the CRM calendar showed none). Match case-insensitively instead
-// so any casing is excluded. Documents with no status still pass, as before.
-// Surrounding whitespace is tolerated too: newer writes go through
-// `.trim().toLowerCase()` in bookingController, but legacy CSV-imported rows
-// can carry padding, and a padded 'Cancelled ' must not count as a live work.
-const NON_REVENUE_FILTER = {
-  $not: { $regex: `^\\s*(${NON_REVENUE.join('|')})\\s*$`, $options: 'i' },
-};
 
 // Keyword inference for the Culture segment, used ONLY when Booking.culture is
 // blank (read-time, non-destructive — the manual field always wins). Reads what
@@ -511,9 +499,7 @@ export const getReEngagement = async (req, res) => {
     if (!canRead(req.user)) {
       return res.status(403).json({ message: 'No marketing access' });
     }
-    const months = Math.max(1, Math.min(60, Number(req.query.months) || 6));
-    const cutoff = new Date();
-    cutoff.setMonth(cutoff.getMonth() - months);
+    const { months, cutoff } = reEngagementCutoff(req.query.months);
 
     const bookings = await Booking.find({
       status: NON_REVENUE_FILTER,
@@ -521,35 +507,8 @@ export const getReEngagement = async (req, res) => {
       .select('customerName phone service serviceStart bookingDate status totalPrice')
       .lean();
 
-    // Group by phone; keep each client's most-recent event date.
-    const byPhone = new Map();
-    for (const b of bookings) {
-      const phone = String(b.phone || '').trim();
-      if (!phone) continue;
-      const when = new Date(b.serviceStart || b.bookingDate);
-      const cur = byPhone.get(phone);
-      if (!cur || when > cur.lastEventDate) {
-        byPhone.set(phone, {
-          customerName: b.customerName || '',
-          phone,
-          service: b.service || '',
-          lastEventDate: when,
-          lastBookingId: b._id,
-          bookings: (cur?.bookings || 0) + 1,
-        });
-      } else {
-        cur.bookings += 1;
-      }
-    }
-
-    const now = Date.now();
-    const due = [...byPhone.values()]
-      .filter((c) => c.lastEventDate < cutoff) // no event since the cutoff
-      .map((c) => ({
-        ...c,
-        monthsSince: Math.floor((now - c.lastEventDate.getTime()) / (30 * 24 * 60 * 60 * 1000)),
-      }))
-      .sort((a, b) => a.lastEventDate - b.lastEventDate); // most overdue first
+    // one row per client (phone), the longest-waiting first
+    const due = reEngagementList(bookings, { cutoff });
 
     res.json({ months, cutoff, count: due.length, clients: due.slice(0, 300) });
   } catch (error) {

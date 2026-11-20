@@ -41,11 +41,18 @@ const expenseSchema = mongoose.Schema(
       type: [{ type: String, enum: ['breakfast', 'lunch', 'snacks', 'dinner'] }],
       default: [],
     },
+    // What counts: while pending, what the artist logged; once Accounts approves it, the APPROVED
+    // amount (which may be less — see utils/expenseApproval.js). The books, the Bank & Cash
+    // balance and every report read this one.
     amount: {
       type: Number,
       required: [true, 'Please add an amount'],
       min: 0,
     },
+    // What the artist originally logged — kept ONLY when the approval reduced the amount; null otherwise.
+    loggedAmount: { type: Number, default: null, min: 0 },
+    // Why it was approved for less (optional; shown to the artist).
+    approvalNote: { type: String, default: '', trim: true },
     date: {
       type: Date,
       required: true,

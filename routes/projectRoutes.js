@@ -10,6 +10,7 @@ import {
   approveProject,
   rejectProject,
   updateCost,
+  raiseProjectCost,
   decideCost,
   getPendingCosts,
   getProjectSpend,
@@ -32,6 +33,8 @@ router.post('/:id/departments/:name/respond', respondToInvitation);
 router.post('/:id/departments/:name/resend', resendInvitation);
 // A project's estimated cost: changed by whoever runs the project, decided by the finance head.
 router.put('/:id/cost', updateCost);
+// ... or raised to a new total, with a reason (the plan wizard asks for this before it makes many priced tasks)
+router.post('/:id/cost/raise', raiseProjectCost);
 router.get('/:id/spend', getProjectSpend);
 // More people for a project (HR answers) and who is on it
 router.post('/:id/manpower', createManpowerRequest);

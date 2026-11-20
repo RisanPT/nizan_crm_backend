@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import Counter from './Counter.js';
 
 const employeeSchema = mongoose.Schema(
   {
@@ -18,6 +19,12 @@ const employeeSchema = mongoose.Schema(
       type: String,
       enum: ['in-house', 'outsource', 'full-time', 'contract'],
       default: 'in-house',
+    },
+    // An outside ARTIST who works a bride's event as an associate (helps the lead artist), paid per work through Artist Payouts. Always an
+    // outsource person: no login, no payroll. Operations adds them while assigning a work; the Associate Works report lists what they did.
+    isAssociate: {
+      type: Boolean,
+      default: false,
     },
     artistRole: {
       type: String,
@@ -228,24 +235,45 @@ const employeeSchema = mongoose.Schema(
   }
 );
 
-// Auto-generate employeeCode before first save if not explicitly assigned
-employeeSchema.pre('save', async function (next) {
-  if (!this.employeeCode) {
+// ── employeeCode: NZ-1001, NZ-1002, … ────────────────────────────────────────
+// Every number is drawn from ONE atomic counter ({ _id: 'employeeCode' } in `counters`, $inc), so employees saved at the same moment —
+// an HR create, an associate quick-add, a Timebox import — can never be handed the same code. (It used to be "1001 + how many employees
+// there are", which two saves at once both read the same.) A number that is already taken — typed in by hand, or given out before the
+// counter existed — is skipped, never handed out again; numbers are never reused, so a skipped or failed save just leaves a gap.
+const CODE_COUNTER = 'employeeCode';
+const FIRST_CODE = 1001;
+const MAX_DRAWS = 10000;
+
+export async function nextEmployeeCode(EmployeeModel = mongoose.models.Employee) {
+  for (let i = 0; i < MAX_DRAWS; i += 1) {
+    let seq;
     try {
-      const count = await mongoose.models.Employee.countDocuments();
-      let num = 1001 + count;
-      let candidate = `NZ-${num}`;
-      while (await mongoose.models.Employee.exists({ employeeCode: candidate })) {
-        num += 1;
-        candidate = `NZ-${num}`;
-      }
-      this.employeeCode = candidate;
+      ({ seq } = await Counter.findOneAndUpdate({ _id: CODE_COUNTER }, { $inc: { seq: 1 } }, { new: true, upsert: true, lean: true }));
     } catch (err) {
-      this.employeeCode = `NZ-${Math.floor(1000 + Math.random() * 9000)}`;
+      if (err?.code === 11000) continue; // two first-ever draws raced to create the counter: draw again
+      throw err;
     }
+    if (seq < FIRST_CODE) {
+      // A new (or lost) counter: start it where the count-based numbering stood — after the employees already there. Raising it with $max
+      // is safe however many draws do this at once; any number in the range that is already taken is skipped below.
+      const already = await EmployeeModel.countDocuments();
+      await Counter.updateOne({ _id: CODE_COUNTER }, { $max: { seq: FIRST_CODE - 1 + already } });
+      continue;
+    }
+    const code = `NZ-${seq}`;
+    if (!(await EmployeeModel.exists({ employeeCode: code }))) return code;
   }
-  next();
+  throw new Error('Could not find a free employee code.');
+}
+
+// Give a code on the first save if none was typed in. A failure fails the save — a made-up code could belong to someone else.
+employeeSchema.pre('save', async function () {
+  if (!this.employeeCode) this.employeeCode = await nextEmployeeCode(this.constructor);
 });
+
+employeeSchema.statics.nextEmployeeCode = function () {
+  return nextEmployeeCode(this);
+};
 
 const Employee = mongoose.model('Employee', employeeSchema);
 

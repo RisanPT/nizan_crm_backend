@@ -12,9 +12,17 @@ import DepartmentReport, { DEPARTMENT_KEYS } from '../models/DepartmentReport.js
 import { round2 } from './accountingController.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { LEADERSHIP_ROLES } from '../utils/leadership.js';
+import CrmCase from '../models/CrmCase.js';
+import { isCrmHead } from '../utils/crmAccess.js';
+import { caseStats } from '../utils/crmStats.js';
+import { istMonthBounds } from '../utils/istDate.js';
+import { daysInclusive, periodLabel } from '../utils/reportPeriod.js';
+import { buildCrmOverview } from '../services/crmMetrics.js';
 
 const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', ...LEADERSHIP_ROLES]; // + leadership (CEO, Executive Director): read-only, enforced in middleware/ceoGuard.js
 const canView = (u) => FINANCE_ROLES.includes(u?.role);
+/// Finance (and management, leadership) open every department's report; the CRM Head opens the CRM one.
+const mayOpen = (u, dept) => canView(u) || (dept === 'crm' && isCrmHead(u));
 
 const DEAD_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
 const isLive = (st) => !DEAD_BOOKING.includes(String(st || '').toLowerCase());
@@ -188,24 +196,25 @@ const DEPARTMENTS = {
         m('inactiveClients', 'Inactive clients', 'count'),
         m('databaseHygiene', 'Database hygiene (duplicates cleaned)', 'text'),
       ]},
+      // filled in from the CRM records (services/crmMetrics.js) — for a month before those began, the figure typed in by hand
       { title: 'Query & Complaint Handling', metrics: [
-        m('avgResponseTime', 'Average response time', 'days'),
-        m('resolutionRatePct', 'Complaint resolution rate', 'pct'),
-        m('pendingCases', 'Pending cases', 'count'),
+        m('avgResponseTime', 'Time to answer a client in chat (median, hours)', 'hours', true),
+        m('resolutionRatePct', 'Complaint resolution rate', 'pct', true),
+        m('pendingCases', 'Pending cases at month end', 'count', true),
       ]},
       { title: 'Booking Coordination & Feedback', metrics: [
-        m('bookingsAssisted', 'Bookings assisted via follow-up', 'count'),
-        m('followUpConversionPct', 'Follow-up-to-conversion rate', 'pct'),
-        m('nps', 'NPS / CSAT collected', 'ratio'),
-        m('testimonials', 'Testimonials/reviews gathered', 'count'),
+        m('bookingsAssisted', 'Booking requests confirmed by the CRM', 'count', true),
+        m('followUpConversionPct', 'Follow-up calls that became bookings', 'pct', true),
+        m('nps', 'NPS (net promoter score)', 'ratio', true),
+        m('testimonials', 'Reviews gathered', 'count', true),
       ]},
     ],
     kpis: [
-      m('avgResponseTime', 'Response Time', 'days'),
-      m('resolutionRatePct', 'Resolution Rate', 'pct'),
-      m('nps', 'Net Promoter Score (NPS)', 'ratio'),
+      m('avgResponseTime', 'Response Time (hours)', 'hours', true),
+      m('resolutionRatePct', 'Resolution Rate', 'pct', true),
+      m('nps', 'Net Promoter Score (NPS)', 'ratio', true),
       m('clientRetentionPct', 'Client Retention Rate', 'pct'),
-      m('followUpConversionPct', 'Follow-up Conversion Rate', 'pct'),
+      m('followUpConversionPct', 'Follow-up Conversion Rate', 'pct', true),
     ],
     targets: [
       m('responseSlaTarget', 'Response time SLA target', 'days'),
@@ -339,6 +348,7 @@ async function computeAuto(dept, from, to, prevFrom, prevTo) {
 
   if (dept === 'crm') {
     out.newClients = await Customer.countDocuments({ createdAt: { $gte: from, $lte: to } });
+    Object.assign(out, await crmMonthFigures(from.getFullYear(), from.getMonth() + 1));
   }
 
   if (dept === 'it') {
@@ -365,6 +375,35 @@ async function computeAuto(dept, from, to, prevFrom, prevTo) {
   return out;
 }
 
+/**
+ * The CRM month-end figures of an IST month, from the CRM records (the same ones the CRM dashboard adds up). Null — "—", or the figure
+ * typed in by hand before — for what the records could not have held then.
+ */
+export const crmMonthFigures = async (year, month) => {
+  const b = istMonthBounds(year, month);
+  const period = { from: b.from, to: b.to, label: periodLabel(b.from, b.to), days: daysInclusive(b.from, b.to), tag: `${b.from}_to_${b.to}`, custom: false, month, year };
+  const { overview, loaded, cur } = await buildCrmOverview({ period, withMembers: false, withTrend: false });
+  const s = overview.sections;
+  const tracked = b.end >= new Date(overview.trackingSince);
+  const complaints = caseStats(loaded.data.cases.filter((c) => c.kind === 'complaint'), cur);
+  // the cases still open at the end of the month (a case resolved or closed later was open then)
+  const pendingCases = tracked
+    ? await CrmCase.countDocuments({
+        createdAt: { $lte: b.end },
+        $or: [{ status: { $in: ['open', 'in_progress'] } }, { resolvedAt: { $gt: b.end } }, { closedAt: { $gt: b.end } }],
+      })
+    : null;
+  return {
+    avgResponseTime: s.chats.medianReplyMins == null ? null : Math.round((s.chats.medianReplyMins / 60) * 10) / 10,
+    resolutionRatePct: tracked ? complaints.resolutionRate : null,
+    pendingCases,
+    bookingsAssisted: s.requests.confirmed,
+    followUpConversionPct: s.reEngagement.winRate,
+    nps: s.reviews.nps,
+    testimonials: s.reviews.submitted,
+  };
+};
+
 // ── Endpoints ───────────────────────────────────────────────────────────────
 
 // @route GET /api/reports/departments
@@ -375,7 +414,7 @@ export const listDepartments = async (req, res) => {
 
 // @route GET /api/reports/department/:dept?month=&year=
 export const getDepartmentReport = async (req, res) => {
-  if (!canView(req.user)) return res.status(403).json({ message: 'No finance access' });
+  if (!mayOpen(req.user, req.params.dept)) return res.status(403).json({ message: 'No finance access' });
   try {
     const dept = req.params.dept;
     const cfg = DEPARTMENTS[dept];
@@ -396,9 +435,10 @@ export const getDepartmentReport = async (req, res) => {
     const manual = saved?.values || {};
     const savedTargets = saved?.targets || {};
 
+    // an automatic figure that could not be worked out (a month before the records began) falls back to the one typed in by hand
     const resolve = (metric) => ({
       ...metric,
-      value: metric.auto ? (auto[metric.key] ?? null) : (manual[metric.key] ?? null),
+      value: metric.auto ? (auto[metric.key] ?? manual[metric.key] ?? null) : (manual[metric.key] ?? null),
     });
 
     res.json({
@@ -422,15 +462,23 @@ export const getDepartmentReport = async (req, res) => {
 
 // @route PUT /api/reports/department/:dept  (upsert manual values + planning)
 export const saveDepartmentReport = async (req, res) => {
-  if (!canView(req.user)) return res.status(403).json({ message: 'No finance access' });
+  if (!mayOpen(req.user, req.params.dept)) return res.status(403).json({ message: 'No finance access' });
   try {
     const dept = req.params.dept;
     if (!DEPARTMENTS[dept]) return res.status(404).json({ message: 'Unknown department' });
     const { month, year } = req.body;
     if (!month || !year) return res.status(400).json({ message: 'month and year are required' });
 
+    // The screen sends the figures it lets you type (leaving out the ones cleared). A figure that is now worked out automatically is
+    // not on it any more, so what was typed for it before is KEPT — it is what an older month shows.
+    const sent = req.body.values && typeof req.body.values === 'object' ? req.body.values : {};
+    const cfg = DEPARTMENTS[dept];
+    const autoKeys = new Set([...cfg.sections.flatMap((s) => s.metrics), ...cfg.kpis].filter((x) => x.auto).map((x) => x.key));
+    const existing = await DepartmentReport.findOne({ department: dept, month: Number(month), year: Number(year) }).select('values').lean();
+    const kept = Object.fromEntries(Object.entries(existing?.values ?? {}).filter(([k]) => autoKeys.has(k)));
+
     const update = {
-      values: req.body.values && typeof req.body.values === 'object' ? req.body.values : {},
+      values: { ...kept, ...sent },
       targets: req.body.targets && typeof req.body.targets === 'object' ? req.body.targets : {},
       allocations: Array.isArray(req.body.allocations)
         ? req.body.allocations.filter((a) => a && a.name).map((a) => ({ name: String(a.name), amount: Number(a.amount) || 0 }))

@@ -12,6 +12,10 @@ export const MANAGER_AND_ADMIN_ROLES = [...MANAGER_ROLES, ...ADMIN_ROLES];
 // Canonical event keys (mirrored by the Flutter notification model).
 export const NOTIFICATION_TYPES = {
   NEW_LEAD: 'new_lead',
+  // A lead that came in on its own (an ad form, the website) has waited too long for its first contact.
+  LEAD_WAITING: 'lead_waiting',
+  // An artist put a work's footage in Dropbox: Marketing is told it is ready to edit.
+  FOOTAGE_UPLOADED: 'footage_uploaded',
   FOLLOWUP_ASSIGNED: 'followup_assigned',
   FOLLOWUP_DUE: 'followup_due',
   FOLLOWUP_MISSED: 'followup_missed',
@@ -43,11 +47,15 @@ export const NOTIFICATION_TYPES = {
   PROJECT_COST_DECISION: 'project_cost_decision',
   // Spending on a project reached 80% of its approved budget / went past it.
   PROJECT_BUDGET_ALERT: 'project_budget_alert',
+  // A task's due date was moved later (extended) by whoever plans the project: its assignee is told.
+  TASK_DEADLINE_EXTENDED: 'task_deadline_extended',
   // A project needs more people: the request reaching HR / its answers / a department head asked to release someone.
   MANPOWER_REQUEST: 'manpower_request',
   MANPOWER_UPDATE: 'manpower_update',
   MANPOWER_RELEASE: 'manpower_release',
   // The CEO / Executive Director: something needs their decision / it was decided / it was withdrawn / the rules for what reaches them changed.
+  // A marketing team member was given a task.
+  MARKETING_TASK: 'marketing_task',
   DECISION_REQUEST: 'decision_request',
   DECISION_RESULT: 'decision_result',
   DECISION_WITHDRAWN: 'decision_withdrawn',
@@ -57,6 +65,18 @@ export const NOTIFICATION_TYPES = {
   CONSULTATION_REMINDER: 'consultation_reminder',
   MARKETING_EOD_REMINDER: 'marketing_eod_reminder',
   MARKETING_EOD_MISSED_SUMMARY: 'marketing_eod_missed_summary',
+  // A scheduled marketing report (Team Dashboard, Campaigns, Lead Report) is ready for its period.
+  MARKETING_REPORT_READY: 'marketing_report_ready',
+  // Marketing Coordinations: a request was given to a team member / an approval they raised was decided (or escalated).
+  COORD_REQUEST: 'coord_request',
+  COORD_APPROVAL: 'coord_approval',
+  // Marketing Coordinations: a follow-up is due today (once per due day — services/marketingCoordReminders.js).
+  COORD_FOLLOWUP_DUE: 'coord_followup_due',
+  // The CRM team (controllers/crmController.js, services/crmCases.js, utils/crmSweep.js): work given to someone, a new case,
+  // and something past its time limit (a request, a client waiting in the chat, a case).
+  CRM_ASSIGNED: 'crm_assigned',
+  CRM_CASE_OPENED: 'crm_case_opened',
+  CRM_OVERDUE: 'crm_overdue',
 };
 
 // Stakeholders (admin accounts) are not part of the day-to-day operational

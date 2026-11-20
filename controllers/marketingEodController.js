@@ -21,7 +21,7 @@ import { sendMemberReminder } from '../services/marketingEodReminders.js';
 import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
 // ── Helper: Format IST Date string (YYYY-MM-DD) ─────────────────────────────
-const toDateStr = (date = new Date()) => {
+export const toDateStr = (date = new Date()) => {
   const d = new Date(date);
   // IST offset is UTC+5:30
   const istOffset = 5.5 * 60 * 60 * 1000;
@@ -29,10 +29,10 @@ const toDateStr = (date = new Date()) => {
   return istDate.toISOString().slice(0, 10);
 };
 
-const toMonthStr = (date = new Date()) => toDateStr(date).slice(0, 7);
+export const toMonthStr = (date = new Date()) => toDateStr(date).slice(0, 7);
 
 // ── Helper: Check if User has Marketing Manager / Admin role ────────────────
-const isManagerOrAdmin = (user) => {
+export const isManagerOrAdmin = (user) => {
   if (!user) return false;
   const role = String(user.role || '').toLowerCase();
   if (role === 'admin' || role === 'marketing_admin' || role === 'marketing_manager' || role === 'manager') return true;
@@ -70,7 +70,7 @@ export const attachMarketingAccess = async (req, res, next) => {
 // Management (read) users — SRS section 7. They see every dashboard and the
 // Team Summary but never edit EOD numbers.
 const MANAGEMENT_READ_ROLES = [...LEADERSHIP_ROLES, 'management', 'director'];
-const canViewTeam = (user) =>
+export const canViewTeam = (user) =>
   isManagerOrAdmin(user) || MANAGEMENT_READ_ROLES.includes(String(user?.role || '').toLowerCase());
 
 // Guard for write endpoints that only the Marketing Manager / Admin may use.
@@ -97,7 +97,7 @@ const addMonths = (monthStr, delta) => {
 // ── Helper: Is this team member the logged-in user? ─────────────────────────
 // Linked by userId; members not linked yet fall back to an exact (case-
 // insensitive) name match, same as resolveMemberForUser used to.
-const isOwnMember = (user, member) => {
+export const isOwnMember = (user, member) => {
   if (!user || !member) return false;
   if (member.userId) return String(member.userId) === String(user._id);
   return (
@@ -106,7 +106,7 @@ const isOwnMember = (user, member) => {
   );
 };
 
-const findOwnMember = async (user) => {
+export const findOwnMember = async (user) => {
   if (!user) return null;
   let member = await MarketingTeamMember.findOne({ userId: user._id, isActive: true });
   if (member) return member;
@@ -133,7 +133,7 @@ const resolveMemberForUser = async (user, requestedMemberId = null) => {
   return null;
 };
 
-const canAccessMember = (user, member) => canViewTeam(user) || isOwnMember(user, member);
+export const canAccessMember = (user, member) => canViewTeam(user) || isOwnMember(user, member);
 
 // A member counts in a month only while active (activeFrom/activeTo).
 const isMemberActiveInMonth = (member, monthStr) => {
@@ -146,7 +146,7 @@ const isMemberActiveInMonth = (member, monthStr) => {
 
 // Members who belong in [monthStr]'s team views: active during that month, and
 // a deactivated member stays visible for months in which they have EODs.
-const membersForMonth = async (monthStr) => {
+export const membersForMonth = async (monthStr) => {
   const all = await MarketingTeamMember.find().sort({ sortOrder: 1 });
   const withData = new Set(
     (await MarketingEodEntry.distinct('memberId', {
@@ -165,7 +165,7 @@ const userLinkedElsewhere = async (userId, exceptMemberId) => {
   return MarketingTeamMember.findOne(filter).select('name');
 };
 
-const getCalendarSetting = async () =>
+export const getCalendarSetting = async () =>
   (await MarketingCalendarSetting.findOne()) || {
     weeklyOff: 0,
     standardHours: 8,
@@ -177,7 +177,7 @@ const getThresholds = async () =>
   (await MarketingThreshold.findOne({ metricScope: 'default' })) || { greenMin: 100, amberMin: 70 };
 
 // ── Helper: Calculate Working Days in Month ─────────────────────────────────
-const calculateWorkingDays = async (year, month, activeFrom = null, weeklyOffDay = 0, activeTo = null) => {
+export const calculateWorkingDays = async (year, month, activeFrom = null, weeklyOffDay = 0, activeTo = null) => {
   const daysInMonth = new Date(year, month, 0).getDate();
   const holidays = await Holiday.find({
     date: {
@@ -237,7 +237,7 @@ const proRate = (target, elapsed, workingDays) =>
   workingDays > 0 ? Math.round(((target * elapsed) / workingDays) * 10) / 10 : 0;
 
 // ── Helper: Audit Log Record ────────────────────────────────────────────────
-const logAudit = async ({ table, recordId, field, oldValue, newValue, user, reason }) => {
+export const logAudit = async ({ table, recordId, field, oldValue, newValue, user, reason }) => {
   try {
     await MarketingAuditLog.create({
       table,
@@ -983,6 +983,10 @@ export const saveEodEntry = async (req, res) => {
     }
 
     const oldEntry = await MarketingEodEntry.findOne({ memberId, entryDate });
+    // a day that is built from Log Activity entries is changed there, never here (this form would overwrite the roll-up)
+    if (oldEntry?.source === 'logs') {
+      return res.status(409).json({ message: 'This day is built from the Log Activity entries. Add or edit logs for the day instead.', code: 'DAY_FROM_LOGS' });
+    }
 
     // FR-5: a member can only report activities in their set for the month
     // (plus anything already recorded on this row). Managers may add any.

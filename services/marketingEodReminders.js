@@ -9,10 +9,12 @@ import Holiday from '../models/Holiday.js';
 import User from '../models/User.js';
 import Department from '../models/Department.js';
 import { notify, NOTIFICATION_TYPES } from '../utils/notify.js';
+import { runFollowUpReminders } from './marketingCoordReminders.js';
 
 // FR-11 — Missing-EOD reminders. In-app notifications only (WhatsApp is a later
 // step). Nothing here runs unless startMarketingEodReminders() is called, and it
-// can be switched off with MARKETING_EOD_REMINDERS=off.
+// can be switched off with MARKETING_EOD_REMINDERS=off. The same once-a-minute
+// tick also sends the Coordinations follow-up reminders (services/marketingCoordReminders.js).
 
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const istNow = (date = new Date()) => new Date(date.getTime() + IST_OFFSET_MS);
@@ -81,7 +83,8 @@ export const sendMemberReminder = async (member, dateStr, actor = null) => {
   return { sent: true, reason: '' };
 };
 
-const managerUserIds = async () => {
+/** The login ids of the Marketing Managers (the manager / admin roles, the Marketing department head, members holding the "Marketing Manager" role). */
+export const managerUserIds = async () => {
   const ids = new Set();
   const mktDept = await Department.findOne({ key: 'marketing' }).select('_id');
   const direct = await User.find({
@@ -155,6 +158,8 @@ export const runMorningManagerSummary = async (now = new Date()) => {
 };
 
 const MORNING_TIME = '09:00';
+const FOLLOWUP_FROM = '08:00';
+const FOLLOWUP_EVERY_MS = 10 * 60 * 1000;
 const WINDOW_MINUTES = 4 * 60; // a late server start still catches up, within reason
 
 const minutesOf = (hhmm) => {
@@ -171,6 +176,7 @@ export const startMarketingEodReminders = () => {
 
   let lastEvening = '';
   let lastMorning = '';
+  let lastFollowUps = 0;
 
   const tick = async () => {
     try {
@@ -191,6 +197,13 @@ export const startMarketingEodReminders = () => {
         lastMorning = today;
         const r = await runMorningManagerSummary(now);
         console.log('[MarketingEOD] Morning manager summary:', JSON.stringify(r));
+      }
+
+      // Coordinations follow-up reminders: from 08:00 (IST), every 10 minutes — each follow-up is told once per due day
+      if (nowMin >= minutesOf(FOLLOWUP_FROM) && now.getTime() - lastFollowUps >= FOLLOWUP_EVERY_MS) {
+        lastFollowUps = now.getTime();
+        const r = await runFollowUpReminders(now);
+        if (r.sent) console.log('[MarketingEOD] Follow-up reminders:', JSON.stringify(r));
       }
     } catch (err) {
       console.error('[MarketingEOD] Reminder tick failed:', err?.message || err);

@@ -34,7 +34,7 @@ const ROLE_GROUP = {
   marketing_admin: 'marketing', marketingadmin: 'marketing', marketing_manager: 'marketing', marketing_executive: 'marketing',
 };
 const GROUP_ROLES = {
-  crm: ['crm', 'crm_manager'],
+  crm: ['crm'], // the CRM Head (crm_manager) is appointed by management, not by another head
   sales: ['sales', 'sales_manager', 'sales_executive'],
   accounts: ['accounts', 'accounts_manager', 'accounts_executive'],
   fleet: ['driver'],
@@ -42,6 +42,9 @@ const GROUP_ROLES = {
   marketing: ['marketing_admin', 'marketingadmin', 'marketing_manager', 'marketing_executive'],
 };
 export const delegatedRoles = (role) => GROUP_ROLES[ROLE_GROUP[lc(role)]] ?? [];
+
+/// The team a role belongs to ('crm', 'sales', 'accounts', …), or '' for none.
+export const roleGroupOf = (role) => ROLE_GROUP[lc(role)] ?? '';
 
 // admin / manager = full access; a department head is the flag, or a *manager / *admin role
 // (the test createUser uses, and the app's Access.of).
@@ -55,7 +58,28 @@ export const requesterKind = (user) => {
 
 /// The admin, manager, CEO and Executive Director roles are an administrator's to give, whichever way an account is made (create,
 /// provision, edit). (Before, only the CEO was protected here: a manager or any department head could create an admin.)
-export const mayGiveRole = (requester, role) => !ADMIN_ONLY_ROLES.includes(lc(role)) || requesterKind(requester).admin;
+/// A department HEAD's role is given by the company's management (an administrator or a manager), never by another head: a head
+/// cannot appoint a second head, nor make themselves one. (The CRM Head — utils/crmAccess.js.)
+const MANAGEMENT_GIVEN_ROLES = ['crm_manager'];
+
+export const mayGiveRole = (requester, role) => {
+  const r = lc(role);
+  if (ADMIN_ONLY_ROLES.includes(r)) return requesterKind(requester).admin;
+  if (MANAGEMENT_GIVEN_ROLES.includes(r)) return requesterKind(requester).full;
+  return true;
+};
+
+/// May [requester] mark someone as a department head (User.isDepartmentHead)? Management only — the flag opens the team's
+/// approvals and HR records, so a head never hands it on. (Only Settings → Users, an administrator's screen, offers it.)
+export const mayMarkDepartmentHead = (requester) => requesterKind(requester).full;
+
+/// Why [requester] may not give [role] — the message the caller answers with (null when they may).
+export const roleGrantRefusal = (requester, role) => {
+  if (mayGiveRole(requester, role)) return null;
+  return MANAGEMENT_GIVEN_ROLES.includes(lc(role))
+    ? 'Only an administrator or a manager can appoint a department head.'
+    : 'Only an administrator can create an admin, manager, CEO or Executive Director account.';
+};
 
 export const canManageUsers = (user) => {
   const { full, head } = requesterKind(user);
@@ -93,6 +117,7 @@ export const authorizeUserChange = (requester, target, { nextRole } = {}) => {
   const role = lc(nextRole);
   if (role && role !== targetRole) {
     if (!me.admin && ADMIN_ONLY_ROLES.includes(role)) return no('Only an administrator can give the admin, manager, CEO or Executive Director role.');
+    if (!me.full && MANAGEMENT_GIVEN_ROLES.includes(role)) return no('Only an administrator or a manager can appoint a department head.');
     const delegated = me.full ? [] : delegatedRoles(requester?.role);
     if (!me.full && delegated.length && !delegated.includes(role)) {
       return no(`You can only give your team these roles: ${delegated.join(', ')}.`);

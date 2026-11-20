@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { stampFirstContact } from '../services/leadResponse.js';
 import Lead from '../models/Lead.js';
 import Booking from '../models/Booking.js';
 import Consultation from '../models/Consultation.js';
@@ -6,6 +7,7 @@ import StylistClient from '../models/StylistClient.js';
 import { postDoc, safePost } from '../services/posting.js';
 import { regionScopedMatch } from '../utils/geoScope.js';
 import { applyLeadGeography } from '../services/leadGeography.js';
+import { applyLeadMarkets } from '../services/leadMarkets.js';
 import { DERIVED_KEYS } from '../utils/leadGeography.js';
 import { notifyStylistLeadsOfNewLead } from '../utils/consultationNotify.js';
 import {
@@ -32,7 +34,8 @@ const phoneTailRx = (key) => new RegExp(`${key.split('').join('[^0-9]*')}[^0-9]*
 
 /// The first OTHER lead using any of [numbers] as its phone or alternate
 /// number (last 10 digits), or null. One mobile number = one lead.
-const findDuplicateLead = async (numbers, excludeId = null) => {
+/// (Also used by services/metaLeads.js, so a Meta form never makes a second lead for a number.)
+export const findDuplicateLead = async (numbers, excludeId = null) => {
   const keys = [...new Set(numbers.map(last10).filter((k) => k.length === 10))];
   if (keys.length === 0) return null;
   const rx = keys.map(phoneTailRx);
@@ -77,6 +80,13 @@ const SERVER_OWNED = [
   // Creator is stamped from the authenticated user, never the client.
   'createdBy',
   'createdByName',
+  // speed to lead: where it came in from and its first contact are the server's (utils/leadResponse.js)
+  'origin',
+  'firstContactAt',
+  'firstContactBy',
+  'firstContactByName',
+  'firstContactVia',
+  'responseAlertAt',
 ];
 
 const IST_OFFSET_MS = 330 * 60 * 1000;
@@ -504,9 +514,11 @@ export const createLead = async (req, res) => {
     const leadData = stripServerOwned({ ...req.body });
     // Old app versions may still send this; duplicates are no longer allowed.
     delete leadData.allowDuplicate;
-    // Pincode / district → consistent stored geography (the region and names are derived).
+    // Pincode / district → consistent stored geography (the region and names are derived). Country / city and the other
+    // marketing details (WhatsApp, e-mail, budget, language, referral, creative) are checked the same way.
     try {
       await applyLeadGeography(leadData);
+      await applyLeadMarkets(leadData);
     } catch (err) {
       return res.status(err.status || 500).json({ message: err.message });
     }
@@ -628,6 +640,13 @@ export const updateLead = async (req, res) => {
       }
     }
 
+    // Marketing details belong to the lead whether or not it has a booking: country / city, WhatsApp, e-mail, budget, …
+    try {
+      await applyLeadMarkets(leadData, existing);
+    } catch (err) {
+      return res.status(err.status || 500).json({ message: err.message });
+    }
+
     // A lead-form save sends campaignId: null whenever the user couldn't load
     // the campaign list (older app builds, filtered list) — that silently wiped
     // existing attribution. Only clear a tag when the client says so explicitly.
@@ -672,6 +691,11 @@ export const updateLead = async (req, res) => {
     // Deleted between the existence check above and this update.
     if (!lead) {
       return res.status(404).json({ message: 'Lead not found' });
+    }
+
+    // speed to lead: moving a lead out of New is a first contact (stamped once; a lost request is not one)
+    if (existing.status === 'New' && typeof leadData.status === 'string' && !['New', 'Lost', 'Pending Lost Approval'].includes(leadData.status)) {
+      await stampFirstContact(lead._id, { user: req.user, via: 'status' });
     }
 
     if (newBookedDay) {
