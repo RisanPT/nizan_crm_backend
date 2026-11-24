@@ -36,11 +36,17 @@ import {
   isLocked,
 } from '../services/posting.js';
 import { fromBound, rangeCondition } from '../utils/istDate.js';
+import { LEADERSHIP_ROLES, isLeadershipRole } from '../utils/leadership.js';
 
 const SOURCE_MODELS = { Collection, AdminExpense, FuelExpense, Expense, CashTransaction, Salary, HraRecord, SalesReturn, Booking, BookingAdvance: Booking, ArtistPayout, Purchase, PurchasePayment: Purchase };
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head'];
-const canManageFinance = (user) => FINANCE_ROLES.includes(user?.role);
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', ...LEADERSHIP_ROLES];
+const canManageFinance = (user) => {
+  const role = String(user?.role ?? '').trim().toLowerCase();
+  if (FINANCE_ROLES.includes(role)) return true;
+  const perms = Array.isArray(user?.permissions) ? user.permissions : [];
+  return perms.some((p) => p === 'company_finance' || String(p).startsWith('company_finance.') || p === 'payables');
+};
 
 const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -827,9 +833,12 @@ const getPayables = async (req, res) => {
 
 // The dashboard is also visible to roles granted `payables.dashboard`, not just
 // the finance roles, so it gets its own check.
-const canSeeAccountsDashboard = (user) =>
-  canManageFinance(user) ||
-  (user?.permissions || []).some((p) => p === 'payables' || p === 'payables.dashboard');
+const canSeeAccountsDashboard = (user) => {
+  const role = String(user?.role ?? '').trim().toLowerCase();
+  if (isLeadershipRole(role) || canManageFinance(user)) return true;
+  const perms = Array.isArray(user?.permissions) ? user.permissions : [];
+  return perms.some((p) => p === 'payables' || p === 'payables.dashboard' || p === 'company_finance');
+};
 
 // 'YYYY-MM-DD' → start / end of that day in IST. Falls back to [fallback].
 const istDayStart = (s, fallback) => (s ? new Date(`${s}T00:00:00.000+05:30`) : fallback);

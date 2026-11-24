@@ -1,5 +1,6 @@
 import User from '../models/User.js';
 import Employee from '../models/Employee.js';
+import { isLeadershipRole, leadershipTitle } from './leadership.js';
 
 /**
  * Maps a user role slug to appropriate Employee department, category, and display role.
@@ -24,6 +25,17 @@ export const mapRoleToDepartmentAndCategory = (roleSlug, customTitle = '') => {
       artistRole: 'artist',
       role: customTitle || 'MUA Artist',
       specialization: 'MUA Artist',
+    };
+  }
+
+  // The company's leaders: the Management department, with their own title.
+  if (isLeadershipRole(slug)) {
+    return {
+      category: 'administrative',
+      department: 'Management',
+      artistRole: 'staff',
+      role: customTitle || leadershipTitle(slug),
+      specialization: 'Leadership',
     };
   }
 

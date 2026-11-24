@@ -12,7 +12,7 @@ const row = (key, count, { amount = 0, oldest = null } = {}) => ({ def: src(key)
 test('the sources: unique keys, the CEO\'s own ones first, and a route only where the CEO can open the screen', () => {
   const keys = INBOX_SOURCES.map((s) => s.key);
   assert.equal(new Set(keys).size, keys.length);
-  assert.deepEqual(INBOX_SOURCES.filter((s) => s.owner === 'you').map((s) => s.key), ['project_proposals', 'ceo_decisions']);
+  assert.deepEqual(INBOX_SOURCES.filter((s) => s.owner === 'you').map((s) => s.key), ['project_proposals', 'decision_requests', 'ceo_decisions']);
   // the screens a CEO may open (their permissions); an operational screen they cannot open must not be linked
   const openable = new Set(['/projects', '/ceo/decisions', '/accounts/dashboard']);
   for (const s of INBOX_SOURCES) if (s.route) assert.ok(openable.has(s.route), `${s.key} links to ${s.route}`);
@@ -127,4 +127,28 @@ test('the daily digest line', () => {
   assert.equal(digestText({ needsYou: 3, withTeam: 0, oldestTeamDays: 0 }), '3 things need your decision');
   assert.equal(digestText({ needsYou: 0, withTeam: 1, oldestTeamDays: 1 }), '1 approval is waiting with the team');
   assert.equal(digestText({ needsYou: 2, withTeam: 8, oldestTeamDays: 9 }), '2 things need your decision · 8 approvals are waiting with the team, the oldest 9 days');
+});
+
+// ── what is with the leaders is not also "with the team" ─────────────────────
+
+test('decision requests: the team\'s checked items are the leaders\' own, and a deferred one stays hidden until its date', () => {
+  const d = src('decision_requests');
+  assert.equal(d.owner, 'you');
+  const m = d.match(NOW);
+  assert.equal(m.open, true);
+  assert.deepEqual(m.kind, { $ne: 'project_proposal' }, 'proposals are counted from the projects, not twice');
+  const [pending, noDate, due] = m.$or;
+  assert.deepEqual(pending, { status: 'pending' });
+  assert.deepEqual(noDate, { deferredUntil: null });
+  assert.deepEqual(due, { deferredUntil: { $lte: NOW } });
+});
+
+test('an expense, payout or plan that is with the leaders is not counted as waiting with the team', () => {
+  for (const key of ['admin_expenses', 'artist_payouts', 'hiring_plans']) {
+    assert.deepEqual(src(key).match['leadership.state'], { $ne: 'awaiting' }, key);
+  }
+});
+
+test('the manual log does not count entries that were removed', () => {
+  assert.equal(src('ceo_decisions').match.deletedAt, null);
 });

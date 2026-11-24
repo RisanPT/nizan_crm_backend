@@ -53,6 +53,16 @@ test('accessFor: stylist lead (parent key) sees all and notes', () => {
   assert.deepEqual([a.hasModule, a.viewAll, a.notesPermission], [true, true, true]);
 });
 
+test('accessFor: stylist role has module access by default', () => {
+  const a = accessFor(user('stylist', []));
+  assert.equal(a.hasModule, true);
+});
+
+test('accessFor: stylist permission key gives module access', () => {
+  const a = accessFor(user('custom_role', ['stylist']));
+  assert.equal(a.hasModule, true);
+});
+
 test('accessFor: unrelated roles and unknown users have no access', () => {
   assert.equal(accessFor(user('sales', ['sales', 'clients'])).hasModule, false);
   assert.equal(accessFor(null).hasModule, false);

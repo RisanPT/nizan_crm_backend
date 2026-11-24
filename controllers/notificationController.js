@@ -3,6 +3,7 @@ import Lead from '../models/Lead.js';
 import Booking from '../models/Booking.js';
 import Collection from '../models/Collection.js';
 import Expense from '../models/Expense.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { sweepSalesTargetMidMonth } from '../utils/salesTargetAlerts.js';
 import { loadCeoInbox, digestText } from '../services/ceoInbox.js';
@@ -119,14 +120,15 @@ const MONTH_END_CHECK_MS = 60 * 60 * 1000; // hourly is more than enough
 
 const _inr = (n) => `₹${Math.round(Number(n) || 0).toLocaleString('en-IN')}`;
 
-const sweepMonthEndSummary = async () => {
+// ({ force: true } skips the hourly throttle — for tests)
+export const sweepMonthEndSummary = async ({ force = false } = {}) => {
   const nowMs = Date.now();
-  if (nowMs - lastMonthEndCheckAt < MONTH_END_CHECK_MS) return;
+  if (!force && nowMs - lastMonthEndCheckAt < MONTH_END_CHECK_MS) return;
   lastMonthEndCheckAt = nowMs;
 
   try {
-    // the CEO gets it too — on top of their own daily digest, not instead of it
-    const admins = await getUserIdsByRoles([...ADMIN_ROLES, 'ceo']);
+    // the CEO and the Executive Director get it too — on top of their own daily digest, not instead of it
+    const admins = await getUserIdsByRoles([...ADMIN_ROLES, ...LEADERSHIP_ROLES]);
     if (admins.length === 0) return;
 
     // The calendar month that just ended.
@@ -135,12 +137,13 @@ const sweepMonthEndSummary = async () => {
     const end = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
     const periodKey = new Date(Date.UTC(start.getFullYear(), start.getMonth(), 1));
 
-    // One summary per month, globally — bail if it already exists.
-    const existing = await Notification.findOne({
-      type: NOTIFICATION_TYPES.MONTH_END_SUMMARY,
-      forDate: periodKey,
-    }).select('_id');
-    if (existing) return;
+    // One summary per month PER PERSON: someone added later (a second leader, a new admin) still gets this month's, and nobody
+    // gets it twice. Bail before the heavy sums when everybody already has it.
+    const already = new Set(
+      (await Notification.distinct('recipient', { type: NOTIFICATION_TYPES.MONTH_END_SUMMARY, forDate: periodKey })).map(String),
+    );
+    const missing = admins.filter((id) => !already.has(String(id)));
+    if (missing.length === 0) return;
 
     const [bookings, collections, expenses] = await Promise.all([
       Booking.find({ bookingDate: { $gte: start, $lte: end } }).select('totalPrice status createdBy').lean(),
@@ -161,46 +164,51 @@ const sweepMonthEndSummary = async () => {
     const label = `${months[start.getMonth()]} ${start.getFullYear()}`;
 
     await notify({
-      recipients: admins,
+      recipients: missing,
       type: NOTIFICATION_TYPES.MONTH_END_SUMMARY,
       title: `${label} month-end summary`,
       body: `Sales ${_inr(revenue)} across ${active.length} works · Collected ${_inr(collected)} · Expenses ${_inr(spent)}.`,
       link: '/reports/analyst',
       forDate: periodKey,
+      dedupe: true,
     });
   } catch (err) {
     console.error('sweepMonthEndSummary failed:', err.message);
   }
 };
 
-// ── The CEO's daily digest ───────────────────────────────────────────────────
-// Once a day (the first fetch of the day creates it, like the month-end summary): how many things need the CEO's decision and
-// how many approvals are waiting with the team, the oldest for how long. Nothing to report = no notification.
+// ── The leadership's daily digest ────────────────────────────────────────────
+// Once a day per person (the first fetch of the day creates it, like the month-end summary): how many things need the CEO's /
+// Executive Director's decision and how many approvals are waiting with the team, the oldest for how long. Nothing to report = no
+// notification. A leader added later in the day still gets that day's; nobody gets it twice.
 let lastCeoDigestCheckAt = 0;
 const CEO_DIGEST_CHECK_MS = 30 * 60 * 1000;
 
-const sweepCeoDigest = async () => {
+// ({ force: true } skips the 30-minute throttle — for tests)
+export const sweepCeoDigest = async ({ force = false } = {}) => {
   const nowMs = Date.now();
-  if (nowMs - lastCeoDigestCheckAt < CEO_DIGEST_CHECK_MS) return;
+  if (!force && nowMs - lastCeoDigestCheckAt < CEO_DIGEST_CHECK_MS) return;
   lastCeoDigestCheckAt = nowMs;
 
   try {
-    const ceos = await getUserIdsByRoles(['ceo']);
-    if (ceos.length === 0) return;
+    const leaders = await getUserIdsByRoles(LEADERSHIP_ROLES);
+    if (leaders.length === 0) return;
 
     const day = istStart(todayIst());
-    const existing = await Notification.findOne({ type: NOTIFICATION_TYPES.CEO_DIGEST, forDate: day }).select('_id');
-    if (existing) return;
+    const already = new Set((await Notification.distinct('recipient', { type: NOTIFICATION_TYPES.CEO_DIGEST, forDate: day })).map(String));
+    const missing = leaders.filter((id) => !already.has(String(id)));
+    if (missing.length === 0) return;
 
     const body = digestText(await loadCeoInbox());
     if (!body) return;
     await notify({
-      recipients: ceos,
+      recipients: missing,
       type: NOTIFICATION_TYPES.CEO_DIGEST,
       title: 'Your day at a glance',
       body,
       link: '/ceo',
       forDate: day,
+      dedupe: true,
     });
   } catch (err) {
     console.error('sweepCeoDigest failed:', err.message);

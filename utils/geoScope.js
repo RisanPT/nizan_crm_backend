@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { isLeadership } from './leadership.js';
 
 // Territory (geo) scoping. A user with a full-access role, or with no geo set,
 // sees everything. Everyone else is limited to the most specific geo level
@@ -12,6 +13,7 @@ const FULL_ACCESS_ROLES = ['admin', 'manager'];
 export const isFullGeoAccess = (user) =>
   !user ||
   FULL_ACCESS_ROLES.includes(String(user.role || '').toLowerCase()) ||
+  isLeadership(user) || // the CEO / Executive Director see the whole company, whatever territory was pinned on the login
   String(user.role || '').toLowerCase() === 'artist_head' ||
   user.artistHead === true;
 

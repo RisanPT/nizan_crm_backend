@@ -5,6 +5,8 @@
 //
 // Mount `attachRolePermissions` before these so req.user.permissions is set.
 
+import { isLeadership } from './leadership.js';
+
 const roleOf = (user) => String(user?.role || '').trim().toLowerCase();
 const permsOf = (user) => (Array.isArray(user?.permissions) ? user.permissions.map(String) : []);
 
@@ -27,26 +29,30 @@ const FINANCE_ROLES = ['accounts', 'finance_head'];
 
 /// Salary slips / payroll runs: HR salaries screen (staff.salaries) or the
 /// Accounts salary + attendance-payroll screens (payables.*).
+// The CEO and the Executive Director never see pay (totals reach them through the dashboards): whatever permissions their role
+// holds, `staff.evaluation` for instance, which opens the 'staff' module by prefix, these stay false for them.
 export const canManagePayroll = (user) =>
-  isFullAccess(user) ||
-  FINANCE_ROLES.includes(roleOf(user)) ||
-  hasPerm(user, 'staff.salaries') ||
-  hasPerm(user, 'payables.admin_salaries') ||
-  hasPerm(user, 'payables.operations_salaries');
+  !isLeadership(user) &&
+  (isFullAccess(user) ||
+    FINANCE_ROLES.includes(roleOf(user)) ||
+    hasPerm(user, 'staff.salaries') ||
+    hasPerm(user, 'payables.admin_salaries') ||
+    hasPerm(user, 'payables.operations_salaries'));
 
 /// HRA records (Accounts → HRA).
 export const canManageHra = (user) =>
-  isFullAccess(user) ||
-  FINANCE_ROLES.includes(roleOf(user)) ||
-  hasPerm(user, 'payables.hra') ||
-  hasPerm(user, 'staff.salaries');
+  !isLeadership(user) &&
+  (isFullAccess(user) ||
+    FINANCE_ROLES.includes(roleOf(user)) ||
+    hasPerm(user, 'payables.hra') ||
+    hasPerm(user, 'staff.salaries'));
 
 /// HR staff records and HR modules (who may manage employees).
 export const canManageStaff = (user) =>
   isFullAccess(user) || user?.isDepartmentHead === true || hasModule(user, 'staff');
 
 /// May see salary / bank / ID fields on employee records.
-export const canSeeEmployeePay = (user) => canManageStaff(user) || canManagePayroll(user) || canManageHra(user);
+export const canSeeEmployeePay = (user) => !isLeadership(user) && (canManageStaff(user) || canManagePayroll(user) || canManageHra(user));
 
 /// Attendance (Timebox) views.
 export const canSeeAttendance = (user) => canManageStaff(user) || canManagePayroll(user);
@@ -80,7 +86,7 @@ export const SENSITIVE_EMPLOYEE_FIELDS = [
 /// Company-wide pay visibility: HR (staff module), payroll, HRA, admin/manager.
 /// Department heads are NOT here — they see pay only for their own team.
 export const canSeeAllEmployeePay = (user) =>
-  isFullAccess(user) || hasModule(user, 'staff') || canManagePayroll(user) || canManageHra(user);
+  !isLeadership(user) && (isFullAccess(user) || hasModule(user, 'staff') || canManagePayroll(user) || canManageHra(user));
 
 /// Strips pay / bank / personal fields from an employee (doc or plain object)
 /// unless the viewer may see them. A user always sees their own record; a
@@ -88,12 +94,14 @@ export const canSeeAllEmployeePay = (user) =>
 /// getHrScope(req, ['staff'])).
 export const redactEmployee = (emp, viewer, scope = null) => {
   if (!emp) return emp;
-  if (canSeeAllEmployeePay(viewer) || scope?.wide) return emp;
+  // The CEO / Executive Director are "HR-wide" for reading (by the 'staff.evaluation' prefix) but never for pay: only their own record.
+  const leader = isLeadership(viewer);
+  if (!leader && (canSeeAllEmployeePay(viewer) || scope?.wide)) return emp;
   const obj = typeof emp.toObject === 'function' ? emp.toObject() : { ...emp };
   const id = String(obj._id);
   const own = viewer?.employeeId && String(viewer.employeeId) === id;
   if (own) return obj;
-  if (scope && !scope.none && scope.employeeIds?.includes(id)) return obj;
+  if (!leader && scope && !scope.none && scope.employeeIds?.includes(id)) return obj;
   for (const f of SENSITIVE_EMPLOYEE_FIELDS) delete obj[f];
   return obj;
 };

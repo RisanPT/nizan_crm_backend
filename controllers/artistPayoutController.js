@@ -4,6 +4,8 @@ import Booking from '../models/Booking.js';
 import ChartOfAccount from '../models/ChartOfAccount.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 import { applyMoneyAccount } from '../utils/moneyAccount.js';
+import { needsLeadership } from '../utils/decisionRules.js';
+import { escalate, getPolicy, supersedeFor, withdrawFor, resetStamp } from '../services/decisions.js';
 
 const payoutPopulate = [
   { path: 'employeeId', select: 'name phone artistRole type status' },
@@ -21,6 +23,28 @@ const canManage = (u) => ['admin', 'accounts', 'finance_head'].includes(u?.role)
 const canRead = (u) =>
   ['admin', 'accounts', 'finance_head', 'manager', 'artist_head'].includes(u?.role) ||
   u?.artistHead === true;
+
+// ── the CEO / Executive Director's limit ─────────────────────────────────────
+// A payout ABOVE the limit set in Decision rules is not approved by Accounts alone: approving it is the CHECK, and the payout then
+// waits for the CEO / Executive Director before it can be paid. Nothing is held while no limit is set.
+
+/// Does [payout] at [amount] have to go to them? (Not one they already approved at this amount.)
+const mustGoToLeadership = async (payout, amount) => {
+  if (payout.leadership?.state === 'approved' && Number(payout.leadership.amount) === Number(amount)) return false;
+  return needsLeadership(await getPolicy(), 'spend_payout', amount);
+};
+
+/// Why [payout] may not be paid yet because of the leaders, or null.
+const payBlock = async (payout) => {
+  const state = payout.leadership?.state;
+  if (state === 'awaiting') return { code: 'NEEDS_LEADERSHIP', message: 'This payout is waiting for the CEO / Executive Director. It can be paid once they approve it.' };
+  if (state === 'rejected' || payout.status === 'cancelled') return { code: 'REJECTED_BY_LEADERSHIP', message: 'The CEO / Executive Director did not approve this payout, so it cannot be paid.' };
+  // asked to be paid without being approved: above the limit it still needs them
+  if (payout.status !== 'approved' && (await mustGoToLeadership(payout, payout.amount))) {
+    return { code: 'NEEDS_LEADERSHIP', message: 'This payout is above the limit. Approve it first, so the CEO / Executive Director can decide.' };
+  }
+  return null;
+};
 
 // Ensure the Artist Payouts ledger head exists so the voucher can post even if
 // the Chart of Accounts was seeded before this feature shipped. Best-effort.
@@ -143,6 +167,7 @@ export const updatePayout = async (req, res) => {
     }
 
     const { amount, date, paymentMode, notes, bookingId } = req.body;
+    const amountChanged = amount !== undefined && (Number(amount) || 0) !== Number(payout.amount);
     if (amount !== undefined) payout.amount = Number(amount) || 0;
     if (date !== undefined) payout.date = date;
     if (paymentMode !== undefined) payout.paymentMode = paymentMode;
@@ -157,7 +182,17 @@ export const updatePayout = async (req, res) => {
       }
     }
 
+    // An approval was for the amount it had: a changed amount that is above the limit (or that a leader approved) needs checking again.
+    let reopened = false;
+    if (amountChanged && payout.status === 'approved' && (await mustGoToLeadership(payout, payout.amount))) {
+      payout.status = 'pending';
+      payout.approvedBy = null;
+      payout.approvedAt = null;
+      reopened = true;
+    }
     await payout.save();
+    if (reopened) await resetStamp('spend_payout', payout._id);
+    else if (payout.leadership?.state === 'awaiting') await supersedeFor('spend_payout', payout, { user: req.user });
     const populated = await ArtistPayout.findById(payout._id).populate(payoutPopulate);
     res.json(populated);
   } catch (error) {
@@ -175,6 +210,17 @@ export const approvePayout = async (req, res) => {
     if (!payout) return res.status(404).json({ message: 'Payout not found' });
     if (payout.status === 'paid') {
       return res.status(400).json({ message: 'This payout is already paid.' });
+    }
+    if (payout.status === 'cancelled') {
+      return res.status(409).json({ code: 'REJECTED_BY_LEADERSHIP', message: 'The CEO / Executive Director did not approve this payout.' });
+    }
+    // Above the limit: Accounts' approval is the check; the payout waits for the CEO / Executive Director.
+    if (await mustGoToLeadership(payout, payout.amount)) {
+      const out = await escalate({ kind: 'spend_payout', source: payout, checker: req.user, checkNote: String(req.body?.note ?? '').trim().slice(0, 500) });
+      if (out.escalated) {
+        const held = await ArtistPayout.findById(payout._id).populate(payoutPopulate);
+        return res.json({ ...held.toObject(), awaitingLeadership: true });
+      }
     }
 
     payout.status = 'approved';
@@ -197,6 +243,8 @@ export const payPayout = async (req, res) => {
     }
     const payout = await ArtistPayout.findById(req.params.id);
     if (!payout) return res.status(404).json({ message: 'Payout not found' });
+    const blocked = await payBlock(payout);
+    if (blocked) return res.status(409).json(blocked);
 
     const { paymentMode } = req.body;
     if (paymentMode) payout.paymentMode = paymentMode;
@@ -234,6 +282,7 @@ export const deletePayout = async (req, res) => {
     if (!payout) return res.status(404).json({ message: 'Payout not found' });
 
     await payout.deleteOne();
+    await withdrawFor('spend_payout', payout._id, { user: req.user, reason: 'The payout was deleted' }).catch(() => null);
     await safePost(() => unpostDoc('ArtistPayout', payout._id));
 
     res.json({ message: 'Payout removed' });

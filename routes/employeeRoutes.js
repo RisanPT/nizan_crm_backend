@@ -20,6 +20,7 @@ import {
   SENSITIVE_EMPLOYEE_FIELDS,
 } from '../utils/hrAccess.js';
 import { getHrScope, canManageEmployee } from '../utils/hrDeptScope.js';
+import { isLeadership } from '../utils/leadership.js';
 
 const router = express.Router();
 
@@ -86,6 +87,8 @@ const inScope = async (req, res, next) => {
 /// their own team.
 const payInScope = async (req, res, next) => {
   try {
+    // never the CEO / Executive Director: salary history is pay (they read totals on the dashboards)
+    if (isLeadership(req.user)) return forbid(res, 'Salary details are not part of this login');
     if (canSeeAllEmployeePay(req.user)) return next();
     if (canManageStaff(req.user) && (await canManageEmployee(req, req.params.id, ['staff']))) return next();
     return forbid(res, 'You are not allowed to view salary details');

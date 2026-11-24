@@ -1,10 +1,17 @@
 import PerformanceEvaluation, { PILLARS } from '../models/PerformanceEvaluation.js';
 import Employee from '../models/Employee.js';
+import { isLeadership } from '../utils/leadership.js';
+
 
 // "HR / Admin (anyone)" tier — admin / manager and the `hr` role (added
 // 2026-11-16) evaluate anyone. Department heads may evaluate only their own team.
 const isAdmin = (u) =>
   ['admin', 'manager', 'ceo', 'hr'].includes(String(u?.role || '').trim().toLowerCase()); // + 'ceo': read-only, enforced in middleware/ceoGuard.js
+
+// "HR / Admin (anyone)" tier — there is no dedicated `hr` role, so full-access
+// roles stand in for HR. Department heads may evaluate only their own team.
+const isAdmin = (u) => u?.role === 'admin' || u?.role === 'manager' || isLeadership(u); // + leadership (CEO, Executive Director): read-only, enforced in middleware/ceoGuard.js
+
 const canRead = (u) => isAdmin(u) || u?.isDepartmentHead === true;
 
 const sameDept = (u, employee) =>

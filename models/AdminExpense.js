@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { leadershipStampField } from './leadershipStamp.js';
 import { moneyAccountFields } from '../utils/moneyAccount.js';
 
 // Suggested department names for the UI dropdown. The stored `department`
@@ -123,6 +124,8 @@ const adminExpenseSchema = mongoose.Schema(
     projectName: { type: String, default: '' },
     // Why it was approved although it took the project past its approved budget (finance head / admin only).
     overBudgetReason: { type: String, default: '' },
+    // Held for the CEO / Executive Director when it is above the limit (see models/leadershipStamp.js).
+    leadership: leadershipStampField(),
     // Monthly recurring bill (Electricity, Telephone/Internet, Rent).
     isRecurring: {
       type: Boolean,

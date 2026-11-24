@@ -81,25 +81,47 @@ export const isFullAccessRole = (role) =>
 export const permissionGranted = (permissions, key) => {
   const list = Array.isArray(permissions) ? permissions : [];
   const parent = String(key).split('.')[0];
-  return list.includes(parent) || list.includes(key);
+  const sub = String(key).split('.')[1];
+  const altParent = parent === 'consultations' ? 'stylist' : (parent === 'stylist' ? 'consultations' : null);
+  if (list.includes(parent) || list.includes(key)) return true;
+  if (altParent) {
+    if (list.includes(altParent)) return true;
+    if (sub && list.includes(`${altParent}.${sub}`)) return true;
+  }
+  return false;
 };
 
 /// What the signed-in user may do in the consultations module.
-///  • hasModule — any consultations permission at all.
+///  • hasModule — any consultations/stylist permission at all or stylist role.
 ///  • viewAll   — sees every stylist's consultations and may assign / override
 ///                (stylist lead: the whole module, or `consultations.reports`).
 ///  • Everyone else sees and acts on their OWN consultations only.
 export const accessFor = (user) => {
   const permissions = Array.isArray(user?.permissions) ? user.permissions : [];
   const fullAccess = isFullAccessRole(user?.role);
+  const roleKey = String(user?.role ?? '').trim().toLowerCase();
+  const isStylistRole = ['stylist', 'stylist_lead', 'bridal_stylist', 'senior_stylist'].includes(roleKey);
   const hasModule =
     fullAccess ||
-    permissions.some((p) => p === 'consultations' || String(p).startsWith('consultations.'));
+    isStylistRole ||
+    permissions.some((p) =>
+      p === 'consultations' ||
+      String(p).startsWith('consultations.') ||
+      p === 'stylist' ||
+      String(p).startsWith('stylist.')
+    );
   return {
     fullAccess,
     hasModule,
-    viewAll: fullAccess || permissionGranted(permissions, 'consultations.reports'),
-    notesPermission: fullAccess || permissionGranted(permissions, 'consultations.notes'),
+    viewAll:
+      fullAccess ||
+      permissionGranted(permissions, 'consultations.reports') ||
+      permissionGranted(permissions, 'stylist.reports') ||
+      roleKey === 'stylist_lead',
+    notesPermission:
+      fullAccess ||
+      permissionGranted(permissions, 'consultations.notes') ||
+      permissionGranted(permissions, 'stylist.notes'),
   };
 };
 
