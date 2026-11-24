@@ -8,11 +8,13 @@ import Lead from '../models/Lead.js';
 import { regionScopedMatch, isFullGeoAccess } from '../utils/geoScope.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { SALES_TARGET_ROLES } from '../utils/salesAchievement.js';
-import { slotAvailability } from './slotController.js';
+import { slotAvailability, blockedDatesAmong, blockedDatesMessage } from './slotController.js';
+import { dayKey } from '../utils/slots.js';
 import { ensureReviewForBooking, reviewFormUrl } from './reviewController.js';
 import { ensureInvoiceNumber } from '../utils/invoiceNumber.js';
 import { istStart, istEnd, istMonthBounds, rangeCondition } from '../utils/istDate.js';
 import { secondLookCondition } from '../utils/secondLook.js';
+import { applyDriverDay, isConfirmed as isDriverDayConfirmed, prepareDriverDay } from '../services/driverDay.js';
 import {
   sendAdvanceInvoiceEmail,
   sendCompletionInvoiceEmail,
@@ -339,10 +341,19 @@ const computeBasePackagePrice = async ({
   return Number(packageDoc.price) || 0;
 };
 
+// On an EDIT an advance the user typed is kept even when it is 0 (the client
+// paid nothing up front). On create, 0 / blank still means "use the package
+// default". Blank / missing values always fall back.
+const isEnteredAmount = (v) =>
+  v !== null && v !== undefined && String(v).trim() !== '' &&
+  Number.isFinite(Number(v)) && Number(v) >= 0;
+
 const computeBaseAdvanceAmount = async ({
   packageId,
   fallbackAdvanceAmount,
+  honourZero = false,
 }) => {
+  if (honourZero && isEnteredAmount(fallbackAdvanceAmount)) return Number(fallbackAdvanceAmount);
   const normalizedFallback = Number(fallbackAdvanceAmount) || 0;
   // Option A: the entered advance is authoritative — it's what the client
   // actually paid (e.g. ₹5000). The package's configured advance is only the
@@ -409,7 +420,9 @@ const computeAdvanceAmount = async ({
   packageId,
   fallbackAdvanceAmount,
   selectedDates,
+  honourZero = false,
 }) => {
+  if (honourZero && isEnteredAmount(fallbackAdvanceAmount)) return Number(fallbackAdvanceAmount);
   const normalizedFallback = Number(fallbackAdvanceAmount) || 0;
   // Option A: an entered advance is the authoritative TOTAL the client paid
   // (NOT multiplied per date). Only when nothing was entered do we fall back to
@@ -437,6 +450,7 @@ const normalizeBookingItems = async ({
   districtId,
   fallbackSelectedDates = [],
   fallbackBookingDate = null,
+  honourZeroAdvance = false,
 }) => {
   if (!Array.isArray(bookingItems) || bookingItems.length === 0) {
     return [];
@@ -464,6 +478,7 @@ const normalizeBookingItems = async ({
     const computedAdvanceAmount = await computeBaseAdvanceAmount({
       packageId: normalizedPackageId,
       fallbackAdvanceAmount: item?.advanceAmount ?? 3000,
+      honourZero: honourZeroAdvance,
     });
 
     let packageDoc = null;
@@ -1437,12 +1452,55 @@ export const createBooking = async (req, res) => {
       } catch (_) {
         // ignore — never prevent booking creation because the check failed
       }
+      // Every work date (all packages), not only the first, must be open.
+      try {
+        const blocked = await blockedDatesAmong([
+          effectiveSchedule.bookingDateValue,
+          ...(effectiveSchedule.selectedDates || []),
+          ...normalizedBookingItems.flatMap((it) => it.selectedDates || []),
+        ]);
+        if (blocked.length) {
+          return res.status(409).json({ message: blockedDatesMessage(blocked), blockedDates: blocked });
+        }
+      } catch (_) {
+        // ignore — same fail-open rule as the capacity check
+      }
     }
 
     // Optional backdated "booking made" date for a late-entered (forgotten)
     // booking. Mongoose respects an explicit createdAt on insert.
     const bookedCreatedAt = createdAt ? new Date(createdAt) : null;
     const hasBookedDate = bookedCreatedAt && !Number.isNaN(bookedCreatedAt.getTime());
+
+    // One driver per artist per day (utils/driverDay.js). A new booking is not held up to ask:
+    // unless confirmed, the artist's works that day that have ANOTHER driver are left alone and
+    // reported. A failure in the rule itself never blocks the booking.
+    let driverDayPending = null;
+    if (normalizedDriverId) {
+      try {
+        const confirmed = isDriverDayConfirmed(req);
+        const driverDay = await prepareDriverDay({
+          before: null,
+          after: {
+            driverId: normalizedDriverId,
+            vehicleId: normalizedVehicleId,
+            driverName,
+            status: normalizedStatus,
+            selectedDates: effectiveSchedule.selectedDates,
+            bookingDate: effectiveSchedule.bookingDateValue,
+            serviceStart: effectiveSchedule.serviceStartValue,
+            serviceEnd: effectiveSchedule.serviceEndValue,
+            assignedStaff: summaryAssignedStaff,
+            bookingItems: normalizedBookingItems,
+          },
+          confirmed,
+          skipOtherDrivers: !confirmed,
+        });
+        driverDayPending = driverDay.pending;
+      } catch (driverDayErr) {
+        console.error('driver-day rule failed (booking created without it):', driverDayErr);
+      }
+    }
 
     const booking = await Booking.create({
       ...(hasBookedDate ? { createdAt: bookedCreatedAt } : {}),
@@ -1513,6 +1571,9 @@ export const createBooking = async (req, res) => {
     // A booking for a known lead's number converts that lead automatically.
     await linkLeadsToBooking(booking);
 
+    // The artist's other works that day get the same driver / vehicle (never throws).
+    const driverDay = await applyDriverDay({ saved: booking, pending: driverDayPending });
+
     // Matrix: Booking Created — notify managers + admins.
     try {
       const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
@@ -1570,6 +1631,7 @@ export const createBooking = async (req, res) => {
     res.status(201).json({
       ...booking.toObject(),
       invoiceEmailSent,
+      driverDay,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -1585,6 +1647,8 @@ export const updateBooking = async (req, res) => {
     }
     // To tell whether the advance changed in this edit.
     const previousAdvance = booking.advanceAmount;
+    // The driver / vehicle before this edit — for the one-driver-per-artist-day rule.
+    const previousFleet = { driverId: booking.driverId, vehicleId: booking.vehicleId };
 
     const {
       bookingItems,
@@ -1675,6 +1739,7 @@ export const updateBooking = async (req, res) => {
       districtId: nextDistrictId,
       fallbackSelectedDates: schedule.selectedDates,
       fallbackBookingDate: schedule.bookingDateValue,
+      honourZeroAdvance: true,
     });
     const effectiveSelectedDates = bookingItems != null
       ? mergeBookingItemDates(normalizedBookingItems, schedule.selectedDates)
@@ -1699,6 +1764,37 @@ export const updateBooking = async (req, res) => {
           })
         : '');
     const nextStatus = String(status ?? booking.status ?? '').toLowerCase();
+
+    // HR-blocked dates: refuse an edit that ADDS a blocked work date. Dates the
+    // booking already had stay allowed, so a booking sitting on a day blocked
+    // after it was made can still be updated (or cancelled). Fail-open.
+    if (!['cancelled', 'rejected', 'postponed'].includes(nextStatus)) {
+      try {
+        const keyOf = (d) => {
+          const k = dayKey(d);
+          return Number.isNaN(k.getTime()) ? '' : k.toISOString();
+        };
+        const previousDays = new Set(
+          [
+            booking.bookingDate,
+            ...(booking.selectedDates || []),
+            ...(booking.bookingItems || []).flatMap((it) => it.selectedDates || []),
+          ].map(keyOf),
+        );
+        const nextDates = [
+          effectiveSchedule.bookingDateValue,
+          ...(effectiveSchedule.selectedDates || []),
+          ...(bookingItems != null ? normalizedBookingItems : []).flatMap((it) => it.selectedDates || []),
+        ].filter((d) => !previousDays.has(keyOf(d)));
+        const blocked = await blockedDatesAmong(nextDates);
+        if (blocked.length) {
+          return res.status(409).json({ message: blockedDatesMessage(blocked), blockedDates: blocked });
+        }
+      } catch (_) {
+        // ignore — never block an edit because the check itself failed
+      }
+    }
+
     const nextPackageId =
       packageId != null ? normalizedPackageId : booking.packageId;
     const effectiveAddons =
@@ -1716,6 +1812,7 @@ export const updateBooking = async (req, res) => {
       packageId: nextPackageId,
       fallbackAdvanceAmount: advanceAmount ?? booking.advanceAmount,
       selectedDates: effectiveSchedule.selectedDates,
+      honourZero: true,
     });
     const finalBookingItems =
       bookingItems != null ? normalizedBookingItems : booking.bookingItems ?? [];
@@ -1855,6 +1952,22 @@ export const updateBooking = async (req, res) => {
     booking.pocName = pocName ?? booking.pocName;
     booking.pocPhone = pocPhone ?? booking.pocPhone;
 
+    // One driver per artist per day (utils/driverDay.js): decided BEFORE saving, so when the
+    // artist's other works that day have another driver the person is asked first (409) and
+    // nothing is half-saved. A failure in the rule itself never blocks the save.
+    let driverDayPending = null;
+    try {
+      const driverDay = await prepareDriverDay({
+        before: previousFleet,
+        after: booking,
+        confirmed: isDriverDayConfirmed(req),
+      });
+      if (driverDay.conflict) return res.status(409).json(driverDay.conflict);
+      driverDayPending = driverDay.pending;
+    } catch (driverDayErr) {
+      console.error('driver-day rule failed (booking saved without it):', driverDayErr);
+    }
+
     let updatedBooking = await booking.save();
     if (bookedAtOverride) {
       await Booking.collection.updateOne(
@@ -1867,6 +1980,8 @@ export const updateBooking = async (req, res) => {
       // ended up showing a different "booked on" day than the booking.
       updatedBooking = (await Booking.findById(booking._id)) ?? updatedBooking;
     }
+    // The artist's other works that day get the same driver / vehicle (never throws).
+    const driverDay = await applyDriverDay({ saved: updatedBooking, pending: driverDayPending });
     await syncLinkedLeadDates(updatedBooking);
     // Linking used to run on create only — a number corrected (or a lead
     // added) after booking never converted the lead. Idempotent.
@@ -1946,6 +2061,7 @@ export const updateBooking = async (req, res) => {
       invoiceEmailSent,
       completionInvoiceEmailSent,
       reviewUrl,
+      driverDay,
     });
   } catch (error) {
     // Never ship the stack trace to the client; the sanitizer humanises message.

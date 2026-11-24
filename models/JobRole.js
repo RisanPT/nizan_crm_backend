@@ -10,6 +10,11 @@ const jobRoleSchema = new mongoose.Schema(
     designation: { type: String, required: true, trim: true },
     shortTitle: { type: String, trim: true, default: '' },
     dept: { type: String, required: true, trim: true },
+    // Real department from the HR Departments master (dept keeps its name for display).
+    departmentId: { type: mongoose.Schema.Types.ObjectId, ref: 'Department', default: null },
+    // The CRM login role (Settings -> Roles key) a person hired into this job gets.
+    // Pre-selected when HR issues the hire's login. '' = self-service only.
+    crmRoleKey: { type: String, trim: true, lowercase: true, default: '' },
     band: { type: String, enum: ['L1', 'L2', 'L3', 'L4', 'L5', 'L6'], default: 'L3' },
     tier: { type: Number, min: 1, max: 5, default: 5 },
     parentId: { type: String, default: null }, // ID or code of parent role in hierarchy

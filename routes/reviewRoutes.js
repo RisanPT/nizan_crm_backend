@@ -8,6 +8,7 @@ import {
   getReviewById,
   updateReview,
   createReviewForBooking,
+  trackReview,
 } from '../controllers/reviewController.js';
 import { protect } from '../middleware/authMiddleware.js';
 
@@ -16,6 +17,7 @@ const router = express.Router();
 // Public — the client opens and submits the form (no login).
 router.get('/form/:token', getReviewForm);
 router.post('/submit/:token', submitReview);
+router.post('/track/:token', trackReview); // form opened / question answered
 
 // Staff — everything below requires auth.
 router.use(protect);

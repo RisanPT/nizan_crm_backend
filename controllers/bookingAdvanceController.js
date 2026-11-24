@@ -108,6 +108,119 @@ export const syncBookingAdvance = async (booking, previousAdvance, userId = null
   }
 };
 
+// Who may correct a booking's advance from "Edit advance".
+export const ADVANCE_EDIT_ROLES = ['admin', 'accounts', 'finance_head', 'manager'];
+
+// @route PUT /api/booking-advances/:id/amount
+// Body: { amount, reason }                    — booking with 0 or 1 package
+//       { items: [{ index, amount }], reason } — one amount per package
+// Sets the advance the client actually paid (0 allowed), logs the change in
+// advanceHistory, and keeps verification honest: an advance Accounts had
+// verified goes back to pending so they re-check the new amount.
+export const updateBookingAdvanceAmount = async (req, res) => {
+  if (!ADVANCE_EDIT_ROLES.includes(req.user?.role)) {
+    return res.status(403).json({ message: 'Not authorized to edit advances' });
+  }
+  try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) return res.status(400).json({ message: 'Invalid booking' });
+    const reason = String(req.body.reason ?? '').trim();
+    if (!reason) return res.status(400).json({ message: 'Give a reason for the change' });
+
+    const booking = await Booking.findById(req.params.id).lean();
+    if (!booking) return res.status(404).json({ message: 'Booking not found' });
+
+    const parseAmount = (v) => {
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 ? round2(n) : null;
+    };
+    const items = Array.isArray(booking.bookingItems) ? booking.bookingItems : [];
+    const set = {};
+    const itemChanges = [];
+    let newTotal;
+
+    if (items.length > 1) {
+      if (!Array.isArray(req.body.items)) {
+        return res.status(400).json({ message: 'Give the advance for each package' });
+      }
+      const next = items.map((it) => round2(it.advanceAmount));
+      for (const entry of req.body.items) {
+        const index = Number(entry?.index);
+        const amount = parseAmount(entry?.amount);
+        if (!Number.isInteger(index) || index < 0 || index >= items.length || amount === null) {
+          return res.status(400).json({ message: 'Invalid package advance' });
+        }
+        next[index] = amount;
+      }
+      next.forEach((amount, index) => {
+        const from = round2(items[index].advanceAmount);
+        if (from !== amount) {
+          set[`bookingItems.${index}.advanceAmount`] = amount;
+          itemChanges.push({ index, service: items[index].service || '', from, to: amount });
+        }
+      });
+      newTotal = round2(next.reduce((s, n) => s + n, 0));
+    } else {
+      const amount = parseAmount(req.body.amount ?? req.body.items?.[0]?.amount);
+      if (amount === null) return res.status(400).json({ message: 'Enter a valid amount (0 or more)' });
+      if (items.length === 1) {
+        set['bookingItems.0.advanceAmount'] = amount;
+        const from = round2(items[0].advanceAmount);
+        if (from !== amount) itemChanges.push({ index: 0, service: items[0].service || '', from, to: amount });
+      }
+      newTotal = amount;
+    }
+
+    const previousAdvance = round2(booking.advanceAmount);
+    if (newTotal === previousAdvance && itemChanges.length === 0) {
+      return res.status(400).json({ message: 'The advance is unchanged' });
+    }
+    // Advance + verified collections may not exceed what the client owes.
+    const net = round2((booking.totalPrice || 0) - (booking.discountAmount || 0));
+    if (round2(newTotal + (booking.collectedAmount || 0)) > net) {
+      return res.status(400).json({
+        message: `Advance plus collected (₹${round2(newTotal + (booking.collectedAmount || 0))}) is more than the bill (₹${net})`,
+      });
+    }
+
+    set.advanceAmount = newTotal;
+    const previousStatus = booking.advanceStatus || '';
+    // A verified advance whose amount changed must be re-checked by Accounts.
+    // Do it here (not via syncBookingAdvance) so it is never auto-verified into
+    // the default account — Accounts may have recorded it somewhere else.
+    const reverify = previousStatus === 'verified' && newTotal > 0 && newTotal !== previousAdvance;
+    if (reverify) {
+      Object.assign(set, { advanceStatus: 'pending', advanceVerifiedBy: null, advanceVerifiedAt: null });
+    }
+    const history = {
+      from: previousAdvance,
+      to: newTotal,
+      reason,
+      items: itemChanges,
+      previousStatus,
+      changedBy: req.user?._id || null,
+      changedByName: req.user?.name || '',
+      changedAt: new Date(),
+    };
+    // updateOne: like verification, this must not run the booking's save hooks.
+    await Booking.updateOne({ _id: booking._id }, { $set: set, $push: { advanceHistory: history } });
+
+    const fresh = await Booking.findById(booking._id).lean();
+    if (reverify) {
+      // Pending isn't postable, so this removes the old receipt until re-verified.
+      await safePost(() => postDoc('BookingAdvance', fresh, req.user?._id || null));
+    } else {
+      // ''/rejected → pending (auto-recorded if Accounts set a default account),
+      // 0 → untracked; re-posts the receipt and issues the invoice number if paid.
+      await safePost(() => syncBookingAdvance(fresh, previousAdvance, req.user?._id || null));
+    }
+    await ensureInvoiceNumber(booking._id);
+
+    res.json(await Booking.findById(booking._id).lean());
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // Remove the advance receipt when a booking is deleted.
 export const unpostBookingAdvance = (bookingId) => safePost(() => unpostDoc('BookingAdvance', bookingId));
 

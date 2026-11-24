@@ -5,6 +5,7 @@ import {
   downloadClientReport,
   getClient,
   listClients,
+  listRoyalBookings,
   refreshClient,
   searchTeamN,
   updateClient,
@@ -20,6 +21,7 @@ router.use(protect, attachRolePermissions, consultationGuard);
 router.route('/').get(listClients).post(createClient);
 // Fixed paths before '/:id'.
 router.get('/team-n-search', searchTeamN);
+router.get('/royal-bookings', listRoyalBookings); // Royal package = stylist included
 router.route('/:id').get(getClient).put(updateClient);
 router.post('/:id/refresh', refreshClient);
 router.get('/:id/report', downloadClientReport);

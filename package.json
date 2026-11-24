@@ -21,7 +21,8 @@
     "import:legacy-bookings": "node scripts/importLegacyBookingsFromNormalizedCsv.js",
     "import:nizan-legacy-bookings": "node scripts/importLegacyBookingsFromNormalizedCsv.js tmp/bookings_formatted_nizan_only.csv tmp/booking_package_review_nizan.csv",
     "import:fma-legacy-bookings": "node scripts/importLegacyBookingsFromNormalizedCsv.js tmp/bookings_formatted_fma_only.csv tmp/booking_package_review_fma.csv",
-    "import:marketing-eod": "node scripts/importMarketingEodSpreadsheet.js"
+    "import:marketing-eod": "node scripts/importMarketingEodSpreadsheet.js",
+    "seed:website-content": "node scripts/seedWebsiteContent.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.2",

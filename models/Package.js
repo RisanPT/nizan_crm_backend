@@ -32,6 +32,51 @@ const districtPriceSchema = mongoose.Schema(
   { _id: false }
 );
 
+const websiteImageSchema = mongoose.Schema(
+  {
+    url: { type: String, required: true },
+    publicId: { type: String, default: '' },
+    width: { type: Number, default: null },
+    height: { type: Number, default: null },
+    alt: { type: String, default: '', trim: true, maxlength: 150 },
+  },
+  { _id: false }
+);
+
+const websiteSchema = mongoose.Schema(
+  {
+    show: { type: Boolean, default: false },
+    sortOrder: { type: Number, default: null },
+    tagline: { type: String, default: '', trim: true, maxlength: 100 },
+    description: { type: String, default: '', trim: true, maxlength: 400 },
+    idealFor: { type: String, default: '', trim: true, maxlength: 200 },
+    features: {
+      type: [{ type: String, trim: true, maxlength: 120 }],
+      default: [],
+      validate: [(v) => v.length <= 12, 'At most 12 features'],
+    },
+    durationLabel: { type: String, default: '', trim: true, maxlength: 30 },
+    highlighted: { type: Boolean, default: false },
+    priceFrom: { type: Boolean, default: false },
+    coverImage: { type: websiteImageSchema, default: null },
+  },
+  { _id: false }
+);
+
+// Bridal Quote "What's Included" rows, set in Services → Packages.
+const quoteInclusionsSchema = mongoose.Schema(
+  {
+    technique: { type: String, default: '', trim: true, maxlength: 60 },
+    products: { type: String, default: '', trim: true, maxlength: 80 },
+    included: {
+      type: [{ type: String, trim: true, maxlength: 120 }],
+      default: [],
+      validate: [(v) => v.length <= 20, 'At most 20 inclusions'],
+    },
+  },
+  { _id: false }
+);
+
 const packageSchema = mongoose.Schema(
   {
     name: {
@@ -67,6 +112,19 @@ const packageSchema = mongoose.Schema(
     sortOrder: {
       type: Number,
       default: null,
+    },
+    // Quote inclusions. Null = never set (the quote then uses its built-in
+    // values for known package names, else shows "—").
+    quoteInclusions: {
+      type: quoteInclusionsSchema,
+      default: null,
+    },
+    // Public website (Team N Website → Packages on Website). All optional:
+    // existing packages stay hidden from the site until switched on there.
+    // Price and advance always come from the fields above.
+    website: {
+      type: websiteSchema,
+      default: () => ({}),
     },
   },
   {

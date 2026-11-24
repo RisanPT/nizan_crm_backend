@@ -8,6 +8,9 @@ import JobRole from '../models/JobRole.js';
 import HiringPlan from '../models/HiringPlan.js';
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
+import Role from '../models/Role.js';
+import Department from '../models/Department.js';
+import { isAdminOnlyRole } from '../utils/userAccess.js';
 import { getHrScope, deptNameFilter, isHrWide } from '../utils/hrDeptScope.js';
 
 // Department-head scoping (owner decision 2026-11-06): HR-wide callers see and
@@ -304,18 +307,23 @@ export const linkHiredCandidateToOnboarding = async (candidate, userId = null) =
   const offer = await Offer.findOne({ candidateId: candidate._id }).sort({ createdAt: -1 });
 
   // Determine role & department
-  let role = offer?.designation || candidate.jobTitle || 'Staff';
+  let role = String(offer?.designation || candidate.jobTitle || '').trim();
   let department = offer?.department || '';
-  if (!department && candidate.jobPostId) {
+  if (candidate.jobPostId && (!department || !role)) {
     const post = await JobPost.findById(candidate.jobPostId).select('department title').lean();
-    if (post?.department) department = post.department;
+    if (!department && post?.department) department = post.department;
     if (!role && post?.title) role = post.title;
   }
-  if (!department && role) {
-    const jr = await JobRole.findOne({ designation: { $regex: new RegExp(`^${role.trim()}$`, 'i') } }).select('dept').lean();
-    if (jr?.dept) department = jr.dept;
-  }
+  if (!role) role = 'Staff';
+  // The HRMS job role with this title (HR-owned list). It supplies the real
+  // department and is stored on the employee so the login gets its CRM role.
+  const jobRole = await findJobRoleByTitle(role);
+  if (!department && jobRole?.dept) department = jobRole.dept;
   if (!department) department = 'General';
+  // Artist / driver CRM roles also drive the employee's artistRole (artist
+  // scoping, driver screens). Other roles stay plain staff.
+  const crmKey = String(jobRole?.crmRoleKey || '').toLowerCase();
+  const fieldRole = crmKey === 'artist' || crmKey === 'driver' ? crmKey : null;
 
   // Find or create employee
   let employee = null;
@@ -335,15 +343,23 @@ export const linkHiredCandidateToOnboarding = async (candidate, userId = null) =
       email: (candidate.email || '').toLowerCase().trim(),
       phone: candidate.phone || '',
       type: 'full-time',
-      artistRole: 'staff',
+      artistRole: fieldRole || 'staff',
       specialization: role,
       status: 'active',
       role,
       department,
-      category: 'administrative',
+      departmentId: jobRole && sameDept(jobRole.dept, department) ? jobRole.departmentId || null : null,
+      jobRoleId: jobRole?._id || null,
+      category: fieldRole ? 'operations' : 'administrative',
       salaryType: 'fixed_monthly',
       baseSalary: offer?.salary || 0,
     });
+  } else if (jobRole && !employee.jobRoleId) {
+    // An existing employee (matched by email) only gains the job-role link;
+    // their other details are left as HR set them.
+    // updateOne, so validation of older employee fields can't block the hire.
+    await Employee.updateOne({ _id: employee._id }, { $set: { jobRoleId: jobRole._id } });
+    employee.jobRoleId = jobRole._id;
   }
 
   // Update offer if present
@@ -357,18 +373,18 @@ export const linkHiredCandidateToOnboarding = async (candidate, userId = null) =
   // Set joining date: offer's joiningDate or 2 weeks from now
   const joiningDate = offer?.joiningDate || new Date(Date.now() + 14 * 86400000);
 
-  const tasks = DEFAULT_ONBOARDING_TASKS.map((t, idx) => ({
+  const tasks = DEFAULT_ONBOARDING_TASKS.map((t) => ({
     title: t,
-    done: idx < 2, // First 1-2 steps typically complete or ready
+    done: false, // nothing is ticked until HR actually does it
     owner: 'HR Team',
     note: '',
   }));
 
   const documents = [
-    { name: 'Signed offer letter', owner: employee.name, required: true, status: 'Received' },
-    { name: 'Aadhaar & PAN', owner: employee.name, required: true, status: 'Received' },
+    { name: 'Signed offer letter', owner: employee.name, required: true, status: 'Pending' },
+    { name: 'Aadhaar & PAN', owner: employee.name, required: true, status: 'Pending' },
     { name: 'Bank account proof', owner: employee.name, required: true, status: 'Pending' },
-    { name: 'Previous experience letter', owner: employee.name, required: false, status: 'Not required' },
+    { name: 'Previous experience letter', owner: employee.name, required: false, status: 'Pending' },
     { name: 'Education certificates', owner: employee.name, required: true, status: 'Pending' },
   ];
 
@@ -510,7 +526,7 @@ const createOffer = asyncHandler(async (req, res) => {
   }
   if (!department && (req.body.designation || cand.jobTitle)) {
     const roleTitle = String(req.body.designation || cand.jobTitle).trim();
-    const role = await JobRole.findOne({ designation: { $regex: new RegExp(`^${roleTitle}$`, 'i') } }).select('dept').lean();
+    const role = await findJobRoleByTitle(roleTitle);
     if (role?.dept) department = role.dept;
   }
   // A department head may only raise offers for their own department.
@@ -627,294 +643,89 @@ const declineOffer = asyncHandler(async (req, res) => {
 });
 
 // ── Job Roles & Organizational Hierarchy (FR-1.1 - FR-1.3) ───────────────────
-const DEFAULT_ROLES_SEED = [
-  {
-    roleCode: 'board-teams',
-    designation: 'Board of Directors / Apex',
-    shortTitle: 'Board',
-    dept: 'Executive / Governance',
-    band: 'L6',
-    tier: 1,
-    parentId: null,
-    reportsTo: 'Apex / Shareholders',
-    team: 'Governance',
-    headcount: 3,
-    purpose: 'Provide governance, approve major capital allocations, and steer long-term vision.',
-    responsibilities: ['Strategic oversight', 'Governance & compliance', 'Executive performance'],
-    deliverables: 'Company longevity, financial resilience, strategic alignment.',
-    exp: '20+ yrs',
-    qual: 'Executive Leadership',
-    skills: [{ name: 'Corporate Governance', score: 5.0 }, { name: 'Capital Allocation', score: 5.0 }],
-    competencies: ['Stewardship', 'Vision', 'Integrity'],
-  },
-  {
-    roleCode: 'ceo',
-    designation: 'Chief Executive Officer (CEO)',
-    shortTitle: 'CEO',
-    dept: 'Executive / Governance',
-    band: 'L6',
-    tier: 2,
-    parentId: 'board-teams',
-    reportsTo: 'Board of Directors',
-    team: 'Executive Office',
-    headcount: 1,
-    purpose: 'Set company vision and strategy, lead the C-suite, and own overall business performance.',
-    responsibilities: ['Own company P&L', 'Lead CFO, CTO, and COO', 'Represent company to partners'],
-    deliverables: 'Revenue and margin targets met, aligned leadership, board confidence.',
-    exp: '15+ yrs',
-    qual: 'MBA / Proven executive leadership track record',
-    skills: [{ name: 'Business Strategy', score: 5.0 }, { name: 'Leadership & Alignment', score: 4.9 }, { name: 'P&L Ownership', score: 4.8 }],
-    competencies: ['Visionary Leadership', 'Decisiveness', 'Commercial Acumen'],
-  },
-  {
-    roleCode: 'cfo',
-    designation: 'Chief Financial Officer (CFO)',
-    shortTitle: 'CFO',
-    dept: 'Finance & Accounts',
-    band: 'L5',
-    tier: 3,
-    parentId: 'ceo',
-    reportsTo: 'CEO',
-    team: 'C-Suite',
-    headcount: 1,
-    purpose: 'Own company finance strategy, statutory compliance, treasury, and financial governance.',
-    responsibilities: ['Direct budgeting & forecasting', 'Statutory, tax, and audit compliance', 'Treasury & capital allocation'],
-    deliverables: 'Clean audits, healthy cash flow, on-time statutory closings.',
-    exp: '12-15 yrs',
-    qual: 'Chartered Accountant (CA) / CPA / MBA Finance',
-    skills: [{ name: 'Financial Strategy', score: 5.0 }, { name: 'Statutory & Tax Governance', score: 4.8 }, { name: 'Treasury & Capital', score: 4.7 }],
-    competencies: ['Financial Rigor', 'Strategic Thinking', 'Integrity'],
-  },
-  {
-    roleCode: 'cto',
-    designation: 'Chief Technology Officer (CTO)',
-    shortTitle: 'CTO',
-    dept: 'Technology & Systems (IT)',
-    band: 'L5',
-    tier: 3,
-    parentId: 'ceo',
-    reportsTo: 'CEO',
-    team: 'C-Suite (CXO)',
-    headcount: 1,
-    purpose: 'Own company technology: the HRMS/CRM platform, cloud architecture, security, and IT function.',
-    responsibilities: ['Define technical architecture', 'Manage cloud infrastructure & security', 'Lead IT and engineering'],
-    deliverables: '99.9% uptime, secure SOC-2 compliant architecture, agile delivery cycles.',
-    exp: '10-14 yrs',
-    qual: 'B.Tech / M.Tech in Computer Science',
-    skills: [{ name: 'System Architecture & Cloud', score: 5.0 }, { name: 'Full-Stack & Distributed DBs', score: 4.8 }, { name: 'InfoSec & Governance', score: 4.7 }],
-    competencies: ['Technical Vision', 'Architectural Rigor', 'Agile Execution'],
-  },
-  {
-    roleCode: 'coo',
-    designation: 'Chief Operating Officer (COO)',
-    shortTitle: 'COO',
-    dept: 'Studio & Services Ops',
-    band: 'L5',
-    tier: 3,
-    parentId: 'ceo',
-    reportsTo: 'CEO',
-    team: 'C-Suite',
-    headcount: 1,
-    purpose: 'Own end-to-end operations across studios, academy, and services; operating heads report into this office.',
-    responsibilities: ['Steer operating performance across studios', 'Align capacity, quality, and budgets', 'Translate strategy into departmental targets'],
-    deliverables: 'NPS > 75, on-budget operations, aligned department scorecards.',
-    exp: '12-15 yrs',
-    qual: "Master's in Business / Operations Management",
-    skills: [{ name: 'Multi-Unit Operations', score: 4.9 }, { name: 'Capacity & Budget Planning', score: 4.7 }, { name: 'People Leadership', score: 4.8 }],
-    competencies: ['Operational Leadership', 'Execution', 'Quality Governance'],
-  },
-  {
-    roleCode: 'finance-head',
-    designation: 'Finance Head',
-    shortTitle: 'Finance Head',
-    dept: 'Finance & Accounts',
-    band: 'L4',
-    tier: 4,
-    parentId: 'cfo',
-    reportsTo: 'CFO',
-    team: 'Finance Leadership',
-    headcount: 1,
-    purpose: 'Lead financial governance, statutory tax compliance, corporate treasury, and internal audits.',
-    responsibilities: ['Formulate annual operating budgets', 'Ensure 100% compliance with GST & direct taxes', 'Oversee AP, AR, and payroll audit pipelines'],
-    deliverables: 'Timely statutory closings, clean audit reports, optimized working capital.',
-    exp: '10-12 yrs',
-    qual: 'Chartered Accountant (CA) / CMA / MBA Finance',
-    skills: [{ name: 'Corporate Financial Modeling', score: 5.0 }, { name: 'Statutory GST & Corporate Tax', score: 4.8 }, { name: 'Internal Audit', score: 4.7 }],
-    competencies: ['Statutory Integrity', 'Analytical Precision', 'Treasury Control'],
-  },
-  {
-    roleCode: 'eng-lead',
-    designation: 'IT Head',
-    shortTitle: 'IT Head',
-    dept: 'Technology & Systems (IT)',
-    band: 'L4',
-    tier: 4,
-    parentId: 'cto',
-    reportsTo: 'CTO',
-    team: 'IT Leadership',
-    headcount: 1,
-    purpose: 'Lead the IT and engineering team building and running the HRMS/CRM platform and release pipelines.',
-    responsibilities: ['Own sprint delivery & code quality', 'Run CI/CD and production monitoring', 'Mentor engineers'],
-    deliverables: 'On-time releases, < 0.1% error rate, secure and documented services.',
-    exp: '6-9 yrs',
-    qual: 'B.Tech / M.Tech in Computer Science',
-    skills: [{ name: 'Full-Stack Engineering', score: 4.8 }, { name: 'API & Integration Design', score: 4.7 }, { name: 'CI/CD & DevOps', score: 4.6 }],
-    competencies: ['Technical Ownership', 'Delivery Focus', 'Mentorship'],
-  },
-  {
-    roleCode: 'studio-head',
-    designation: 'Studio Operations Head',
-    shortTitle: 'Studio Head',
-    dept: 'Studio & Services Ops',
-    band: 'L4',
-    tier: 4,
-    parentId: 'coo',
-    reportsTo: 'COO',
-    team: 'Studio Leadership',
-    headcount: 1,
-    purpose: 'Own day-to-day studio operations: bookings, artist scheduling, hygiene standards, and client experience.',
-    responsibilities: ['Run multi-studio scheduling & staffing', 'Enforce hygiene, safety, and grooming standards', 'Resolve client escalations'],
-    deliverables: 'NPS > 75, on-time turnaround, zero hygiene escalations.',
-    exp: '6-9 yrs',
-    qual: "Bachelor's in Hospitality / Operations",
-    skills: [{ name: 'Studio Scheduling & Capacity', score: 4.7 }, { name: 'Hygiene & Safety Governance', score: 4.8 }, { name: 'Client Experience', score: 4.6 }],
-    competencies: ['Operational Discipline', 'People Leadership', 'Service Excellence'],
-  },
-  {
-    roleCode: 'academy-head',
-    designation: 'Academy Head (Principal)',
-    shortTitle: 'Academy Head',
-    dept: 'Academy',
-    band: 'L4',
-    tier: 4,
-    parentId: 'coo',
-    reportsTo: 'COO',
-    team: 'Academy Leadership',
-    headcount: 1,
-    purpose: 'Lead the makeup academy: curriculum quality, trainer performance, admissions, and student outcomes.',
-    responsibilities: ['Own curriculum roadmap & certifications', 'Supervise trainers and monitor student pass rates', 'Drive admissions targets'],
-    deliverables: 'Certification pass rate > 92%, trainer score > 4.7, full batch enrolment.',
-    exp: '7-10 yrs',
-    qual: 'Master Trainer / Cosmetology Educator Certification',
-    skills: [{ name: 'Curriculum & Pedagogy', score: 4.8 }, { name: 'Trainer Management', score: 4.6 }, { name: 'Admissions & Growth', score: 4.4 }],
-    competencies: ['Educational Leadership', 'Mentorship', 'Quality Governance'],
-  },
-  {
-    roleCode: 'sr-bridal-stylist',
-    designation: 'Senior Bridal Stylist',
-    shortTitle: 'Senior Bridal Stylist',
-    dept: 'Bridal Styling',
-    band: 'L4',
-    tier: 5,
-    parentId: 'studio-head',
-    reportsTo: 'Studio Operations Head',
-    team: 'Bridal Styling Team',
-    headcount: 4,
-    purpose: 'Lead luxury HD bridal makeovers end-to-end and own client satisfaction on high-stakes wedding days.',
-    responsibilities: ['Consult, design, and execute bespoke HD bridal makeup', 'Mentor trainee artists on hygiene', 'Own client timelines across wedding schedules'],
-    deliverables: 'On-brand looks, 4.8+ client rating, zero hygiene escalations.',
-    exp: '4-6 yrs',
-    qual: 'Diploma in Cosmetology / Bridal Makeup Certification',
-    skills: [{ name: 'HD Bridal & Airbrush Contouring', score: 5.0 }, { name: 'Traditional & Muhurtham Draping', score: 4.8 }, { name: 'Skin Triage & Color Correction', score: 4.7 }],
-    competencies: ['Creative Precision', 'Composure Under Pressure', 'Hygiene Discipline'],
-  },
-  {
-    roleCode: 'academy-trainer',
-    designation: 'Academy Trainer',
-    shortTitle: 'Academy Trainer',
-    dept: 'Academy',
-    band: 'L4',
-    tier: 5,
-    parentId: 'academy-head',
-    reportsTo: 'Academy Head',
-    team: 'Academy Team',
-    headcount: 2,
-    purpose: 'Deliver professional makeup and hairstyling curriculum to academy students and assess practical certifications.',
-    responsibilities: ['Lead live stage demos & workshops', 'Update syllabus to reflect current trends', 'Track student graduation metrics'],
-    deliverables: 'Student certification pass rate > 92%, trainer feedback score > 4.7.',
-    exp: '3-5 yrs',
-    qual: 'Train-the-Trainer Certification / Master Makeup Diploma',
-    skills: [{ name: 'Curriculum Delivery & Stage Demos', score: 4.9 }, { name: 'Cosmetic Chemistry & Hygiene', score: 4.6 }, { name: 'Student Mentorship', score: 4.8 }],
-    competencies: ['Stage Presence', 'Patience', 'Pedagogical Clarity'],
-  },
-  {
-    roleCode: 'studio-asst',
-    designation: 'Studio Assistant',
-    shortTitle: 'Studio Assistant',
-    dept: 'Studio Ops',
-    band: 'L2',
-    tier: 5,
-    parentId: 'studio-head',
-    reportsTo: 'Studio Operations Head',
-    team: 'Studio Operations Team',
-    headcount: 4,
-    purpose: 'Maintain studio hygiene, sanitize equipment, prepare vanity workstations, and track product inventory.',
-    responsibilities: ['Sanitize brushes, palettes, and styling tools', 'Prep workstation setups ahead of appointments', 'Conduct daily stock counts'],
-    deliverables: 'Zero hygiene non-compliances, stations prepped 15 min prior to appointments.',
-    exp: '0-2 yrs',
-    qual: 'Higher Secondary / Any Diploma / Salon Basics Training',
-    skills: [{ name: 'Sanitization & Brush Care', score: 4.8 }, { name: 'Vanity Station Preparation', score: 4.7 }, { name: 'Inventory Stock Logging', score: 4.4 }],
-    competencies: ['Reliability', 'Workplace Discipline', 'Swift Attention'],
-  },
-  {
-    roleCode: 'sr-accountant',
-    designation: 'Senior Accountant',
-    shortTitle: 'Senior Accountant',
-    dept: 'Finance & Accounts',
-    band: 'L3',
-    tier: 5,
-    parentId: 'finance-head',
-    reportsTo: 'Finance Head',
-    team: 'Finance Team',
-    headcount: 2,
-    purpose: 'Manage comprehensive general ledger books, monthly accounts closing, tax filings, and bank reconciliations.',
-    responsibilities: ['Reconcile salon billing & vendor invoices', 'Prepare monthly P&L and tax computations', 'Coordinate with statutory auditors'],
-    deliverables: 'Accounts finalized by 5th of each month, zero filing delays.',
-    exp: '4-6 yrs',
-    qual: 'M.Com / CA Inter / B.Com',
-    skills: [{ name: 'General Ledger Accounting', score: 4.8 }, { name: 'GST Returns (GSTR-1, 3B)', score: 4.7 }, { name: 'Tally Prime / ERP', score: 4.9 }],
-    competencies: ['Attention to Detail', 'Reconciliation Speed', 'Statutory Discipline'],
-  },
-  {
-    roleCode: 'software-eng',
-    designation: 'Software Engineer',
-    shortTitle: 'Software Engineer',
-    dept: 'Technology & Systems (IT)',
-    band: 'L3',
-    tier: 5,
-    parentId: 'eng-lead',
-    reportsTo: 'IT Head',
-    team: 'IT Team',
-    headcount: 3,
-    purpose: 'Build and maintain features across the HRMS/CRM web and mobile apps and backend services.',
-    responsibilities: ['Implement features and automated tests', 'Integrate third-party APIs', 'Participate in code reviews'],
-    deliverables: 'Shipped features per sprint, green test suite, timely bug fixes.',
-    exp: '2-5 yrs',
-    qual: 'B.Tech / BCA / MCA or equivalent',
-    skills: [{ name: 'JavaScript / Flutter / Node', score: 4.6 }, { name: 'Databases & Queries', score: 4.5 }, { name: 'Testing & Debugging', score: 4.5 }],
-    competencies: ['Craftsmanship', 'Collaboration', 'Problem Solving'],
-  },
-];
+// Job roles are HR-owned master data (owner decision 2026-11-24): there are no
+// seeded defaults; HR adds the roles that exist in the office. Only `admin` and
+// `hr` logins may create, edit or delete them (same rule as the leave desk).
+// Each role sits in a real department (Departments master) and may name the CRM
+// login role (Settings -> Roles key) its hires get.
+const JOB_ROLE_MANAGERS = ['admin', 'hr'];
+const isJobRoleManager = (user) => JOB_ROLE_MANAGERS.includes(String(user?.role || '').trim().toLowerCase());
+const assertJobRoleManager = (req, res) => {
+  if (!isJobRoleManager(req.user)) {
+    res.status(403);
+    throw new Error('Only HR or an administrator can manage job roles');
+  }
+};
+
+// The active job role with this exact title (case-insensitive), or null.
+const findJobRoleByTitle = async (title) => {
+  const t = String(title || '').trim();
+  if (!t) return null;
+  return JobRole.findOne({ active: true, designation: new RegExp(`^${escRx(t)}$`, 'i') }).lean();
+};
+
+// Department from the master: by id, else by name. 400 when neither resolves.
+const resolveJobRoleDepartment = async (res, departmentId, deptName) => {
+  let dep = null;
+  if (departmentId) dep = await Department.findById(departmentId).select('name active').lean();
+  else if (String(deptName || '').trim()) {
+    dep = await Department.findOne({ name: new RegExp(`^${escRx(String(deptName).trim())}$`, 'i') })
+      .select('name active')
+      .lean();
+  }
+  if (!dep || dep.active === false) {
+    res.status(400);
+    throw new Error('Please choose a department from the Departments list');
+  }
+  return { departmentId: dep._id, dept: dep.name };
+};
+
+// '' (no CRM role) or a known Settings role key. Only an admin may link the
+// admin-only roles (admin / manager / ceo), matching who may grant them at login.
+const resolveCrmRoleKey = async (req, res, raw) => {
+  const key = String(raw || '').trim().toLowerCase();
+  if (!key) return '';
+  const role = await Role.findOne({ key }).select('key active').lean();
+  if (!role || role.active === false) {
+    res.status(400);
+    throw new Error(`Unknown CRM role "${key}"`);
+  }
+  if (isAdminOnlyRole(key) && String(req.user?.role || '').trim().toLowerCase() !== 'admin') {
+    res.status(403);
+    throw new Error(`Only an administrator can link the "${key}" login role`);
+  }
+  return key;
+};
+
+const assertUniqueDesignation = async (res, designation, exceptId = null) => {
+  const filter = { active: true, designation: new RegExp(`^${escRx(designation)}$`, 'i') };
+  if (exceptId) filter._id = { $ne: exceptId };
+  if (await JobRole.exists(filter)) {
+    res.status(409);
+    throw new Error(`A job role named "${designation}" already exists`);
+  }
+};
 
 const getJobRoles = asyncHandler(async (req, res) => {
-  let roles = await JobRole.find({ active: true }).sort({ tier: 1, designation: 1 }).lean();
-  if (roles.length === 0) {
-    await JobRole.insertMany(DEFAULT_ROLES_SEED);
-    roles = await JobRole.find({ active: true }).sort({ tier: 1, designation: 1 }).lean();
-  }
+  // No auto-seed: HR creates its own roles.
+  const roles = await JobRole.find({ active: true }).sort({ tier: 1, designation: 1 }).lean();
   res.json(roles);
 });
 
 const createJobRole = asyncHandler(async (req, res) => {
-  guard(req, res);
-  await assertHrWide(req, res); // job roles are company master data
+  assertJobRoleManager(req, res);
   const designation = String(req.body.designation || '').trim();
   if (!designation) { res.status(400); throw new Error('Please provide a designation title'); }
+  await assertUniqueDesignation(res, designation);
+  const { departmentId, dept } = await resolveJobRoleDepartment(res, req.body.departmentId, req.body.dept);
+  const crmRoleKey = await resolveCrmRoleKey(req, res, req.body.crmRoleKey);
   const role = await JobRole.create({
     roleCode: req.body.roleCode || `role-${Date.now()}`,
     designation,
     shortTitle: req.body.shortTitle || designation,
-    dept: String(req.body.dept || 'Operations').trim(),
+    dept,
+    departmentId,
+    crmRoleKey,
     band: req.body.band || 'L3',
     tier: Number(req.body.tier) || 5,
     parentId: req.body.parentId || null,
@@ -934,14 +745,23 @@ const createJobRole = asyncHandler(async (req, res) => {
 });
 
 const updateJobRole = asyncHandler(async (req, res) => {
-  guard(req, res);
-  await assertHrWide(req, res); // job roles are company master data
+  assertJobRoleManager(req, res);
   const role = await JobRole.findById(req.params.id);
-  if (!role) { res.status(404); throw new Error('Job role not found'); }
+  if (!role || role.active === false) { res.status(404); throw new Error('Job role not found'); }
   const b = req.body;
-  if (b.designation !== undefined) role.designation = String(b.designation).trim();
+  if (b.designation !== undefined) {
+    const designation = String(b.designation).trim();
+    if (!designation) { res.status(400); throw new Error('Please provide a designation title'); }
+    await assertUniqueDesignation(res, designation, role._id);
+    role.designation = designation;
+  }
+  if (b.departmentId !== undefined || b.dept !== undefined) {
+    const d = await resolveJobRoleDepartment(res, b.departmentId, b.dept);
+    role.departmentId = d.departmentId;
+    role.dept = d.dept;
+  }
+  if (b.crmRoleKey !== undefined) role.crmRoleKey = await resolveCrmRoleKey(req, res, b.crmRoleKey);
   if (b.shortTitle !== undefined) role.shortTitle = String(b.shortTitle).trim();
-  if (b.dept !== undefined) role.dept = String(b.dept).trim();
   if (b.band !== undefined) role.band = b.band;
   if (b.tier !== undefined) role.tier = Number(b.tier) || 5;
   if (b.parentId !== undefined) role.parentId = b.parentId || null;
@@ -959,14 +779,15 @@ const updateJobRole = asyncHandler(async (req, res) => {
   res.json(role);
 });
 
+// Archived (active=false), not hard-deleted: employees hired into it keep a
+// valid jobRoleId. It disappears from every list and its name can be reused.
 const deleteJobRole = asyncHandler(async (req, res) => {
-  guard(req, res);
-  await assertHrWide(req, res); // job roles are company master data
+  assertJobRoleManager(req, res);
   const role = await JobRole.findById(req.params.id);
   if (!role) { res.status(404); throw new Error('Job role not found'); }
   role.active = false;
   await role.save();
-  res.json({ message: 'Job role archived', id: req.params.id });
+  res.json({ message: 'Job role deleted', id: req.params.id });
 });
 
 const getHiringPlans = asyncHandler(async (req, res) => {
@@ -1080,11 +901,17 @@ const deleteHiringPlan = asyncHandler(async (req, res) => {
 
 const notifyRecruitmentTeam = async ({ title, body, link }) => {
   try {
-    const recipients = await User.find({
+    // Permissions live on the Role record, not the User: find the roles that
+    // carry recruitment / Staff-HR access (e.g. `hr`), then their users.
+    const roleRows = await Role.find({
       $or: [
-        { role: { $in: ['admin', 'manager'] } },
         { permissions: { $in: ['recruitment', 'staff'] } },
+        { permissions: { $regex: /^(recruitment|staff)\./ } },
       ],
+    }).select('key').lean();
+    const roleKeys = ['admin', 'manager', 'hr', ...roleRows.map((r) => String(r.key || '').toLowerCase()).filter(Boolean)];
+    const recipients = await User.find({
+      role: { $in: [...new Set(roleKeys)] },
       active: { $ne: false },
     }).select('_id').lean();
 
@@ -1130,7 +957,7 @@ const incomingApplicantWebhook = asyncHandler(async (req, res) => {
   let jobTitle = String(b.jobTitle || b.role || b.position || '').trim();
   if (!jobPost && jobTitle) {
     jobPost = await JobPost.findOne({
-      title: new RegExp(`^${jobTitle.trim()}$`, 'i'),
+      title: new RegExp(`^${escRx(jobTitle.trim())}$`, 'i'),
       status: 'open',
     });
   }

@@ -407,14 +407,14 @@
       "id": "leave", "title": "Apply for / manage leave", "module": "HR", "route": "/hr/leave",
       "menuPath": "Sidebar → Leave (HRMS → Time & Attendance → Leave Management)",
       "keywords": ["leave", "holiday", "apply leave", "sick leave", "casual leave", "time off", "vacation", "leave balance"],
-      "summary": "Apply for leave and see your balance.",
-      "steps": ["Open Leave.", "Choose to apply, pick the type and dates, add a reason.", "Submit; your manager decides it in Approvals."]
+      "summary": "Apply for leave in Timebox; see your balance and history in the CRM. HR approves or rejects it in Leave Management.",
+      "steps": ["Apply for leave in the Timebox app (Attendance → Request Leave).", "It arrives in the CRM for HR to decide.", "Open Leave Management in the CRM to see your balance, upcoming leave and HR's decision.", "HR and admin approve or reject under Leave Management → Overview or Requests."]
     },
     {
       "id": "approvals", "title": "Approvals", "module": "HR", "route": "/hr/approvals",
       "menuPath": "Sidebar → Approvals",
-      "keywords": ["approve leave", "pending approvals", "reject", "team requests"],
-      "summary": "Review and decide leave and HR requests from your team.",
+      "keywords": ["pending approvals", "reject", "team requests", "expense claim approval"],
+      "summary": "Review and decide HR requests from your team (leave is decided in Leave Management by HR).",
       "steps": ["Open Approvals.", "Open a request and approve or reject with a comment."]
     },
     {

@@ -3,7 +3,7 @@ import Booking from '../models/Booking.js';
 import Employee from '../models/Employee.js';
 import SlotCapacity from '../models/SlotCapacity.js';
 import BlockedDate from '../models/BlockedDate.js';
-import { slotHalf, consumesSlot, dayKey } from '../utils/slots.js';
+import { slotHalf, consumesSlot, dayKey, dayWindow } from '../utils/slots.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 
 // Marketing intelligence is read by the marketing team + full-access managers.
@@ -317,13 +317,13 @@ const computeCoverage = async () => {
 // [from, to), rolled up per calendar month. Mirrors slotController.getMonth.
 const slotUtilizationForRange = async (from, to, fyLabel) => {
   const def = (await SlotCapacity.findOne({ date: null })) || { morning: 3, evening: 3 };
-  const overrides = await SlotCapacity.find({ date: { $gte: from, $lt: to } }).lean();
+  const overrides = await SlotCapacity.find({ date: dayWindow(from, to) }).lean();
   const capByDay = new Map(overrides.map((o) => [dayKey(o.date).toISOString(), o]));
-  const blocked = await BlockedDate.find({ active: true, date: { $gte: from, $lt: to } })
+  const blocked = await BlockedDate.find({ active: true, date: dayWindow(from, to) })
     .select('date').lean();
   const blockedSet = new Set(blocked.map((b) => dayKey(b.date).toISOString()));
 
-  const bookings = await Booking.find({ bookingDate: { $gte: from, $lt: to } })
+  const bookings = await Booking.find({ bookingDate: dayWindow(from, to) })
     .select('bookingDate status').lean();
   const bookedByDay = new Map();
   for (const b of bookings) {

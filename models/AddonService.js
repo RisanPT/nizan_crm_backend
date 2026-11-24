@@ -22,6 +22,12 @@ const addonServiceSchema = mongoose.Schema(
       enum: ['active', 'inactive'],
       default: 'active',
     },
+    // Public website. Hidden until switched on in Team N Website.
+    website: {
+      show: { type: Boolean, default: false },
+      sortOrder: { type: Number, default: null },
+      description: { type: String, default: '', trim: true, maxlength: 200 },
+    },
   },
   {
     timestamps: true,

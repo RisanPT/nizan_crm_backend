@@ -6,7 +6,8 @@ import { getHrScope, assertEmployeeInScope, isHrWide } from '../utils/hrDeptScop
 // Dept heads only see/handle grievances of their own department's staff.
 const KEYS = ['grievance'];
 
-const isFull = (user) => ['admin', 'manager'].includes(String(user?.role || '').toLowerCase());
+// Confidential grievances: admin, manager and HR (role `hr`, added 2026-11-16).
+const isFull = (user) => ['admin', 'manager', 'hr'].includes(String(user?.role || '').trim().toLowerCase());
 
 // Full access sees confidential cases; others with the perm see non-confidential.
 const canManage = (user) => {

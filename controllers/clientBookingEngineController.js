@@ -4,7 +4,7 @@ import District from '../models/District.js';
 import ServicePackage from '../models/Package.js';
 import SlotCapacity from '../models/SlotCapacity.js';
 import SlotHold from '../models/SlotHold.js';
-import { slotHalf, consumesSlot, dayKey } from '../utils/slots.js';
+import { slotHalf, consumesSlot, dayKey, dayWindow } from '../utils/slots.js';
 
 const DEFAULT_MORNING = 3;
 const DEFAULT_EVENING = 3;
@@ -66,7 +66,7 @@ export const checkSingleDateAvailability = async (dateStr, clientUserId = null) 
   // Check if date is HR-blocked
   const isBlocked = !!(await BlockedDate.exists({
     active: true,
-    date: { $gte: day, $lt: dayEnd },
+    date: dayWindow(day, dayEnd),
   }));
 
   if (isBlocked) {
@@ -83,7 +83,7 @@ export const checkSingleDateAvailability = async (dateStr, clientUserId = null) 
 
   // Count existing confirmed/pending bookings
   const bookings = await Booking.find({
-    bookingDate: { $gte: day, $lt: dayEnd },
+    bookingDate: dayWindow(day, dayEnd),
     status: { $nin: ['cancelled', 'rejected', 'Cancelled', 'Rejected'] },
   })
     .select('eventSlot status')
