@@ -4,6 +4,7 @@ import ContentItem from '../models/ContentItem.js';
 import MarketingAsset, { ASSET_STAGES } from '../models/MarketingAsset.js';
 import SocialAccount from '../models/SocialAccount.js';
 import MarketingShoot from '../models/MarketingShoot.js';
+import Booking from '../models/Booking.js';
 import SocialsTarget from '../models/SocialsTarget.js';
 import MarketingActivity from '../models/MarketingActivity.js';
 import MarketingTask from '../models/MarketingTask.js';
@@ -18,6 +19,7 @@ import * as T from '../utils/marketingTeamStats.js';
 import { withBrands } from '../services/marketingLeadReportData.js';
 import { parseAssetSearch, assetClauses, combineClauses, rankAssets, termRegex } from '../utils/assetSearch.js';
 import { cleanKeywords, keywordAsStored, normalizeKeyword, renameKeyword, applyKeywordChange, rankKeywordSuggestions, MAX_KEYWORDS } from '../utils/assetKeywords.js';
+import { workOfAssets, workClauses, workFacets, LINKED } from '../services/workQuality.js';
 
 // The Socials module — Overview, Content Calendar, Content & Assets, Publishing & Accounts, Performance, Reports & Insights
 // (the marketing team's document, "Socials Module — UX Screens 01 to 06"). Routes: routes/marketingSocialsRoutes.js, /api/marketing/socials.
@@ -206,7 +208,7 @@ export const getCalendar = asyncHandler(async (req, res) => {
 
 // ── Assets (shared with the Creative Portfolio gallery) ───────────────────────
 
-const assetShape = (a, uploaderName = new Map()) => ({
+export const assetShape = (a, uploaderName = new Map(), work = null) => ({
   id: idOf(a),
   title: a.title,
   brand: a.brand,
@@ -227,6 +229,10 @@ const assetShape = (a, uploaderName = new Map()) => ({
   owner: a.ownerName || uploaderName.get(idOf(a.createdBy)) || '',
   approvedAt: a.approvedAt ?? null,
   createdAt: a.createdAt,
+  // the work it came from (a booking: its client, day, artists) and the client's review of it — null when it belongs to no work
+  bookingId: a.bookingId ? idOf(a.bookingId) : null,
+  workDay: a.workDay ?? '',
+  work,
 });
 
 /** The names of the people who added the assets that name no owner. */
@@ -287,8 +293,10 @@ export const listAssets = asyncHandler(async (req, res) => {
   if (period) base.createdAt = { $gte: istStart(period.from), $lt: istEnd(period.to) };
   const spec = parseAssetSearch(req.query);
   const [hits, ownerUsers] = await Promise.all([searchHits(spec.text.terms), ownerUsersOf(spec.owner)]);
-  const clauses = assetClauses(spec, { hits, ownerUsers });
+  // the artist on the work and the client's review of it narrow the library like any other filter
+  const clauses = { ...assetClauses(spec, { hits, ownerUsers }), ...(await workClauses(spec)) };
   const match = { ...base, ...combineClauses(clauses) };
+  const workGroup = (except) => [{ $match: combineClauses(clauses, [except]) }, { $match: LINKED }, { $group: { _id: { b: '$bookingId', s: '$shootId' }, n: { $sum: 1 } } }, { $limit: 5000 }];
   const facetOf = (key) => [{ $match: combineClauses(clauses, [key]) }, { $group: { _id: `$${key}`, n: { $sum: 1 } } }];
   // keywords asked as "all of these" narrow, so their list counts within the results; asked as "any of these" they are a choice
   const kwExcept = spec.kwMode === 'any' ? ['keywords'] : [];
@@ -309,6 +317,8 @@ export const listAssets = asyncHandler(async (req, res) => {
         // the keywords picked, counted even when they are not among the most used
         chosen: chosenKw.length ? [{ $match: combineClauses(clauses, [...kwExcept, 'notKeywords']) }, { $unwind: '$tags' }, { $match: { tags: { $in: chosenKw } } }, { $group: { _id: '$tags', n: { $sum: 1 } } }] : [{ $match: { _id: { $exists: false } } }],
         untagged: [{ $match: combineClauses(clauses, ['untagged']) }, { $match: { $or: [{ tags: { $exists: false } }, { tags: { $size: 0 } }] } }, { $count: 'n' }],
+        workArtist: workGroup('artist'),
+        workReview: workGroup('review'),
       },
     },
   ]);
@@ -339,8 +349,11 @@ export const listAssets = asyncHandler(async (req, res) => {
   for (const r of agg.chosen) if (!keywordRows.some((x) => x._id === r._id)) keywordRows.push(r);
   for (const k of chosenKw) if (!keywordRows.some((x) => x._id === k)) keywordRows.push({ _id: k, n: 0 });
   const k = agg.kpis[0] ?? { total: 0, photos: 0, videos: 0, finals: 0, approved: 0, postProduced: 0 };
+  const [works, wf] = await Promise.all([workOfAssets(items), workFacets(agg.workArtist, agg.workReview)]);
+  // an artist asked for stays in the list even when nothing matches now
+  for (const key of spec.artist) if (!wf.artists.some((a) => a.key === key)) wf.artists.push({ key, name: key.startsWith('n:') ? key.slice(2) : '', count: 0 });
   res.json({
-    items: items.map((a) => assetShape(a, names)),
+    items: items.map((a) => assetShape(a, names, works.get(idOf(a)) ?? null)),
     total,
     pageNo: spec.pageNo,
     pages,
@@ -359,6 +372,9 @@ export const listAssets = asyncHandler(async (req, res) => {
       owners,
       // assets with no keyword yet (to find and fix)
       untagged: agg.untagged[0]?.n ?? 0,
+      // the artists on the works behind the items, and the clients' reviews of those works
+      artists: wf.artists,
+      reviews: wf.reviews,
     },
     // what the search box was read as — shown under it so a typo or a left-out word is visible
     search: { terms: spec.text.terms.map((t) => (t.phrase ? `"${t.text}"` : t.text)), exclude: spec.text.exclude.map((t) => t.text), keywords: spec.text.keywords, notKeywords: spec.text.notKeywords },
@@ -443,8 +459,14 @@ export const getAsset = asyncHandler(async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.id)) bad(res, 'That asset was not found.', 404);
   const a = await MarketingAsset.findById(req.params.id).lean();
   if (!a) bad(res, 'That asset was not found.', 404);
-  res.json(assetShape(a, await uploaderNames([a])));
+  const works = await workOfAssets([a]);
+  res.json(assetShape(a, await uploaderNames([a]), works.get(idOf(a)) ?? null));
 });
+
+/** A booking picked for an asset must exist. */
+const checkAssetBooking = async (res, bookingId) => {
+  if (bookingId && !(await Booking.exists({ _id: bookingId }))) bad(res, 'That booking no longer exists.');
+};
 
 const shootForAsset = async (res, shootId) => {
   const shoot = await MarketingShoot.findById(shootId).select('brand category').lean();
@@ -463,9 +485,11 @@ export const createAsset = asyncHandler(async (req, res) => {
   // an upload attached to a shoot takes the shoot's brand, portfolio and tags — the shoot decides, whatever the form sent
   if (fields.shootId) fields = { ...fields, ...assetFromShoot(await shootForAsset(res, fields.shootId), fields) };
   if (!fields.ownerName) fields.ownerName = String(req.user?.name ?? '').trim().slice(0, 100);
+  await checkAssetBooking(res, fields.bookingId);
   fields.approvedAt = approvedAtFor({}, { stage: fields.stage ?? 'raw', isFinal: fields.isFinal === true });
   const asset = await MarketingAsset.create({ ...fields, createdBy: req.user._id });
-  res.status(201).json(assetShape(asset.toObject()));
+  const works = await workOfAssets([asset.toObject()]);
+  res.status(201).json(assetShape(asset.toObject(), new Map(), works.get(idOf(asset)) ?? null));
 });
 
 export const updateAsset = asyncHandler(async (req, res) => {
@@ -479,6 +503,7 @@ export const updateAsset = asyncHandler(async (req, res) => {
   if (!manager && v.value.isFinal !== undefined && v.value.isFinal !== !!asset.isFinal) bad(res, MANAGER_ONLY_ASSET, 403);
   const before = { stage: asset.stage, isFinal: asset.isFinal, approvedAt: asset.approvedAt, shootId: asset.shootId ? idOf(asset.shootId) : null };
   let fields = { ...v.value };
+  await checkAssetBooking(res, fields.bookingId);
   // a new file behind an approved (or final) asset is not what was approved: it goes back for review unless a manager changed it
   if (!manager && fields.url && fields.url !== asset.url && isUsableAsset(asset)) {
     fields.stage = 'in_review';
@@ -492,7 +517,8 @@ export const updateAsset = asyncHandler(async (req, res) => {
   await asset.save();
   // the posts made from it follow it to its new shoot
   if ((shootId ?? null) !== before.shootId) await ContentItem.updateMany({ assetId: asset._id }, { $set: { shootId: shootId ?? null } });
-  res.json(assetShape(asset.toObject(), await uploaderNames([asset])));
+  const works = await workOfAssets([asset.toObject()]);
+  res.json(assetShape(asset.toObject(), await uploaderNames([asset]), works.get(idOf(asset)) ?? null));
 });
 
 export const deleteAsset = asyncHandler(async (req, res) => {

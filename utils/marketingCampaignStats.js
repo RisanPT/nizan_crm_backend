@@ -1,6 +1,7 @@
 import { istDay, addDays, eachDay, previousRange, changePct, daysBetween } from './marketingTeamStats.js';
 import { isQualified, qualityOf, leadDay, sourceKeyOf, leadBrand, QUALITIES, NOT_RATED } from './marketingLeadStages.js';
 import { DEAD_BOOKING, outcomeContext, bookingMoney, brandOfCampaign, costPer, leadsByCampaignType, CAMPAIGN_TYPES } from './marketingOutcomes.js';
+import { metaStatusWord } from './metaAds.js';
 
 // What the Campaigns hub counts — ONE definition of each number, used by every tab, so Overview, All Campaigns, Performance, Budget & Spend,
 // Leads & Conversions, Reports and the Weekly Report agree. Pure (tests/marketingCampaignStats.test.js): the controller
@@ -355,6 +356,8 @@ export const campaignRows = ({ campaigns, metrics, leads, outcomes, work = new M
         platform: platformOfCampaign(c),
         objective: objectiveOfCampaign(c),
         status: statusOfCampaign(c),
+        // the status read from Meta by the live sync, in words ("Paused", "Ended"…); '' = the status is the team's own
+        metaStatus: metaStatusWord(c.metaStatus ?? ''),
         budget: num(c.budget),
         metaCampaignId: c.metaCampaignId ?? '',
         spend: m.spend,
@@ -629,8 +632,10 @@ export const adRows = (ads, campaignsById, opts = null) => {
       metaAdId: a.metaAdId ?? '',
       format: a.format ?? 'image',
       status: a.status ?? 'active',
+      metaStatus: metaStatusWord(a.metaStatus ?? ''), // Meta's own word ("Ad set paused", "Rejected by Meta"…); '' = not read from Meta
       creativeUrl: a.creativeUrl ?? '',
       thumbUrl: a.thumbUrl ?? '',
+      thumbFromMeta: a.thumbSource === 'meta', // the picture is the ad's own on Meta (refreshed by every sync)
       figures: f.figures === 'range' ? 'range' : 'lifetime',
       impressions: f.impressions,
       reach: f.reach,

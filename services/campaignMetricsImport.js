@@ -3,12 +3,15 @@
 // can never disagree about matching or replacing. The rows are the import's own shape (utils/marketingCampaignInput.js cleanImportInput).
 //
 //  • 'campaign' rows — a campaign's day: each campaign-day record is REPLACED (writing the same rows twice changes nothing).
-//  • 'ad' rows — an AD's day: the ad is found by its Meta ad ID, else by its name in the campaign, else ADDED; its day is replaced; then
+//  • 'ad' rows — an AD's day: the ad is found by its Meta ad ID, else by its name in the campaign, else ADDED; its day is replaced (a row
+//    with no ad ID whose name two of the campaign's ads carry is NOT written — another ad would count those days twice); then
 //    (file import) the campaign's day becomes the sum of its ads' days. The live sync keeps Meta's own campaign day instead (reach does not
 //    add up across ads), so it passes campaignDaysFromAds: false.
 //  • 'breakdown' rows — an audience / placement segment's day: stored per campaign, day and segment; a campaign-day with no figure of its
 //    own gets the segments' total (file import only).
-// Campaigns are matched by Meta campaign ID, else exact title; one that is not found is created only when asked (createMissing).
+// Campaigns are matched by Meta campaign ID, else exact title (utils/marketingCampaignInput.js matchImportGroups says when a title is not
+// trusted); one that is not found is created only when asked (createMissing). A campaign that gets a Meta ID here takes the Meta Lead
+// Ads leads that came before it (services/metaLeadTags.js).
 import mongoose from 'mongoose';
 import Campaign from '../models/Campaign.js';
 import CampaignDailyMetric from '../models/CampaignDailyMetric.js';
@@ -16,7 +19,8 @@ import CampaignAd from '../models/CampaignAd.js';
 import CampaignAdDailyMetric from '../models/CampaignAdDailyMetric.js';
 import CampaignBreakdownMetric from '../models/CampaignBreakdownMetric.js';
 import MetaImportLog from '../models/MetaImportLog.js';
-import { groupImportRows, matchImportGroups, matchImportAd } from '../utils/marketingCampaignInput.js';
+import { groupImportRows, matchImportGroups, adMatchOf } from '../utils/marketingCampaignInput.js';
+import { tagMetaLeads } from './metaLeadTags.js';
 
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 export const r2 = (n) => Math.round(n * 100) / 100;
@@ -114,8 +118,10 @@ export const writeImportRows = async ({
   if (stampMetaIds) {
     for (const { group, campaign } of matched) {
       if (group.metaId && !campaign.metaCampaignId && !(await metaIdTaken(group.metaId, campaign._id))) {
-        await Campaign.updateOne({ _id: campaign._id, $or: [{ metaCampaignId: '' }, { metaCampaignId: null }, { metaCampaignId: { $exists: false } }] }, { $set: { metaCampaignId: group.metaId } });
+        const r = await Campaign.updateOne({ _id: campaign._id, $or: [{ metaCampaignId: '' }, { metaCampaignId: null }, { metaCampaignId: { $exists: false } }] }, { $set: { metaCampaignId: group.metaId } });
         campaign.metaCampaignId = group.metaId;
+        // the Meta leads of this campaign that came before it was known
+        if (r.modifiedCount) await tagMetaLeads(group.metaId, campaign._id);
       }
     }
   }
@@ -128,6 +134,7 @@ export const writeImportRows = async ({
       if (u.reason !== 'no_match' || !u.group.name) continue;
       const taken = u.group.metaId && (await metaIdTaken(u.group.metaId));
       const c = await Campaign.create({ title: u.group.name, brand, platform: 'meta', channel: 'Meta', status: 'active', metaCampaignId: taken ? '' : u.group.metaId, createdBy: actorId });
+      if (!taken && u.group.metaId) await tagMetaLeads(u.group.metaId, c._id);
       created += 1;
       targets.push({ group: u.group, campaignId: c._id });
     }
@@ -140,13 +147,14 @@ export const writeImportRows = async ({
       if (!last || day > last) last = day;
     }
   }
-  const writes = level === 'ad' ? targets.reduce((n, t) => n + [...t.group.ads.values()].reduce((m, a) => m + a.days.size, 0), 0) : level === 'breakdown' ? targets.reduce((n, t) => n + t.group.segments.size, 0) : targets.reduce((n, t) => n + t.group.days.size, 0);
+  let writes = level === 'ad' ? targets.reduce((n, t) => n + [...t.group.ads.values()].reduce((m, a) => m + a.days.size, 0), 0) : level === 'breakdown' ? targets.reduce((n, t) => n + t.group.segments.size, 0) : targets.reduce((n, t) => n + t.group.days.size, 0);
   const stillUnmatched = unmatched.filter((u) => !(createMissing && u.reason === 'no_match' && u.group.name));
   const unmatchedList = stillUnmatched.map((u) => ({ name: u.group.name, metaId: u.group.metaId, reason: u.reason, rows: u.group.rowCount, days: u.group.days.size, spend: r2(sumDays(u.group)), from: [...u.group.days.keys()].sort()[0] ?? '', to: [...u.group.days.keys()].sort().at(-1) ?? '' }));
   const matchedRows = targets.reduce((n, t) => n + t.group.rowCount, 0);
   const unmatchedRows = stillUnmatched.reduce((n, u) => n + u.group.rowCount, 0);
   const unmatchedNames = stillUnmatched.map((u) => u.group.name || u.group.metaId);
   let adsCreated = 0;
+  const adsSkipped = []; // [{ campaign, ad }] rows not written: the ad's name is shared and the file has no ad ID to tell them apart
   if (writes) {
     if (!log) {
       // the importer may send a big file in several requests: they share one log entry
@@ -165,7 +173,12 @@ export const writeImportRows = async ({
       for (const t of targets) {
         const have = await CampaignAd.find({ campaignId: t.campaignId }).select('name metaAdId').lean();
         for (const fileAd of t.group.ads.values()) {
-          let ad = matchImportAd(fileAd, have);
+          const found = adMatchOf(fileAd, have);
+          if (found.ambiguous) {
+            adsSkipped.push({ campaign: t.group.name, ad: fileAd.name, days: fileAd.days.size, spend: r2([...fileAd.days.values()].reduce((s, d) => s + d.spend, 0)) });
+            continue;
+          }
+          let ad = found.ad;
           if (!ad) {
             ad = (await CampaignAd.create({ campaignId: t.campaignId, name: fileAd.name || `Ad ${fileAd.metaId}`, adSetName: fileAd.adSetName, metaAdId: fileAd.metaId, metaAdSetId: fileAd.adSetId, format: 'other', status: 'active', dailyFigures: true, createdBy: actorId })).toObject();
             have.push(ad);
@@ -184,6 +197,7 @@ export const writeImportRows = async ({
           }
         }
       }
+      writes -= adsSkipped.reduce((n, s) => n + s.days, 0); // what was not written is not counted
       if (adDays.length) await CampaignAdDailyMetric.bulkWrite(adDays.map((d) => ({ updateOne: { filter: { adId: d.adId, day: d.day }, update: { $set: { campaignId: d.campaignId, ...figuresOnly(d.figures), ...stamp } }, upsert: true } })));
       await recomputeFromAds([...pairs.values()], touchedAds, actorId, log._id, campaignDaysFromAds);
     } else {
@@ -214,5 +228,5 @@ export const writeImportRows = async ({
     log.to = !log.to || (last && last > log.to) ? last : log.to;
     await log.save();
   }
-  return { dryRun: false, ...report, unmatched: unmatchedList, created, written: writes, adsCreated, importId: log ? idOf(log) : null, from: first, to: last };
+  return { dryRun: false, ...report, unmatched: unmatchedList, created, written: writes, adsCreated, adsSkipped, importId: log ? idOf(log) : null, from: first, to: last };
 };

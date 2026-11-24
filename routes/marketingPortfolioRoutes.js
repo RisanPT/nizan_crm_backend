@@ -6,7 +6,7 @@ import { protect } from '../middleware/authMiddleware.js';
 import { attachMarketingAccess } from '../controllers/marketingEodController.js';
 import { canManageMarketing } from '../controllers/contentController.js';
 import {
-  addMoodboard, renameMoodboardItem, removeMoodboard, saveLogistics,
+  addMoodboard, renameMoodboardItem, removeMoodboard, addCameraRefs, renameCameraRef, removeCameraRef, saveLogistics,
   tickChecklist,
   markFrameShot,
   uploadShootDocument,
@@ -15,6 +15,7 @@ import {
   removeShootDocument,
   listShoots, getShoot, createShoot, updateShoot, deleteShoot, getSetup, getCalendar, getReports, getBookingOptions, getShootOptions, getBookingContent,
 } from '../controllers/marketingPortfolioController.js';
+import { getQuality, getArtistQuality } from '../controllers/workQualityController.js';
 
 // /api/marketing/portfolio — the Creative Portfolio (Shoot Planner, Production Calendar, Shoot Reports, and a booking's Content card).
 // The Gallery reads the shared
@@ -42,6 +43,9 @@ router.use(
 );
 
 router.get('/setup', getSetup);
+// Artist Quality: the clients' reviews of each artist's works, with the works' photos and videos
+router.get('/quality', getQuality);
+router.get('/quality/artist/:key', getArtistQuality);
 router.get('/calendar', getCalendar);
 router.get('/reports', getReports);
 router.get('/booking-options', getBookingOptions); // works a shoot can be linked to
@@ -51,6 +55,8 @@ router.route('/shoots').get(listShoots).post(createShoot);
 router.route('/shoots/:id').get(getShoot).put(updateShoot).delete(deleteShoot);
 // the moodboard (pictures and links) and Crew & Logistics, changed from their own tabs
 router.route('/shoots/:id/moodboard').post(addMoodboard).patch(renameMoodboardItem).delete(removeMoodboard);
+// Camera Movement: its reference pictures and video links (its PDFs: /documents with part=camera)
+router.route('/shoots/:id/camera').post(addCameraRefs).patch(renameCameraRef).delete(removeCameraRef);
 router.put('/shoots/:id/logistics', saveLogistics);
 router.patch('/shoots/:id/logistics/check', tickChecklist); // one checklist line ticked (never undoes another person's tick)
 router.patch('/shoots/:id/storyboard/:key', markFrameShot); // one frame ticked as filmed on the shoot day

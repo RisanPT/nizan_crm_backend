@@ -13,6 +13,7 @@ import { getSalesExcludedCreatorsHandler } from '../utils/salesRules.js';
 import { getBookingMap } from '../controllers/bookingMapController.js';
 import { getNextWorkHints } from '../controllers/artistDayController.js';
 import { fleetAssignmentGuard } from '../middleware/fleetAssignmentGuard.js';
+import { artistAssignmentGuard } from '../middleware/artistAssignmentGuard.js';
 
 const router = express.Router();
 
@@ -28,7 +29,8 @@ router.get('/map', getBookingMap);
 // An artist's works screen: where each work falls in their day + the road to the next one (before '/:id').
 router.get('/next-work', getNextWorkHints);
 // A driver / vehicle that is already on another work then (or unavailable) needs a confirmation.
-router.route('/').get(getBookings).post(fleetAssignmentGuard, createBooking);
-router.route('/:id').get(getBookingById).put(fleetAssignmentGuard, updateBooking).delete(deleteBooking);
+// An artist put on a NEW booking who is already on another work then, on leave, or out of slots needs one too (artistAssignmentGuard).
+router.route('/').get(getBookings).post(fleetAssignmentGuard, artistAssignmentGuard, createBooking);
+router.route('/:id').get(getBookingById).put(fleetAssignmentGuard, artistAssignmentGuard, updateBooking).delete(deleteBooking);
 
 export default router;

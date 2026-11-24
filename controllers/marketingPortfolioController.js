@@ -1,7 +1,7 @@
 import asyncHandler from 'express-async-handler';
 import WorkFootage from '../models/WorkFootage.js';
 import { footageState, sizeLabel } from '../utils/workFootage.js';
-import { addToMoodboard, checkPdf, utf8Name, cleanLogistics, cleanMoodboardItems, DOC_PARTS, makeDocKey, MAX_DOCS_PER_PART, mergeStoryboard, moodboardKind, relabelMoodboard, removeFromMoodboard, shiftMilestones, shotProgress, withFrameKeys } from '../utils/shootBoard.js';
+import { addToMoodboard, checkPdf, utf8Name, cleanLogistics, cleanMoodboardItems, DOC_PART_NAMES, DOC_PARTS, makeDocKey, MAX_DOCS_PER_PART, mergeStoryboard, moodboardKind, relabelMoodboard, removeFromMoodboard, shiftMilestones, shotProgress, withFrameKeys } from '../utils/shootBoard.js';
 import { getPdf, putPdf, removePdf } from '../services/shootFiles.js';
 import mongoose from 'mongoose';
 import MarketingShoot, { MILESTONE_KEYS } from '../models/MarketingShoot.js';
@@ -164,6 +164,7 @@ export const getShoot = asyncHandler(async (req, res) => {
     brief: s.brief ?? {},
     crew: (s.crew ?? []).map((c) => ({ memberId: c.memberId ? idOf(c.memberId) : null, employeeId: c.employeeId ? idOf(c.employeeId) : null, name: c.name, role: c.role })),
     references: refsView(s.references),
+    cameraRefs: refsView(s.cameraRefs),
     logistics: logisticsView(s.logistics),
     storyboard: storyboardView(s.storyboard),
     documents: documentsView(s.documents),
@@ -278,39 +279,55 @@ const shootOr404 = async (res, id) => {
   return shoot;
 };
 
-/** Add pictures and links to the moodboard ({ items: [{ url, label }] }) — a picture uploaded from the phone arrives as its link. */
-export const addMoodboard = asyncHandler(async (req, res) => {
+// the two boards of pictures and links: the moodboard (references) and the Camera Movement plan (cameraRefs) — the same rules each
+const BOARDS = {
+  moodboard: { field: 'references', name: 'the moodboard', what: 'A moodboard' },
+  camera: { field: 'cameraRefs', name: 'the camera movement plan', what: 'The camera movement plan' },
+};
+
+/** Add pictures and links to a board ({ items: [{ url, label }] }) — a picture uploaded from the phone arrives as its link. */
+const addToBoard = (board) => asyncHandler(async (req, res) => {
+  const b = BOARDS[board];
   const shoot = await shootOr404(res, req.params.id);
   const v = cleanMoodboardItems(req.body?.items ?? (req.body?.url ? [req.body] : []));
   if (!v.ok) bad(res, v.message);
-  const r = addToMoodboard(plain(shoot.references), v.value, { byName: req.user?.name ?? '' });
+  const r = addToMoodboard(plain(shoot[b.field]), v.value, { byName: req.user?.name ?? '', what: b.what });
   if (!r.ok) bad(res, r.message);
-  shoot.references = r.list;
+  shoot[b.field] = r.list;
   await shoot.save();
-  res.status(201).json({ references: refsView(shoot.references), added: r.added, skipped: r.skipped });
+  res.status(201).json({ [b.field]: refsView(shoot[b.field]), added: r.added, skipped: r.skipped });
 });
 
-/** A moodboard item's label ({ url, label }). */
-export const renameMoodboardItem = asyncHandler(async (req, res) => {
+/** An item's label on a board ({ url, label }). */
+const renameOnBoard = (board) => asyncHandler(async (req, res) => {
+  const b = BOARDS[board];
   const shoot = await shootOr404(res, req.params.id);
   const url = String(req.body?.url ?? '');
-  if (!plain(shoot.references).some((r) => r.url === url)) bad(res, 'That picture or link is not on the moodboard.', 404);
-  shoot.references = relabelMoodboard(plain(shoot.references), url, req.body?.label);
+  if (!plain(shoot[b.field]).some((r) => r.url === url)) bad(res, `That picture or link is not on ${b.name}.`, 404);
+  shoot[b.field] = relabelMoodboard(plain(shoot[b.field]), url, req.body?.label);
   await shoot.save();
-  res.json({ references: refsView(shoot.references) });
+  res.json({ [b.field]: refsView(shoot[b.field]) });
 });
 
-/** Take an item off the moodboard (?url=). */
-export const removeMoodboard = asyncHandler(async (req, res) => {
+/** Take an item off a board (?url=); a moodboard picture that was the shoot's cover takes the cover with it. */
+const removeFromBoard = (board) => asyncHandler(async (req, res) => {
+  const b = BOARDS[board];
   const shoot = await shootOr404(res, req.params.id);
-  const r = removeFromMoodboard(plain(shoot.references), String(req.query.url ?? req.body?.url ?? ''));
-  if (!r.removed) bad(res, 'That picture or link is not on the moodboard.', 404);
-  shoot.references = r.list;
-  // a cover that was this picture goes with it
-  if (shoot.coverUrl && !r.list.some((x) => x.url === shoot.coverUrl) && String(req.query.url ?? req.body?.url) === shoot.coverUrl) shoot.coverUrl = '';
+  const url = String(req.query.url ?? req.body?.url ?? '');
+  const r = removeFromMoodboard(plain(shoot[b.field]), url);
+  if (!r.removed) bad(res, `That picture or link is not on ${b.name}.`, 404);
+  shoot[b.field] = r.list;
+  if (board === 'moodboard' && shoot.coverUrl && url === shoot.coverUrl) shoot.coverUrl = '';
   await shoot.save();
-  res.json({ references: refsView(shoot.references), coverUrl: shoot.coverUrl ?? '' });
+  res.json({ [b.field]: refsView(shoot[b.field]), coverUrl: shoot.coverUrl ?? '' });
 });
+
+export const addMoodboard = addToBoard('moodboard');
+export const renameMoodboardItem = renameOnBoard('moodboard');
+export const removeMoodboard = removeFromBoard('moodboard');
+export const addCameraRefs = addToBoard('camera');
+export const renameCameraRef = renameOnBoard('camera');
+export const removeCameraRef = removeFromBoard('camera');
 
 /**
  * A storyboard frame ticked as filmed on the shoot day ({ shot: true | false }) — that frame alone, in one step, so two people ticking
@@ -350,8 +367,8 @@ export const tickChecklist = asyncHandler(async (req, res) => {
 export const uploadShootDocument = asyncHandler(async (req, res) => {
   const shoot = await shootOr404(res, req.params.id);
   const part = String(req.body?.part ?? '');
-  if (!DOC_PARTS.includes(part)) bad(res, 'Say where the PDF goes: the moodboard or the storyboard.');
-  if ((shoot.documents ?? []).filter((d) => d.part === part).length >= MAX_DOCS_PER_PART) bad(res, `The ${part} holds up to ${MAX_DOCS_PER_PART} PDFs — remove one first.`);
+  if (!DOC_PARTS.includes(part)) bad(res, 'Say where the PDF goes: the moodboard, the storyboard or the camera movement plan.');
+  if ((shoot.documents ?? []).filter((d) => d.part === part).length >= MAX_DOCS_PER_PART) bad(res, `The ${DOC_PART_NAMES[part]} holds up to ${MAX_DOCS_PER_PART} PDFs — remove one first.`);
   const v = checkPdf({ buffer: req.file?.buffer, name: req.file?.originalname });
   if (!v.ok) bad(res, v.message, v.status);
   let kept;

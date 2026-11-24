@@ -1,5 +1,6 @@
 import mongoose from 'mongoose';
 import { leadershipStampField } from './leadershipStamp.js';
+import { ALL_PROJECT_PHASES, fitPhase } from '../utils/projectPhases.js';
 
 // One department on a project. The project has exactly one `owner` (the department
 // accountable for it, approving it); the rest are `participant`s the project manager
@@ -193,9 +194,11 @@ const projectSchema = mongoose.Schema(
       min: 0,
       max: 100,
     },
+    // The step the project is at. The list depends on the owning department (utils/projectPhases.js): IT → Discovery … Maintenance,
+    // Marketing → Research … Review, everyone else → Initiation … Closure.
     phase: {
       type: String,
-      enum: ['discovery', 'design', 'development', 'testing', 'deployment', 'maintenance'],
+      enum: ALL_PROJECT_PHASES,
       default: 'discovery',
     },
     category: {
@@ -211,6 +214,14 @@ const projectSchema = mongoose.Schema(
     timestamps: true,
   }
 );
+
+// A new project, or one whose phase or owning department changes, takes a phase from its department's list (the equivalent step
+// when it was given another department's — Discovery on an Accounts project → Initiation). An unknown phase is left for the enum
+// to refuse. A project nobody touches keeps what it has.
+projectSchema.pre('validate', function fitPhaseToDepartment() {
+  if (!(this.isNew || this.isModified('phase') || this.isModified('targetDepartment'))) return;
+  if (ALL_PROJECT_PHASES.includes(this.phase)) this.phase = fitPhase(this.phase, this.targetDepartment);
+});
 
 const Project = mongoose.model('Project', projectSchema);
 

@@ -82,7 +82,7 @@ export const crmWeeklyXlsx = async (v) => {
   add(
     'Summary',
     [
-      ['Team N ERP - CRM Weekly Report'],
+      ['Team N Makeovers - CRM Weekly Report'],
       [`Week: ${v.week.label}`],
       [statusText(v)],
       [],
@@ -148,7 +148,7 @@ const workTable = (doc, rows, empty) => {
 
 export const writeCrmWeeklyPdf = (doc, v) => {
   const f = v.figures;
-  doc.fontSize(18).fillColor(INK).font('Helvetica-Bold').text('Team N ERP - CRM Weekly Report', MARGIN, MARGIN);
+  doc.fontSize(18).fillColor(INK).font('Helvetica-Bold').text('Team N Makeovers - CRM Weekly Report', MARGIN, MARGIN);
   doc.fontSize(10).font('Helvetica').fillColor(GREY).text(`Week: ${v.week.label}   ·   ${statusText(v)}`);
 
   heading(doc, 'Summary');

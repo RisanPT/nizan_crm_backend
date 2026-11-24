@@ -262,6 +262,20 @@ await check('the moodboard takes pictures and links from its own tab — each on
   // an edit of the plan that leaves the moodboard out keeps it
   await call('PUT', `/marketing/portfolio/shoots/${shoot._id}`, shahala, { title: 'Diya reception film v2' });
   assert.equal((await Shoot.findById(shoot._id).lean()).references.length, 1);
+  // Camera Movement: its own pictures and video links (a YouTube or Instagram reel plays as a video), labelled, removed — never on the moodboard
+  const cam = await call('POST', `/marketing/portfolio/shoots/${shoot._id}/camera`, shahala, { items: [{ url: 'https://res.cloudinary.com/x/image/upload/v1/dolly-diagram.jpg', label: 'Dolly in' }, { url: 'https://www.instagram.com/reel/Cx9/' }, { url: 'https://youtu.be/gimbal1' }] });
+  assert.equal(cam.status, 201, cam.text);
+  assert.deepEqual(cam.body.cameraRefs.map((x) => [x.kind, x.label, x.addedByName]), [['image', 'Dolly in', 'Shahala'], ['video', '', 'Shahala'], ['video', '', 'Shahala']]);
+  const camNamed = await call('PATCH', `/marketing/portfolio/shoots/${shoot._id}/camera`, shahala, { url: 'https://youtu.be/gimbal1', label: 'Gimbal orbit' });
+  assert.equal(camNamed.body.cameraRefs[2].label, 'Gimbal orbit');
+  const camOff = await call('DELETE', `/marketing/portfolio/shoots/${shoot._id}/camera?url=${encodeURIComponent('https://www.instagram.com/reel/Cx9/')}`, shahala);
+  assert.equal(camOff.body.cameraRefs.length, 2);
+  const missing = await call('DELETE', `/marketing/portfolio/shoots/${shoot._id}/camera?url=${encodeURIComponent('https://www.pinterest.com/pin/9/')}`, shahala);
+  assert.deepEqual([missing.status, missing.body.message], [404, 'That picture or link is not on the camera movement plan.']);
+  const both = (await call('GET', `/marketing/portfolio/shoots/${shoot._id}`, shahala)).body;
+  assert.deepEqual([both.references.length, both.cameraRefs.map((x) => x.label)], [1, ['Dolly in', 'Gimbal orbit']]);
+  await call('PUT', `/marketing/portfolio/shoots/${shoot._id}`, shahala, { title: 'Diya reception film v2' });
+  assert.equal((await Shoot.findById(shoot._id).lean()).cameraRefs.length, 2, 'an edit of the plan keeps them too');
 });
 await check('logistics: call time, map, checklist with who ticked what, notes', async () => {
   const r = await call('PUT', `/marketing/portfolio/shoots/${shoot._id}/logistics`, shahala, { callTime: '06:30', mapUrl: 'https://maps.app.goo.gl/abc', checklist: [{ text: 'Ring light' }, { text: 'Steamer', done: true }], notes: 'Park at gate 2' });
@@ -415,6 +429,13 @@ await check('a PDF is renamed and removed (and let go from storage); two uploads
   assert.equal(over.status, 400);
   assert.match(over.body.message, /up to 20/);
   assert.equal((await upload(shahala, { part: 'storyboard' }, { bytes: pdfOf(1), name: 'still-room.pdf' })).status, 201, 'the storyboard has its own 20');
+  // the camera movement plan: its own PDFs (and its own 20), read back with the rest
+  const cam = await upload(shahala, { part: 'camera', label: 'Gimbal + dolly moves' }, { bytes: pdfOf(4), name: 'camera-moves.pdf' });
+  assert.equal(cam.status, 201, cam.text);
+  assert.deepEqual([cam.body.added.part, cam.body.added.label, cam.body.added.pages], ['camera', 'Gimbal + dolly moves', 4]);
+  const read = await call('GET', `/marketing/portfolio/shoots/${shoot._id}/documents/${cam.body.added.key}`, shahala);
+  assert.equal(read.status, 200);
+  assert.equal((await upload(shahala, { part: 'lighting' }, { bytes: pdfOf(1), name: 'x.pdf' })).status, 400, 'only the three places');
 });
 await check('moving the shoot moves its milestones not yet done by the same days; the done brief stays', async () => {
   const before = (await Shoot.findById(shoot._id).lean()).milestones;

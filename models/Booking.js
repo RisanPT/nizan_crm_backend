@@ -396,6 +396,11 @@ const bookingSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // An influencer collaboration (shown in its own colour on the calendar).
+    influencerWork: {
+      type: Boolean,
+      default: false,
+    },
     bookingDate: {
       type: Date,
       required: true,
@@ -589,6 +594,11 @@ bookingSchema.index({ origin: 1, createdAt: -1 });
 bookingSchema.index({ origin: 1, requestDecidedAt: 1 });
 // Marketing outcomes (utils/marketingOutcomes.js): the Lead Report, Campaigns hub and Weekly Report find a lead's booking by Booking.leadId.
 bookingSchema.index({ leadId: 1 });
+// the day an artist / vehicle is out (allocation, fleet availability): these lists are searched by day and by person
+bookingSchema.index({ selectedDates: 1 });
+bookingSchema.index({ 'bookingItems.selectedDates': 1 });
+bookingSchema.index({ serviceStart: 1 });
+bookingSchema.index({ 'assignedStaff.employeeId': 1 });
 
 const Booking = mongoose.model('Booking', bookingSchema);
 

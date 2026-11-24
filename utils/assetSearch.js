@@ -13,6 +13,7 @@
 
 import mongoose from 'mongoose';
 import { normalizeKeyword, keywordAsStored } from './assetKeywords.js';
+import { REVIEW_FILTERS } from './workReview.js';
 
 const MAX_LIST = 60;
 const MAX_TERMS = 10;
@@ -104,6 +105,9 @@ export const parseAssetSearch = (query = {}) => {
     usable: yes(query.usable),
     final: yes(query.final),
     untagged: yes(query.untagged),
+    // the work behind the item (services/workQuality.js): an artist on it (employee id, or "n:name"), the client's review of it
+    artist: listOf(query.artist).map(String).filter((k) => mongoose.isValidObjectId(k) || /^n:.+/.test(k)),
+    review: listOf(query.review).filter((v) => REVIEW_FILTERS.includes(v)),
     text,
     // "best match" needs words to match; without them it is the newest first
     sort: sortAsked === 'relevance' && !text.terms.length ? 'newest' : sortAsked,

@@ -3,7 +3,7 @@ import Campaign from '../models/Campaign.js';
 import MetaAdsSync from '../models/MetaAdsSync.js';
 import MetaImportLog from '../models/MetaImportLog.js';
 import { isManagerOrAdmin } from './marketingEodController.js';
-import { META_SYNC_DAYS_BACK, META_SYNC_EVERY_HOURS, META_SYNC_MAX_DAYS, adsConfig, istToday, syncRange } from '../utils/metaAds.js';
+import { META_SYNC_DAYS_BACK, META_SYNC_EVERY_MINUTES, META_SYNC_MAX_DAYS, adsConfig, istToday, syncRange } from '../utils/metaAds.js';
 import { MetaProblem } from '../services/metaGraph.js';
 import { LinkRefusal, addMetaCampaigns, ignoreMetaCampaign, linkMetaCampaign, loadAdsState, restoreMetaCampaign, runAdsSync } from '../services/metaAdsSync.js';
 
@@ -34,6 +34,10 @@ const runView = (r) =>
         adsCreated: r.adsCreated ?? 0,
         spend: r.spend ?? 0,
         unlinkedSpend: r.unlinkedSpend ?? 0,
+        // campaigns and ads whose status changed on Meta; ads that got their picture; ads a file could not place (two of one name)
+        statusChanges: r.statusChanges ?? 0,
+        pictures: r.pictures ?? 0,
+        adsSkipped: r.adsSkipped ?? 0,
       }
     : null;
 
@@ -49,12 +53,13 @@ export const getAdsStatus = async (req, res) => {
   const lastAt = s.lastRun?.at ? new Date(s.lastRun.at) : null;
   res.json({
     config: { appSecret: cfg.has.appSecret, token: cfg.has.token, accounts: cfg.accounts, ready: cfg.ready, version: cfg.version },
-    settings: { autoSync: s.autoSync !== false, everyHours: META_SYNC_EVERY_HOURS, daysBack: META_SYNC_DAYS_BACK, maxDays: META_SYNC_MAX_DAYS, updatedByName: s.updatedByName || '' },
+    // everyHours stays for older app builds (they say "every N hours")
+    settings: { autoSync: s.autoSync !== false, everyMinutes: META_SYNC_EVERY_MINUTES, everyHours: META_SYNC_EVERY_MINUTES / 60, daysBack: META_SYNC_DAYS_BACK, maxDays: META_SYNC_MAX_DAYS, updatedByName: s.updatedByName || '' },
     canManage: isManagerOrAdmin(req.user),
     running,
     lastRun: runView(s.lastRun),
     lastOkAt: s.lastOkAt ?? null,
-    nextAutoAt: cfg.ready && s.autoSync !== false ? new Date((lastAt ?? new Date()).getTime() + META_SYNC_EVERY_HOURS * 3600 * 1000) : null,
+    nextAutoAt: cfg.ready && s.autoSync !== false ? new Date((lastAt ?? new Date()).getTime() + META_SYNC_EVERY_MINUTES * 60 * 1000) : null,
     unlinked: (s.unlinked ?? []).map((u) => ({ metaId: u.metaId, name: u.name, accountId: u.accountId, brand: u.brand, reason: u.reason, firstDay: u.firstDay, lastDay: u.lastDay, spend: u.spend, runFrom: u.runFrom, runTo: u.runTo })),
     ignored: s.ignored ?? [],
     campaignChoices: choices.map((c) => ({ id: String(c._id), title: c.title, brand: c.brand || '' })),

@@ -201,6 +201,17 @@ const quietly = async (what, fn) => {
   }
 };
 
+/** The Marketing Manager(s) — loaded only when a lead comes in (services/marketingEodReminders.js knows who they are). */
+const marketingManagerIds = async () => {
+  try {
+    const { managerUserIds } = await import('./marketingEodReminders.js');
+    return await managerUserIds();
+  } catch (err) {
+    console.error('[Meta leads] could not find the Marketing managers:', err?.message ?? err);
+    return [];
+  }
+};
+
 /** Her number is already a CRM lead: say so on that lead (its history) and tell its owner (or the managers). Nothing else changes. */
 const noteAgain = async (dupe, info) => {
   const how = [info.formName && `the form "${info.formName}"`, info.adName && `ad "${info.adName}"`, info.campaignName && `campaign "${info.campaignName}"`]
@@ -275,9 +286,11 @@ const makeLead = async (m, info, campaign, assignee, leadgenId) => {
 const tellAboutNewLead = async (lead, info, assignee) => {
   const from = info.formName ? ` (form "${info.formName}")` : '';
   await quietly('new-lead notice', async () => {
+    // the CRM's managers, and Marketing's (the ads are theirs: a lead is the result of their campaign)
     const managers = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+    const marketing = await marketingManagerIds();
     await notify({
-      recipients: managers,
+      recipients: [...new Set([...managers, ...marketing].map(String))],
       type: NOTIFICATION_TYPES.NEW_LEAD,
       title: 'New Meta lead',
       body: `${lead.name} came in from Meta Lead Ads${from}${assignee ? `, given to ${assignee.name}` : ', waiting to be assigned'}.`,

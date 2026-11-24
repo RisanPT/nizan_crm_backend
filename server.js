@@ -80,6 +80,8 @@ import clientRoutes from './routes/clientRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import staffClientRoutes from './routes/staffClientRoutes.js';
 import crmRoutes from './routes/crmRoutes.js';
+import allocationRoutes from './routes/allocationRoutes.js';
+import artistTeamRoutes from './routes/artistTeamRoutes.js';
 import metaWebhookRoutes from './routes/metaWebhookRoutes.js';
 import metaLeadRoutes from './routes/metaLeadRoutes.js';
 import { startMetaLeadRetries } from './services/metaLeads.js';
@@ -233,7 +235,9 @@ app.use(
       callback(new Error(`CORS blocked for origin: ${origin}`));
     },
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    // + the "assign anyway" confirmations the app repeats a booking save with (fleet and artist clash guards) — without them a
+    // browser's preflight refuses the retry, so "assign anyway" never reached the server from the web app
+    allowedHeaders: ['Content-Type', 'Authorization', 'X-Confirm-Fleet-Conflict', 'X-Confirm-Artist-Conflict'],
   })
 );
 app.options('*', cors());
@@ -361,6 +365,8 @@ app.use('/api/client', clientRoutes);                 // Client app: my-profile 
 app.use('/api/chat', chatRoutes);                     // Concierge chat (client + staff)
 app.use('/api/app-clients', staffClientRoutes);       // Staff: view bridal app clients (brides)
 app.use('/api/meta', metaLeadRoutes);                  // Meta: Lead Ads (who gets leads, missed-lead check) + the ad spend sync (/ads); the webhook is above
+app.use('/api/allocation', allocationRoutes);          // smart booking allocation: suggestions, confirm, the Allocation Board, extras
+app.use('/api/artist-teams', artistTeamRoutes);       // Artist Management: the in-house teams (main artist, assistants, places, rotation)
 app.use('/api/crm', crmRoutes);                       // CRM team: queue, assigning work, cases, re-engagement, settings
 
 app.get('/api', (req, res) => {

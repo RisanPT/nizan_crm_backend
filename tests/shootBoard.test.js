@@ -12,6 +12,12 @@ test('moodboard: a picture shows, a video plays outside, anything else is a link
   assert.equal(moodboardKind('https://www.dropbox.com/scl/fi/x/look.PNG?dl=0'), 'image');
   assert.equal(moodboardKind('https://cdn.test/clip.mp4'), 'video');
   assert.equal(moodboardKind('https://www.pinterest.com/pin/123/'), 'link');
+  // a video page on a video site plays as a video (Camera Movement's references): YouTube, an Instagram reel, Vimeo, TikTok
+  for (const v of ['https://youtu.be/abc', 'https://www.youtube.com/watch?v=x', 'https://youtube.com/shorts/x', 'https://www.instagram.com/reel/Cx/', 'https://www.instagram.com/teamn/reels/Cx/', 'https://vimeo.com/123456', 'https://www.tiktok.com/@a/video/1']) {
+    assert.equal(moodboardKind(v), 'video', v);
+  }
+  // but an Instagram post, a channel page or YouTube's home is a link
+  for (const l of ['https://www.instagram.com/p/Cx/', 'https://www.youtube.com/@teamn', 'https://youtube.com/']) assert.equal(moodboardKind(l), 'link', l);
   assert.equal(moodboardKind('not a link'), 'link');
 });
 

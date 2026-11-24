@@ -59,7 +59,7 @@ export const financeXlsx = async ({ collections, expenses }, { label }) => {
 
   const s = summarizeFinanceRows({ collections, expenses });
   const summary = XLSX.utils.aoa_to_sheet([
-    ['Team N ERP - Finance Report'],
+    ['Team N Makeovers - Finance Report'],
     [`Period: ${label}`],
     [],
     ['', 'Collections', 'Expenses'],
@@ -145,7 +145,7 @@ const refLine = (row) => [row.bookingNo, row.workDayText ? `work ${row.workDayTe
 
 /// Writes the report to [doc]. Landscape A4, so the work, the amount and the notes can all sit on one line.
 export const writeFinancePdf = (doc, { collections, expenses }, { label }) => {
-  doc.fontSize(18).fillColor(INK).font('Helvetica-Bold').text('Team N ERP - Finance Report', MARGIN, MARGIN);
+  doc.fontSize(18).fillColor(INK).font('Helvetica-Bold').text('Team N Makeovers - Finance Report', MARGIN, MARGIN);
   doc.fontSize(10).font('Helvetica').fillColor(GREY).text(`Period: ${label}`);
   doc.moveDown(0.8);
 

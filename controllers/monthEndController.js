@@ -15,6 +15,7 @@ import MonthlyTarget from '../models/MonthlyTarget.js';
 import Region from '../models/Region.js';
 import CeoDecision from '../models/CeoDecision.js';
 import { accountMovements, round2 } from './accountingController.js';
+import { cashBankTotalsAt } from './bankAccountController.js';
 import { filingsForPeriod } from './taxFilingController.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { istDayKey, istMonthBounds } from '../utils/istDate.js';
@@ -172,17 +173,30 @@ export const getMonthEndReview = async (req, res) => {
         fuels.filter((f) => inPeriod(f.date)).reduce((s, f) => s + (f.totalAmount || 0), 0),
     );
 
-    // Bank + cash closing balances from the ledger (opening + movement to date).
+    // Bank + cash: the accounts on the Bank & Cash Balance screen — the balances the team entered from the statements plus the ledger's
+    // receipts and payments since — at the month's end, or live while the month is still running. (The ledger alone counted every
+    // cash / bank ledger from its opening, the entries before the balances were entered included, and so disagreed with that screen.)
+    // With no account set up yet: the ledger's cash / bank accounts, opening plus every entry to date, as before.
     let bankBalance = 0;
     let cashBalance = 0;
-    for (const a of accounts) {
-      if (!a.isBank && !a.isCash) continue;
-      const m = mvToDate.get(String(a._id)) || { debit: 0, credit: 0 };
-      const openDr = a.openingType === 'dr' ? a.openingBalance || 0 : 0;
-      const openCr = a.openingType === 'cr' ? a.openingBalance || 0 : 0;
-      const net = openDr + m.debit - openCr - m.credit;
-      if (a.isBank) bankBalance += net;
-      else cashBalance += net;
+    let cashSource = 'accounts';
+    let cashMissing = 0;
+    const fromAccounts = await cashBankTotalsAt(to >= now ? null : to);
+    if (fromAccounts.count > 0) {
+      bankBalance = fromAccounts.bank;
+      cashBalance = fromAccounts.cash;
+      cashMissing = fromAccounts.missing;
+    } else {
+      cashSource = 'ledger';
+      for (const a of accounts) {
+        if (!a.isBank && !a.isCash) continue;
+        const m = mvToDate.get(String(a._id)) || { debit: 0, credit: 0 };
+        const openDr = a.openingType === 'dr' ? a.openingBalance || 0 : 0;
+        const openCr = a.openingType === 'cr' ? a.openingBalance || 0 : 0;
+        const net = openDr + m.debit - openCr - m.credit;
+        if (a.isBank) bankBalance += net;
+        else cashBalance += net;
+      }
     }
     bankBalance = round2(bankBalance);
     cashBalance = round2(cashBalance);
@@ -469,6 +483,10 @@ export const getMonthEndReview = async (req, res) => {
         bankBalance,
         cashBalance,
         totalLiquid: round2(bankBalance + cashBalance),
+        // where the cash & bank figures came from: 'accounts' (the Bank & Cash Balance screen) | 'ledger' (no account set up yet);
+        // cashMissing = accounts with no balance entered by the month's end (left out of a past month's figure)
+        cashSource,
+        cashMissing,
         forecast,
       },
       receivables: {

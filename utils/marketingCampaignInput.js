@@ -264,20 +264,32 @@ export const groupImportRows = (rows) => {
  * two ads of the campaign is not guessed (a new ad is made for it). `existing`: the campaign's ads [{ _id, name, metaAdId }].
  * → the matching ad, or null
  */
-export const matchImportAd = (fileAd, existing = []) => {
+export const matchImportAd = (fileAd, existing = []) => adMatchOf(fileAd, existing).ad;
+
+/**
+ * [matchImportAd] with the reason when there is no match: → { ad } | { ad: null, ambiguous: true } (a file row WITHOUT a Meta ad ID whose
+ * name two or more of the campaign's ads carry — making yet another ad would count those days twice, so it is not written) |
+ * { ad: null } (a new ad).
+ */
+export const adMatchOf = (fileAd, existing = []) => {
   if (fileAd.metaId) {
     const byId = existing.find((a) => a.metaAdId && a.metaAdId === fileAd.metaId);
-    if (byId) return byId;
+    if (byId) return { ad: byId };
   }
-  if (!fileAd.name) return null;
+  if (!fileAd.name) return { ad: null };
   const same = existing.filter((a) => String(a.name ?? '').trim().toLowerCase() === fileAd.name.trim().toLowerCase() && (!fileAd.metaId || !a.metaAdId));
-  return same.length === 1 ? same[0] : null;
+  if (same.length === 1) return { ad: same[0] };
+  return same.length > 1 && !fileAd.metaId ? { ad: null, ambiguous: true } : { ad: null };
 };
 
 /**
- * Which campaign each group of the file belongs to: by the Meta campaign ID first, else by the exact title (any case). A title shared by
- * two campaigns is AMBIGUOUS and is not guessed. `campaigns`: [{ _id, title, metaCampaignId }].
- * → { matched: [{ group, campaign }], unmatched: [{ group, reason: 'no_match' | 'ambiguous' }] }
+ * Which campaign each group of the file belongs to: by the Meta campaign ID first, else by the exact title (any case). Never guessed:
+ *  • 'ambiguous'    — two of our campaigns share the title;
+ *  • 'other_meta_id' — the campaign of that title is linked to ANOTHER Meta campaign (Meta lets two campaigns share a name: writing this
+ *                     one's days onto it would overwrite the other's spend);
+ *  • 'same_name'    — two Meta campaigns of the file (different IDs) share the title of one campaign of ours: neither is guessed.
+ * A row without a Meta campaign ID (an export without the ID column) still matches by title. `campaigns`: [{ _id, title, metaCampaignId }].
+ * → { matched: [{ group, campaign }], unmatched: [{ group, reason: 'no_match' | 'ambiguous' | 'other_meta_id' | 'same_name' }] }
  */
 export const matchImportGroups = (groups, campaigns) => {
   const byMeta = new Map();
@@ -287,17 +299,29 @@ export const matchImportGroups = (groups, campaigns) => {
     const t = String(c.title ?? '').trim().toLowerCase();
     byTitle.set(t, [...(byTitle.get(t) ?? []), c]);
   }
+  // each group's verdict, in the file's order
+  const verdicts = groups.map((g) => {
+    const viaId = g.metaId ? byMeta.get(g.metaId) : null;
+    if (viaId) return { group: g, campaign: viaId };
+    const sameTitle = g.name ? byTitle.get(g.name.trim().toLowerCase()) ?? [] : [];
+    if (sameTitle.length > 1) return { group: g, reason: 'ambiguous' };
+    if (!sameTitle.length) return { group: g, reason: 'no_match' };
+    if (g.metaId && sameTitle[0].metaCampaignId) return { group: g, reason: 'other_meta_id' };
+    return { group: g, campaign: sameTitle[0], byTitle: true };
+  });
+  // two Meta campaigns (different IDs) landing on one campaign of ours by its title: which is ours cannot be told
+  const keyOf = (c) => String(c._id ?? c.title);
+  const metaIdsOn = new Map();
+  for (const v of verdicts) {
+    if (!v.byTitle || !v.group.metaId) continue;
+    metaIdsOn.set(keyOf(v.campaign), new Set([...(metaIdsOn.get(keyOf(v.campaign)) ?? []), v.group.metaId]));
+  }
   const matched = [];
   const unmatched = [];
-  for (const g of groups) {
-    const viaId = g.metaId ? byMeta.get(g.metaId) : null;
-    if (viaId) {
-      matched.push({ group: g, campaign: viaId });
-      continue;
-    }
-    const sameTitle = g.name ? byTitle.get(g.name.trim().toLowerCase()) ?? [] : [];
-    if (sameTitle.length === 1) matched.push({ group: g, campaign: sameTitle[0] });
-    else unmatched.push({ group: g, reason: sameTitle.length > 1 ? 'ambiguous' : 'no_match' });
+  for (const v of verdicts) {
+    if (v.byTitle && v.group.metaId && metaIdsOn.get(keyOf(v.campaign)).size > 1) unmatched.push({ group: v.group, reason: 'same_name' });
+    else if (v.campaign) matched.push({ group: v.group, campaign: v.campaign });
+    else unmatched.push({ group: v.group, reason: v.reason });
   }
   return { matched, unmatched };
 };

@@ -1,4 +1,17 @@
 import mongoose from 'mongoose';
+import { normalizeAssignedStaff, staffByUnit, summarizeAssignedStaff } from '../utils/bookingStaff.js';
+import { autoAllocateBooking, confirmAllocation, dayFullMessage, fourthWorkCheck, logShadowSuggestion, syncAllocationsForBooking } from '../services/artistAllocation.js';
+import { mayAllocate } from '../utils/allocationAccess.js';
+
+/// The allocation never stops a booking save: a failure is logged and the save goes on (like safePost for the ledger).
+const safeAllocation = async (fn) => {
+  try {
+    return await fn();
+  } catch (e) {
+    console.error('[allocation] after booking save:', e?.message ?? e);
+    return null;
+  }
+};
 import Booking from '../models/Booking.js';
 import { postDoc, unpostDoc, safePost } from '../services/posting.js';
 import { syncBookingAdvance, unpostBookingAdvance } from './bookingAdvanceController.js';
@@ -54,49 +67,6 @@ const generatePlaceholderEmail = ({ customerName = '', phone = '' }) => {
     : `legacy.${fallbackKey}`;
 
   return `${localPart}@placeholder.local`;
-};
-
-const normalizeWorks = (works, fallbackSpecialization = '') => {
-  if (Array.isArray(works)) {
-    return [
-      ...new Set(
-        works
-          .map((item) => String(item ?? '').trim())
-          .filter(Boolean)
-      ),
-    ];
-  }
-
-  const normalizedFallback = String(fallbackSpecialization ?? '').trim();
-  return normalizedFallback ? [normalizedFallback] : [];
-};
-
-const normalizeAssignedStaff = (assignedStaff = []) => {
-  if (!Array.isArray(assignedStaff)) return [];
-
-  return assignedStaff
-    .filter((item) => item && item.employeeId)
-    .map((item) => {
-      const normalizedWorks = normalizeWorks(
-        item.works,
-        item.specialization ?? item.role
-      );
-      const normalizedSpecialization =
-        String(item.specialization ?? '').trim() ||
-        normalizedWorks[0] ||
-        String(item.role ?? '').trim();
-
-      return {
-        employeeId: item.employeeId,
-        artistName: item.artistName ?? '',
-        role: item.role ?? normalizedSpecialization,
-        specialization: normalizedSpecialization,
-        works: normalizedWorks,
-        phone: item.phone ?? '',
-        type: item.type ?? '',
-        roleType: item.roleType ?? 'assistant',
-      };
-    });
 };
 
 const normalizeAddons = (addons = []) => {
@@ -269,28 +239,6 @@ const summarizeEventSlots = (bookingItems = [], fallbackSlot = '') => {
   ];
 
   return slots.join(' | ');
-};
-
-const summarizeAssignedStaff = (bookingItems = [], fallbackAssignedStaff = []) => {
-  if (!Array.isArray(bookingItems) || bookingItems.length === 0) {
-    return normalizeAssignedStaff(fallbackAssignedStaff);
-  }
-
-  const mergedAssignments = [];
-  const seen = new Set();
-
-  for (const item of bookingItems) {
-    for (const assignment of normalizeAssignedStaff(item?.assignedStaff ?? [])) {
-      const key =
-        String(assignment.employeeId ?? '').trim() ||
-        `${String(assignment.artistName ?? '').trim()}::${String(assignment.roleType ?? '').trim()}`;
-      if (!key || seen.has(key)) continue;
-      seen.add(key);
-      mergedAssignments.push(assignment);
-    }
-  }
-
-  return mergedAssignments;
 };
 
 const mergeBookingItemDates = (bookingItems = [], fallbackDates = []) => {
@@ -1214,6 +1162,7 @@ export const createBooking = async (req, res) => {
     staffInstructions,
     internalRemarks,
     contentCreationRequired,
+    influencerWork,
     bookingDate,
     serviceStart,
     serviceEnd,
@@ -1425,15 +1374,37 @@ export const createBooking = async (req, res) => {
 
     // Slot capacity gate: refuse a booking whose date + slot half is full.
     // Fail-OPEN — a capacity-check error must never block a real booking.
+    // A FULL date (smart allocation on): an artist whose works that day are close together may still have time for a 4th work —
+    // CRM / the Artist Head / a manager can book it (it goes to her, the Artist Head OKs the 4th work); sales are told where and when
+    // it is possible and ask CRM. At most `extrasPerDay` bookings past the day's limit.
+    let fourthPlan = null;
     if (req.user) {
       try {
         const slot = await slotAvailability(effectiveSchedule.bookingDateValue, summaryEventSlot);
         if (slot.full) {
-          return res.status(409).json({
-            message: slot.blocked
-              ? 'This date has been blocked by HR — no bookings can be added. Please choose another date.'
-              : `That date is fully booked — all ${slot.capacity} slots are taken (${slot.booked}/${slot.capacity}). Please choose another date.`,
-          });
+          const check = slot.blocked
+            ? null
+            : await safeAllocation(() => fourthWorkCheck({
+                _id: new mongoose.Types.ObjectId(), bookingNumber: '', customerName, status: 'confirmed',
+                selectedDates: effectiveSchedule.selectedDates, bookingDate: effectiveSchedule.bookingDateValue,
+                serviceStart: effectiveSchedule.serviceStartValue, serviceEnd: effectiveSchedule.serviceEndValue,
+                pincode, districtId: normalizedDistrictId, mapUrl, eventSlot: summaryEventSlot,
+                bookingItems: normalizedBookingItems, assignedStaff: [],
+              }));
+          const fits = check?.full && check.units.length > 0 && check.units.every((u) => u.fit);
+          if (fits && mayAllocate(req.user)) {
+            fourthPlan = check;
+          } else {
+            return res.status(409).json({
+              message: check?.full
+                ? dayFullMessage(check, { canBook: mayAllocate(req.user) })
+                : slot.blocked
+                  ? 'This date has been blocked by HR — no bookings can be added. Please choose another date.'
+                  : `That date is fully booked — all ${slot.capacity} slots are taken (${slot.booked}/${slot.capacity}). Please choose another date.`,
+              code: slot.blocked ? 'DAY_BLOCKED' : 'DAY_FULL',
+              ...(check?.full ? { fourthWork: check } : {}),
+            });
+          }
         }
       } catch (_) {
         // ignore — never prevent booking creation because the check failed
@@ -1491,6 +1462,7 @@ export const createBooking = async (req, res) => {
       staffInstructions,
       internalRemarks,
       contentCreationRequired,
+      influencerWork,
       bookingDate: effectiveSchedule.bookingDateValue,
       selectedDates: effectiveSchedule.selectedDates,
       serviceStart: effectiveSchedule.serviceStartValue,
@@ -1569,10 +1541,22 @@ export const createBooking = async (req, res) => {
     await safePost(() => postDoc('Booking', booking.toObject(), req.user?._id || null));
     // An advance taken now waits for Accounts to verify where it landed.
     await safePost(() => syncBookingAdvance(booking, undefined, req.user?._id || null));
+    // the smart allocation (best-effort): slots for staff put on a new booking; in shadow mode, what the ERP would have suggested
+    await safeAllocation(() => syncAllocationsForBooking(booking.toObject(), { user: req.user, source: 'create' }));
+    await safeAllocation(() => logShadowSuggestion(booking.toObject()));
+    // a 4th work on a full date: straight to the artist found for it (the Artist Head OKs a work past her slots)
+    const fourthWork = fourthPlan
+      ? await safeAllocation(async () => (await confirmAllocation({ user: req.user, bookingId: booking._id, bookingUpdatedAt: null /* just made here — the save's own steps touched it since */, picks: fourthPlan.units.map((u) => ({ unitKey: u.unitKey, teamId: u.fit.teamId })), source: 'fourth' })).results)
+      : null;
+    // automatic allocation (when switched on): a staff-made booking is confirmed — clean matches get their team now
+    const allocation = fourthPlan ? null : await safeAllocation(() => autoAllocateBooking(booking.toObject(), { user: req.user, source: 'create' }));
+    const fresh = allocation || fourthWork ? await Booking.findById(booking._id) : null;
 
     res.status(201).json({
-      ...booking.toObject(),
+      ...(fresh ?? booking).toObject(),
       invoiceEmailSent,
+      ...(allocation ? { allocation } : {}),
+      ...(fourthWork ? { fourthWork } : {}),
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -1588,6 +1572,8 @@ export const updateBooking = async (req, res) => {
     }
     // To tell whether the advance changed in this edit.
     const previousAdvance = booking.advanceAmount;
+    // who worked each package before this edit — the allocation tells the artists put on / taken off (services/artistAllocation.js)
+    const staffBefore = staffByUnit(booking.toObject());
 
     const {
       bookingItems,
@@ -1624,6 +1610,7 @@ export const updateBooking = async (req, res) => {
       staffInstructions,
       internalRemarks,
       contentCreationRequired,
+      influencerWork,
       bookingDate,
       serviceStart,
       serviceEnd,
@@ -1839,6 +1826,9 @@ export const updateBooking = async (req, res) => {
     booking.internalRemarks = internalRemarks ?? booking.internalRemarks;
     booking.contentCreationRequired =
       contentCreationRequired ?? booking.contentCreationRequired;
+    if (influencerWork !== undefined && influencerWork !== null) {
+      booking.influencerWork = influencerWork === true || influencerWork === 'true';
+    }
     booking.bookingDate = effectiveSchedule.bookingDateValue;
     booking.selectedDates = effectiveSchedule.selectedDates;
     booking.serviceStart = effectiveSchedule.serviceStartValue;
@@ -1876,6 +1866,17 @@ export const updateBooking = async (req, res) => {
     // Linking used to run on create only — a number corrected (or a lead
     // added) after booking never converted the lead. Idempotent.
     await linkLeadsToBooking(updatedBooking);
+    // the smart allocation's slots follow the staff of a NEW booking; in shadow mode, note what the ERP would have suggested
+    await safeAllocation(() => syncAllocationsForBooking(updatedBooking.toObject(), { before: staffBefore, user: req.user, intent: req.body?.allocationIntent ?? null, source: 'manage' }));
+    if (previousStatus === 'pending' && String(updatedBooking.status ?? '').toLowerCase() === 'confirmed') {
+      await safeAllocation(() => logShadowSuggestion(updatedBooking.toObject()));
+    }
+    // automatic allocation (when switched on): the moment a booking becomes confirmed, clean matches get their team
+    let allocation = null;
+    if (String(previousStatus ?? '').toLowerCase() !== 'confirmed' && String(updatedBooking.status ?? '').toLowerCase() === 'confirmed') {
+      allocation = await safeAllocation(() => autoAllocateBooking(updatedBooking.toObject(), { user: req.user, source: 'auto' }));
+      if (allocation) updatedBooking = (await Booking.findById(updatedBooking._id)) ?? updatedBooking;
+    }
     const shouldSendAdvanceInvoice =
       previousStatus != 'confirmed' &&
       String(updatedBooking.status ?? '').toLowerCase() == 'confirmed';
@@ -1951,6 +1952,7 @@ export const updateBooking = async (req, res) => {
       invoiceEmailSent,
       completionInvoiceEmailSent,
       reviewUrl,
+      ...(allocation ? { allocation } : {}),
     });
   } catch (error) {
     // Never ship the stack trace to the client; the sanitizer humanises message.

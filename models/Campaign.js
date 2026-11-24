@@ -41,6 +41,10 @@ const campaignSchema = new mongoose.Schema(
     dailyBudget: { type: Number, default: 0, min: 0 },
     metaCampaignId: { type: String, default: '', trim: true }, // matches the rows of a Meta Ads Manager export to this campaign
     audienceNote: { type: String, default: '', trim: true }, // who the campaign is aimed at, in the team's own words
+    // the live Meta sync (services/metaAdsSync.js): the campaign's own status word on Meta (ACTIVE, PAUSED, COMPLETED…) and when it was
+    // read. A linked campaign's `status` follows it; '' = never read from Meta (the status is the team's own).
+    metaStatus: { type: String, default: '', trim: true },
+    metaStatusAt: { type: Date, default: null },
   },
   { timestamps: true }
 );

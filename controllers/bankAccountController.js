@@ -137,6 +137,33 @@ export const liveCashBankTotals = async () => {
   };
 };
 
+/**
+ * Bank / Cash totals across the active accounts at instant [at] — the figures the Bank & Cash Balance screen shows, so every
+ * dashboard and the month-end review agree with it. [at] null (or not yet reached): the live balances (liveCashBankTotals). A past
+ * instant: each account's manual balance in force then plus its ledger's receipts and payments up to it; an account with no
+ * balance entered by then is left out and counted in `missing`. `count` = the active accounts (0 = none set up yet).
+ */
+export const cashBankTotalsAt = async (at = null) => {
+  if (!at || new Date(at) >= new Date()) {
+    const live = await liveCashBankTotals();
+    return { bank: live.bank, cash: live.cash, total: live.total, missing: 0, count: live.count };
+  }
+  const raw = await BankAccount.find({ active: true }).populate('ledger', 'code name').lean();
+  let bank = 0;
+  let cash = 0;
+  let missing = 0;
+  for (const a of raw) {
+    const v = await balanceAtInstant(a, new Date(at));
+    if (v === null) {
+      missing += 1;
+      continue;
+    }
+    if ((a.kind || 'bank') === 'cash') cash += v;
+    else bank += v;
+  }
+  return { bank: round2(bank), cash: round2(cash), total: round2(bank + cash), missing, count: raw.length };
+};
+
 // @route GET /api/bank-accounts  — list accounts + live balances
 export const getBankAccounts = async (req, res) => {
   try {
@@ -351,7 +378,10 @@ export const getTransactions = async (req, res) => {
 
     const opening = doc.ledger ? balanceAt(anchors, lines, before) : anchorAt(anchors, before)?.balance ?? null;
     const shown = lines.filter((l) => l.date >= viewStart);
-    const closing = shown.length > 0 ? shown[shown.length - 1].balance : opening;
+    // the balance at the END of what is shown (the range's last moment, else now) — a balance entered inside the range counts, even
+    // with no entry after it (it used to copy the opening when the range had no entry: a balance entered on the range's last day was lost)
+    const closingAt = end ?? new Date();
+    const closing = doc.ledger ? balanceAt(anchors, lines, closingAt) : anchorAt(anchors, closingAt)?.balance ?? null;
     const described = await describeTransactions(shown);
     const head = { since: range ? null : doc.asOf || null, opening, closing, range, truncated };
 

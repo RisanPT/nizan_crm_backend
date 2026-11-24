@@ -38,11 +38,24 @@ const frameSchema = new mongoose.Schema(
   { _id: false },
 );
 
-// a PDF on the moodboard or the storyboard (a brief, a lookbook, a drawn storyboard, a shot list) — read in the app through the server
+// a picture, a video or a link on the moodboard or the camera movement plan
+const referenceItemSchema = new mongoose.Schema(
+  {
+    label: { type: String, default: '', trim: true, maxlength: 120 },
+    url: { type: String, required: true, trim: true },
+    kind: { type: String, enum: ['image', 'video', 'link'], default: 'link' },
+    addedByName: { type: String, default: '' },
+    addedAt: { type: Date, default: null },
+  },
+  { _id: false },
+);
+
+// a PDF on the moodboard, the storyboard or the camera movement plan (a brief, a lookbook, a drawn storyboard, a shot list, the camera
+// moves) — read in the app through the server
 const documentSchema = new mongoose.Schema(
   {
     key: { type: String, required: true },
-    part: { type: String, enum: ['moodboard', 'storyboard'], required: true },
+    part: { type: String, enum: ['moodboard', 'storyboard', 'camera'], required: true }, // camera = the camera movement plan
     name: { type: String, default: '', trim: true, maxlength: 160 }, // the file's name
     label: { type: String, default: '', trim: true, maxlength: 120 },
     fileUrl: { type: String, default: '' }, // where it is kept (never sent to the app — services/shootFiles.js)
@@ -84,19 +97,9 @@ const marketingShootSchema = new mongoose.Schema(
     milestones: { type: [milestoneSchema], default: [] },
     coverUrl: { type: String, default: '', trim: true },
     // the moodboard: pictures (uploaded or linked), videos and links — kind decided from the link (utils/shootBoard.js)
-    references: {
-      type: [
-        {
-          label: { type: String, default: '', trim: true, maxlength: 120 },
-          url: { type: String, required: true, trim: true },
-          kind: { type: String, enum: ['image', 'video', 'link'], default: 'link' },
-          addedByName: { type: String, default: '' },
-          addedAt: { type: Date, default: null },
-          _id: false,
-        },
-      ],
-      default: [],
-    },
+    references: { type: [referenceItemSchema], default: [] },
+    // Camera Movement: reference pictures and video links of the moves (pan, dolly, gimbal…), the same kind of items (its PDFs: documents)
+    cameraRefs: { type: [referenceItemSchema], default: [] },
     // Crew & Logistics: when the crew must be there, where (a map link), what to bring or arrange (ticked off), notes
     logistics: {
       callTime: { type: String, default: '', match: /^(\d{2}:\d{2})?$/ },

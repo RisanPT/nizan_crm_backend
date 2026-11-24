@@ -43,6 +43,7 @@ app.use(express.json());
 app.use(sanitizeErrorResponses);
 app.use('/api/accounting', await imp('routes/accountingRoutes.js'));
 app.use('/api/bank-accounts', await imp('routes/bankAccountRoutes.js'));
+app.use('/api/reports', await imp('routes/reportRoutes.js'));
 app.use(errorHandler);
 const server = app.listen(0, '127.0.0.1');
 await new Promise((r) => server.once('listening', r));
@@ -294,6 +295,36 @@ await check('the accounts list says what each held at the end of last month', as
   assert.equal(of(old._id).previousBalance, 500, 'what it held at the END OF LAST MONTH — before today\'s ₹100');
   assert.equal(of(fresh._id).previousBalance, null, 'its first balance is from this month: nothing to compare with');
   assert.equal(list.previous.total, null, 'so the total cannot be compared either');
+});
+
+await check('the month-end review\'s cash & bank are the accounts\' balances (the Finance dashboard agrees with Bank balances)', async () => {
+  // money posted on the bank ledger BEFORE its balance was entered from the statement: that balance already holds it — the review
+  // used to add it again (every cash / bank ledger from day one)
+  const axis = await BankAccount.findById(bank._id).lean();
+  await JournalEntry.create({ date: ist('2026-10-15'), voucherNo: 'JV/OLD', voucherType: 'journal', narration: 'before the statement balance', status: 'posted', lines: [{ account: axis.ledger, debit: 99999, credit: 0 }, { account: charges._id, debit: 0, credit: 99999 }] });
+  const list = (await api('GET', '/bank-accounts', accounts.token)).body;
+  const [y, m] = new Date(Date.now() + 330 * 60000).toISOString().slice(0, 7).split('-').map(Number);
+  const now = await api('GET', `/reports/month-end?year=${y}&month=${m}`, accounts.token);
+  assert.equal(now.status, 200, now.text);
+  const c = now.body.cashFlow;
+  assert.deepEqual([c.bankBalance, c.cashBalance, c.totalLiquid, c.cashSource, c.cashMissing], [list.bankTotal, list.cashTotal, list.totalBalance, 'accounts', 0], 'this month: the live balances, exactly');
+  // a past month: each account's balance at its end — what the statement says its closing was
+  const oct = (await api('GET', '/reports/month-end?year=2026&month=10', accounts.token)).body.cashFlow;
+  let bankEnd = 0;
+  let cashEnd = 0;
+  let missing = 0;
+  for (const a of (await api('GET', '/bank-accounts', accounts.token)).body.accounts.filter((x) => x.active)) {
+    const st = (await api('GET', `/bank-accounts/${a._id}/transactions?from=2026-10-01&to=2026-10-31&page=1`, accounts.token)).body;
+    if (st.closing === null || st.closing === undefined) {
+      missing += 1;
+      continue;
+    }
+    if (a.kind === 'cash') cashEnd += st.closing;
+    else bankEnd += st.closing;
+  }
+  assert.deepEqual([oct.bankBalance, oct.cashBalance, oct.cashMissing], [Math.round(bankEnd * 100) / 100, Math.round(cashEnd * 100) / 100, missing]);
+  assert.ok(oct.cashMissing >= 1, 'an account whose first balance is from this month had none at the end of October');
+  assert.equal(oct.bankBalance < 99999, true, 'the October entry before the statement balance is not counted twice');
 });
 
 await check('only finance staff; a bad range or direction is refused; an unknown account is 404', async () => {

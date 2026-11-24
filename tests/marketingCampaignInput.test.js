@@ -2,7 +2,7 @@
 // What the app may send for a campaign, an ad, a day's figures and a Meta Ads Manager import; how the file's rows are merged and matched.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { cleanCampaignInput, cleanAdInput, cleanMetricInput, cleanImportInput, groupImportRows, matchImportGroups, matchImportAd, dayToDate, MAX_IMPORT_ROWS } from '../utils/marketingCampaignInput.js';
+import { cleanCampaignInput, cleanAdInput, cleanMetricInput, cleanImportInput, groupImportRows, matchImportGroups, matchImportAd, adMatchOf, dayToDate, MAX_IMPORT_ROWS } from '../utils/marketingCampaignInput.js';
 
 const ID = '64b7f0c2a1b2c3d4e5f60718';
 const refused = (r, field) => {
@@ -181,9 +181,41 @@ test('matching: by Meta ID first, then by exact title in any case; a shared titl
   const m = matchImportGroups(groups, campaigns);
   assert.deepEqual(m.matched.map((x) => [x.group.name, x.campaign._id]), [['Bridal Campaign – Nov', 'c1'], ['Whatever Meta calls it', 'c2']]);
   assert.deepEqual(m.unmatched.map((x) => [x.group.name, x.reason]), [['Festive Offers', 'ambiguous'], ['Trial Makeup', 'no_match'], ['Makeup Courses – Enquiry', 'no_match'], ['Unknown', 'no_match']]);
-  // an unknown ID with a name we do know still matches by the name
-  assert.equal(matchImportGroups(groupImportRows([row({ campaign: 'Studio Tour', metaId: '5555' })]), campaigns).matched[0].campaign._id, 'c2');
+  // an unknown ID with the name of a campaign NOT linked to Meta yet matches by the name (and takes the ID)
+  assert.equal(matchImportGroups(groupImportRows([row({ campaign: 'Makeup Courses', metaId: '5555' })]), campaigns).matched[0].campaign._id, 'c5');
   assert.deepEqual(matchImportGroups([], campaigns), { matched: [], unmatched: [] });
+});
+
+test('a Meta campaign never lands on a campaign of ours linked to ANOTHER Meta campaign of the same name (it would overwrite its spend)', () => {
+  const campaigns = [
+    { _id: 'c2', title: 'Studio Tour', metaCampaignId: '1203' },
+    { _id: 'c5', title: 'Makeup Courses', metaCampaignId: '' },
+  ];
+  // Meta lets two campaigns share a name: 5555 is not 1203
+  const other = matchImportGroups(groupImportRows([row({ campaign: 'Studio Tour', metaId: '5555' })]), campaigns);
+  assert.deepEqual([other.matched.length, other.unmatched[0].reason], [0, 'other_meta_id']);
+  // the right one still lands by its ID; a file WITHOUT the ID column still matches by the name
+  assert.equal(matchImportGroups(groupImportRows([row({ campaign: 'Studio Tour', metaId: '1203' })]), campaigns).matched[0].campaign._id, 'c2');
+  assert.equal(matchImportGroups(groupImportRows([row({ campaign: 'Studio Tour' })]), campaigns).matched[0].campaign._id, 'c2');
+  // two Meta campaigns of one name, ours not linked yet: neither is guessed (each would overwrite the other's days)
+  const two = matchImportGroups(groupImportRows([row({ campaign: 'Makeup Courses', metaId: '7001' }), row({ campaign: 'Makeup Courses', metaId: '7002' })]), campaigns);
+  assert.deepEqual([two.matched.length, two.unmatched.map((u) => [u.group.metaId, u.reason])], [0, [['7001', 'same_name'], ['7002', 'same_name']]]);
+  // the file's order is kept
+  const mixed = matchImportGroups(groupImportRows([row({ campaign: 'Makeup Courses', metaId: '7001' }), row({ campaign: 'Studio Tour', metaId: '1203' })]), campaigns);
+  assert.deepEqual(mixed.matched.map((x) => x.campaign._id), ['c5', 'c2']);
+});
+
+test('an ad without a Meta ad ID whose name two of the campaign\'s ads carry is not guessed (another ad would double its days)', () => {
+  const ads = [
+    { _id: 'a1', name: 'Reel 1', metaAdId: '120301' },
+    { _id: 'a2', name: 'reel 1', metaAdId: '120302' },
+    { _id: 'a3', name: 'Static', metaAdId: '' },
+  ];
+  assert.deepEqual(adMatchOf({ name: 'Reel 1', metaId: '' }, ads), { ad: null, ambiguous: true });
+  assert.equal(adMatchOf({ name: 'Reel 1', metaId: '120302' }, ads).ad._id, 'a2', 'the ID tells them apart');
+  assert.equal(adMatchOf({ name: 'static', metaId: '' }, ads).ad._id, 'a3');
+  assert.deepEqual(adMatchOf({ name: 'New reel', metaId: '' }, ads), { ad: null }, 'a new ad');
+  assert.equal(matchImportAd({ name: 'Reel 1', metaId: '' }, ads), null);
 });
 
 test('an ad-level import: each row needs an ad (name or Meta ad ID); ads are grouped per campaign with their days', () => {

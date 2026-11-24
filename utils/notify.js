@@ -16,6 +16,14 @@ export const NOTIFICATION_TYPES = {
   LEAD_WAITING: 'lead_waiting',
   // An artist put a work's footage in Dropbox: Marketing is told it is ready to edit.
   FOOTAGE_UPLOADED: 'footage_uploaded',
+  // the smart booking allocation (services/artistAllocation.js): a work given to an artist team / taken off it; an EXTRA slot to OK
+  ARTIST_ASSIGNED: 'artist_assigned',
+  ARTIST_UNASSIGNED: 'artist_unassigned',
+  EXTRA_SLOT_REQUEST: 'extra_slot_request',
+  EXTRA_SLOT_DECISION: 'extra_slot_decision',
+  // automatic allocation: a new work the ERP could not give on its own (to CRM) / the artist team a salesperson's booking got
+  ALLOCATION_NEEDED: 'allocation_needed',
+  BOOKING_ARTIST_ASSIGNED: 'booking_artist_assigned',
   FOLLOWUP_ASSIGNED: 'followup_assigned',
   FOLLOWUP_DUE: 'followup_due',
   FOLLOWUP_MISSED: 'followup_missed',

@@ -88,18 +88,61 @@ console.log('\nConnect the CRM to Dropbox\n────────────�
 const { text, values } = readEnv();
 let key = values.DROPBOX_APP_KEY ?? '';
 let secret = values.DROPBOX_APP_SECRET ?? '';
-if (key && secret) console.log(`✔ Found your App key and App secret in ${envPath}`);
+const tail = (k) => `…${k.slice(-4)}`;
+
+/** Does the Dropbox app saved in .env still work? → '' when it does, else Dropbox's reason ("app is disabled" for a deleted app). */
+const savedProblem = async () => {
+  if (!values.DROPBOX_REFRESH_TOKEN) return '';
+  try {
+    const res = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'content-type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'refresh_token', refresh_token: values.DROPBOX_REFRESH_TOKEN, client_id: key, client_secret: secret }).toString(),
+    });
+    const b = await res.json().catch(() => ({}));
+    return b.access_token ? '' : [b.error, b.error_description].filter((x) => x && typeof x === 'string').join(' — ') || `HTTP ${res.status}`;
+  } catch {
+    return ''; // offline: no verdict — the steps below say so
+  }
+};
+
+if (key && secret) {
+  // A NEW Dropbox app (the old one deleted or replaced): its key goes in here — the saved one is never reused without asking.
+  const problem = await savedProblem();
+  if (/disabled|invalid_client/i.test(problem)) {
+    // the app itself is gone (deleted / disabled) or its key and secret don't match
+    console.log(`✖ The Dropbox app saved in ${envPath} (App key ${tail(key)}) no longer works — Dropbox says: ${problem}.`);
+    console.log('  Use your NEW app: Dropbox App Console → the new app → Settings → App key / App secret.');
+    key = '';
+    secret = '';
+  } else {
+    // the app is fine (its key and secret may just have been put into .env by hand) — only its connection needs making again
+    if (problem) console.log(`The saved connection no longer works (Dropbox says: ${problem}) — connect it again below.`);
+    console.log(`Saved in ${envPath}: the app with App key ${tail(key)}.`);
+    const ans = await ask('Press Enter to connect with that app — or, for a NEW Dropbox app, paste its App key here: ');
+    if (ans && !/^(y|yes)$/i.test(ans)) {
+      key = /^(n|no|new)$/i.test(ans) ? '' : ans;
+      secret = '';
+    }
+  }
+}
 if (!key) key = await ask('Paste the App key (Dropbox App Console → your app → Settings): ');
 if (!secret) secret = await askHidden('Paste the App secret (it stays hidden while you paste): ');
 if (!key || !secret) stop('The App key and App secret are both needed.');
 
-const authorize = `https://www.dropbox.com/oauth2/authorize?client_id=${encodeURIComponent(key)}&response_type=code&token_access_type=offline`;
+// Ask for exactly the permissions the CRM uses (plus account_info.read, always on): a Team permission left ticked in the App Console
+// then cannot turn this into a "work account only" link.
+const scope = ['account_info.read', ...NEEDED].join(' ');
+const authorize = `https://www.dropbox.com/oauth2/authorize?client_id=${encodeURIComponent(key)}&response_type=code&token_access_type=offline&scope=${encodeURIComponent(scope)}`;
 console.log('\nStep 1 — the COMPANY Dropbox account (the one the footage should go to) allows the CRM:');
 console.log(`  ${authorize}`);
 console.log('  • If you use that account yourself: Dropbox opens in your browser — sign in, click Continue → Allow, copy the code.');
 console.log('  • If someone else looks after it (e.g. the Marketing team): send them the link above. They open it, sign in to THEIR');
 console.log('    Dropbox, click Continue → Allow, and send you the code straight away (it works for a few minutes only).');
 console.log('    This window waits for you — paste the code as soon as it arrives.');
+console.log('  • "Please sign in with a work account"? The app still has TEAM permissions: App Console → the app → Permissions →');
+console.log('    untick everything under "Team scopes", click Submit, then open the link again.');
+console.log('  • "Error connecting app" / scope? Tick the missing permission under "Individual scopes", Submit, open the link again.');
 if (process.platform === 'darwin' && stdout.isTTY) execFile('open', [authorize], () => {});
 const code = await ask('\nStep 2 — paste the code here and press Enter: ');
 if (!code) stop('No code was pasted. Run the script again.');
@@ -117,6 +160,7 @@ try {
 }
 if (!body.refresh_token) {
   const why = [body.error, body.error_description].filter(Boolean).join(' — ') || 'no answer';
+  if (/disabled/i.test(why)) stop(`Dropbox says this app is disabled (${why}) — it is an old or deleted app.\n  Run this again and paste the App key and App secret of your NEW app (App Console → the app → Settings).`);
   if (/invalid_client|client_id|client_secret/i.test(why)) stop(`Dropbox says the App key or App secret is wrong (${why}).\n  Copy both again from the app's Settings tab into backend/.env — no spaces or quotes — and run this again.`);
   if (/invalid_grant|code/i.test(why)) stop(`Dropbox did not take the code (${why}).\n  A code works once and only for a few minutes — run the script again and paste the new code straight away.`);
   stop(`Dropbox said: ${why}`);

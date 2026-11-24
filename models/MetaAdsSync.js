@@ -48,6 +48,9 @@ const metaAdsSyncSchema = new mongoose.Schema(
       adsCreated: { type: Number, default: 0 },
       spend: { type: Number, default: 0 }, // written to CRM campaigns
       unlinkedSpend: { type: Number, default: 0 }, // seen on campaigns no CRM campaign matches
+      statusChanges: { type: Number, default: 0 }, // CRM campaigns and ads whose status changed with Meta's
+      pictures: { type: Number, default: 0 }, // ads whose picture came from Meta
+      adsSkipped: { type: Number, default: 0 }, // ads not written: two of the campaign's ads share the name and no Meta ad ID tells them apart
       importId: { type: mongoose.Schema.Types.ObjectId, ref: 'MetaImportLog', default: null },
     },
     lastOkAt: { type: Date, default: null },

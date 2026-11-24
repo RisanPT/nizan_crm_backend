@@ -221,6 +221,10 @@ await check('a form becomes a CRM lead: answers in their fields, its campaign, t
   assert.equal(Math.abs(new Date(lead.leadDate) - Date.parse(LEADS[9001].created_time.replace('+0000', 'Z'))) < 1000, true, 'dated when she sent it');
   const told = await Notification.find({ leadId: lead._id }).lean();
   assert.ok(told.some((x) => String(x.recipient) === String(manager.user._id) && x.title === 'New Meta lead'));
+  // and Marketing's manager (the ads are theirs) — not every Marketing member
+  assert.ok(told.some((x) => String(x.recipient) === String(head.user._id) && x.title === 'New Meta lead'), 'the Marketing Manager hears of it');
+  assert.equal(told.some((x) => String(x.recipient) === String(member.user._id)), false);
+  assert.equal(told.filter((x) => String(x.recipient) === String(head.user._id)).length, 1, 'once');
   const leadCall = calls.find((c) => c.path === '/v25.0/9001');
   assert.equal(leadCall.token, PAGE_TOKEN, 'the lead is read as the Page');
   assert.equal(e.formName, 'Bridal Nov form');

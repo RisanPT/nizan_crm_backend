@@ -62,7 +62,7 @@ const travelFor = async (candidate, others) => {
   return (other) => travelBetween(mine, coords.get(pincodeOf(other)) ?? null);
 };
 
-const leavesOf = async (employeeIds, days) => {
+export const leavesOf = async (employeeIds, days) => {
   const out = new Map();
   if (employeeIds.length === 0 || days.length === 0) return out;
   const sorted = [...days].sort();

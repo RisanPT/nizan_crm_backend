@@ -110,7 +110,7 @@ export const crmXlsx = async ({ overview, rows }) => {
 
   const o = overview;
   const summary = [
-    ['Team N ERP - CRM Report'],
+    ['Team N Makeovers - CRM Report'],
     [`Period: ${o.range.label}`],
     [`For: ${scopeText(o)}`],
     [`Compared with: ${previousText(o)}`],
@@ -147,7 +147,7 @@ const line = (text, extra = {}) => [{ text: text == null ? '' : String(text), si
 
 /// Writes the report to [doc] (landscape A4).
 export const writeCrmPdf = (doc, { overview: o, rows }) => {
-  doc.fontSize(18).fillColor(INK).font('Helvetica-Bold').text('Team N ERP - CRM Report', MARGIN, MARGIN);
+  doc.fontSize(18).fillColor(INK).font('Helvetica-Bold').text('Team N Makeovers - CRM Report', MARGIN, MARGIN);
   doc.fontSize(10).font('Helvetica').fillColor(GREY).text(`Period: ${o.range.label}   ·   For: ${scopeText(o)}   ·   Compared with: ${previousText(o)}`);
   doc.fontSize(8.5).text(trackingText(o));
 

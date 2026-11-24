@@ -26,6 +26,10 @@ const campaignAdSchema = new mongoose.Schema(
     metaAdId: { type: String, default: '', trim: true, maxlength: 40 },
     metaAdSetId: { type: String, default: '', trim: true, maxlength: 40 },
     dailyFigures: { type: Boolean, default: false }, // true once an ad-level import wrote days for it
+    // the live Meta sync: the ad's status word on Meta (ACTIVE, ADSET_PAUSED, DISAPPROVED…), and where the thumbnail came from —
+    // 'meta' = its picture on Meta (refreshed by each run; Meta's links expire), '' = typed by the team (never replaced by the sync)
+    metaStatus: { type: String, default: '', trim: true },
+    thumbSource: { type: String, enum: ['', 'meta'], default: '' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
   },
   { timestamps: true },

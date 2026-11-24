@@ -97,13 +97,22 @@ export const haversineKm = (a, b) => {
   return 2 * 6371 * Math.asin(Math.sqrt(h));
 };
 
+const located = (p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lng);
+
+/// The DRIVE alone between two venues (no handling time) — the estimate the artist allocation's "within 30 minutes" uses.
+///   → { minutes, km, known }   known = false when either place couldn't be located (minutes is then the flat default)
+export const driveMinutes = (from, to) => {
+  if (!located(from) || !located(to)) return { minutes: DEFAULT_TRAVEL_MIN, km: null, known: false };
+  const km = haversineKm(from, to) * ROAD_FACTOR;
+  return { minutes: (km / AVG_KMH) * 60, km, known: true };
+};
+
 /// Minutes to get from one venue to the next, handling time included.
 ///   → { minutes, known }   known = false when either place couldn't be located (a flat default)
 export const travelBetween = (from, to) => {
-  const ok = (p) => p && Number.isFinite(p.lat) && Number.isFinite(p.lng);
-  if (!ok(from) || !ok(to)) return { minutes: DEFAULT_TRAVEL_MIN, known: false };
-  const km = haversineKm(from, to) * ROAD_FACTOR;
-  return { minutes: Math.round((km / AVG_KMH) * 60 + HANDLING_MIN), known: true };
+  const d = driveMinutes(from, to);
+  if (!d.known) return { minutes: DEFAULT_TRAVEL_MIN, known: false };
+  return { minutes: Math.round(d.minutes + HANDLING_MIN), known: true };
 };
 
 /// What the screens show about another booking.

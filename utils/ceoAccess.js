@@ -143,7 +143,7 @@ export const LEADERSHIP_DENIED_MOUNTS = [
 // fields on every record), /api/offboarding (settlement), /api/recruitment (offers), /api/timebox (payroll).
 export const LEADERSHIP_READ_OK_MOUNTS = [
   '/api', '/api/account-reports', '/api/accounting', '/api/addon-services', '/api/admin-expenses', '/api/app-clients',
-  '/api/approvals', '/api/artist-payouts', '/api/assets', '/api/associate-works', '/api/attendances', '/api/auth', '/api/blocked-dates',
+  '/api/allocation', '/api/approvals', '/api/artist-payouts', '/api/artist-teams', '/api/assets', '/api/associate-works', '/api/attendances', '/api/auth', '/api/blocked-dates',
   '/api/booking-advances', '/api/bookings', '/api/budgets', '/api/cash-transactions', '/api/ceo', '/api/chat', '/api/client',
   '/api/client/auth', '/api/collections', '/api/company-reports', '/api/consultations', '/api/content', '/api/countries', '/api/crm', '/api/customers',
   '/api/dashboard', '/api/decision-policy', '/api/decisions', '/api/departments', '/api/designations', '/api/districts', '/api/employee-assets', '/api/employees',

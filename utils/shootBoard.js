@@ -1,8 +1,9 @@
 // The Shoot Planner's moodboard, logistics and milestone dates (pure — tests/shootBoard.test.js). The controller
 // (controllers/marketingPortfolioController.js) saves what these return.
 //
-//  • Moodboard: pictures (uploaded from the phone or computer, or a link to a picture), videos and plain links (Pinterest, Instagram,
-//    a Drive folder). Each is kept once (by its link), with a label, who added it and when. At most MAX_MOODBOARD.
+//  • Moodboard (and the Camera Movement plan, the same kind of board): pictures (uploaded from the phone or computer, or a link to a
+//    picture), videos (a video file, or a YouTube / Instagram reel / Vimeo / TikTok page) and plain links (Pinterest, a Drive folder).
+//    Each is kept once (by its link), with a label, who added it and when. At most MAX_MOODBOARD.
 //  • Logistics: the crew's call time, a map link, a checklist of what to bring or arrange (each ticked by whoever did it), and notes.
 //  • Milestones: moving the shoot day moves the milestones not yet done by the same number of days (done ones keep their dates).
 //  • Storyboard: each frame keeps a KEY of its own, so on the shoot day a frame is ticked "shot" (who, when) on its own — a tick never
@@ -21,6 +22,17 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 const IMAGE_EXT = /\.(jpe?g|png|webp|gif|heic|heif|avif|bmp)$/i;
 const VIDEO_EXT = /\.(mp4|mov|m4v|webm|avi|mkv)$/i;
 
+/** A video page on a video site — YouTube, an Instagram reel, Vimeo, TikTok — shown as a video (it plays in its own app). */
+const isVideoPage = (u, path) => {
+  const host = u.hostname.toLowerCase().replace(/^(www\.|m\.)/, '');
+  if (host === 'youtu.be') return path.length > 1;
+  if (host === 'youtube.com' || host === 'music.youtube.com') return /^\/(watch|shorts\/|live\/|embed\/)/.test(path);
+  if (host === 'instagram.com') return /^\/(reels?|tv)\//.test(path) || /^\/[^/]+\/reels?\//.test(path);
+  if (host === 'vimeo.com' || host === 'player.vimeo.com') return /\/\d+/.test(path);
+  if (host === 'tiktok.com' || host === 'vm.tiktok.com') return /\/video\//.test(path) || host === 'vm.tiktok.com';
+  return false;
+};
+
 /** What a moodboard link shows: 'image' (a picture the screen can show), 'video', or 'link' (anything else — opened outside). */
 export const moodboardKind = (url) => {
   let u;
@@ -35,6 +47,7 @@ export const moodboardKind = (url) => {
   if (/^i\.pinimg\.com$/i.test(u.hostname) || /^images\.unsplash\.com$/i.test(u.hostname)) return 'image';
   if (IMAGE_EXT.test(path)) return 'image';
   if (VIDEO_EXT.test(path)) return 'video';
+  if (isVideoPage(u, path)) return 'video';
   return 'link';
 };
 
@@ -54,7 +67,7 @@ export const cleanMoodboardItems = (items) => {
  * [existing] with [items] added at the end (a link already on the board is not added twice) — refused past MAX_MOODBOARD.
  * → { ok, list, added, skipped } or { ok: false, message }
  */
-export const addToMoodboard = (existing, items, { byName = '', now = new Date(), max = MAX_MOODBOARD } = {}) => {
+export const addToMoodboard = (existing, items, { byName = '', now = new Date(), max = MAX_MOODBOARD, what = 'A moodboard' } = {}) => {
   const list = [...(existing ?? [])];
   const have = new Set(list.map((r) => r.url));
   let added = 0;
@@ -68,7 +81,7 @@ export const addToMoodboard = (existing, items, { byName = '', now = new Date(),
     list.push({ url: it.url, label: it.label ?? '', kind: it.kind ?? moodboardKind(it.url), addedByName: byName, addedAt: now });
     added += 1;
   }
-  if (list.length > max) return fail(`A moodboard holds up to ${max} pictures and links — this would make ${list.length}. Remove some first.`, 'items');
+  if (list.length > max) return fail(`${what} holds up to ${max} pictures and links — this would make ${list.length}. Remove some first.`, 'items');
   return { ok: true, list, added, skipped };
 };
 
@@ -174,11 +187,13 @@ export const shotProgress = (frames) => {
   return { total, shot, pct: total ? Math.round((shot * 100) / total) : 0 };
 };
 
-// ── PDFs on the moodboard and the storyboard ──────────────────────────────────
-// A brief, a lookbook, a drawn storyboard, a shot list… uploaded as a PDF and read inside the app. Kept by the server (services/
-// shootFiles.js) and only ever sent back through it — the stored file's own address is never handed out.
+// ── PDFs on the moodboard, the storyboard and the camera movement plan ─────────
+// A brief, a lookbook, a drawn storyboard, a shot list, the camera moves (pan, dolly, gimbal…)… uploaded as a PDF and read inside the
+// app. Kept by the server (services/shootFiles.js) and only ever sent back through it — the stored file's own address is never handed out.
 
-export const DOC_PARTS = ['moodboard', 'storyboard'];
+export const DOC_PARTS = ['moodboard', 'storyboard', 'camera'];
+/** Each part as people call it ("The camera movement plan holds up to 20 PDFs"). */
+export const DOC_PART_NAMES = { moodboard: 'moodboard', storyboard: 'storyboard', camera: 'camera movement plan' };
 export const MAX_PDF_BYTES = 25 * 1024 * 1024;
 export const MAX_DOCS_PER_PART = 20;
 

@@ -23,6 +23,8 @@ import * as T from '../utils/marketingTeamStats.js';
 import { metaConfig } from '../utils/metaLeads.js';
 import { adsConfig } from '../utils/metaAds.js';
 import MetaAdsSync from '../models/MetaAdsSync.js';
+import { tagMetaLeads } from '../services/metaLeadTags.js';
+import { metaStatusWord } from '../utils/metaAds.js';
 
 // The Campaigns hub — Overview, All Campaigns, Performance, Creatives & Ads, Budget & Spend, Leads & Conversions, Reports & Insights (the
 // marketing team's document, pages "Campaigns — Overview with Meta sync" and "Screens 02 to 07"). Routes: routes/marketingCampaignHubRoutes.js,
@@ -67,7 +69,7 @@ const pageOf = (req, dflt = 10) => ({ limit: Math.min(Math.max(parseInt(req.quer
 
 // ── loading ───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
-const CAMPAIGN_FIELDS = 'title channel status startDate endDate createdAt brand platform objective budget dailyBudget metaCampaignId audienceNote notes';
+const CAMPAIGN_FIELDS = 'title channel status startDate endDate createdAt brand platform objective budget dailyBudget metaCampaignId metaStatus metaStatusAt audienceNote notes';
 const LEAD_FIELDS = 'campaignId status priority source region district leadDate createdAt bookingId creative';
 
 const leadWindow = (from, to) => ({ $or: [{ leadDate: { $gte: istStart(from), $lt: istEnd(to) } }, { leadDate: null, createdAt: { $gte: istStart(from), $lt: istEnd(to) } }] });
@@ -171,6 +173,8 @@ const campaignShape = (c) => ({
   budget: c.budget ?? 0,
   dailyBudget: c.dailyBudget ?? 0,
   metaCampaignId: c.metaCampaignId ?? '',
+  metaStatus: metaStatusWord(c.metaStatus ?? ''),
+  metaStatusAt: c.metaStatusAt ?? null,
   audienceNote: c.audienceNote ?? '',
   notes: c.notes ?? '',
   createdAt: c.createdAt ?? null,
@@ -371,6 +375,8 @@ export const createCampaign = asyncHandler(async (req, res) => {
   if (await metaIdTaken(v.value.metaCampaignId)) return fail(res, 409, 'Another campaign already has that Meta campaign ID.', { field: 'metaCampaignId' });
   try {
     const c = await Campaign.create({ ...v.value, createdBy: req.user._id });
+    // its Meta ID typed in: the Meta Lead Ads leads of that Meta campaign that came before take it
+    if (c.metaCampaignId) await tagMetaLeads(c.metaCampaignId, c._id);
     res.status(201).json(campaignShape(c.toObject()));
   } catch (e) {
     if (e?.code === 11000) return fail(res, 409, 'Another campaign already has that Meta campaign ID.', { field: 'metaCampaignId' });
@@ -385,6 +391,7 @@ export const updateCampaign = asyncHandler(async (req, res) => {
   const v = cleanCampaignInput(req.body, c);
   if (!v.ok) return fromInput(res, v);
   if (v.value.metaCampaignId && (await metaIdTaken(v.value.metaCampaignId, c._id))) return fail(res, 409, 'Another campaign already has that Meta campaign ID.', { field: 'metaCampaignId' });
+  const metaBefore = c.metaCampaignId ?? '';
   Object.assign(c, v.value);
   try {
     await c.save();
@@ -392,6 +399,7 @@ export const updateCampaign = asyncHandler(async (req, res) => {
     if (e?.code === 11000) return fail(res, 409, 'Another campaign already has that Meta campaign ID.', { field: 'metaCampaignId' });
     throw e;
   }
+  if (c.metaCampaignId && c.metaCampaignId !== metaBefore) await tagMetaLeads(c.metaCampaignId, c._id);
   res.json(campaignShape(c.toObject()));
 });
 

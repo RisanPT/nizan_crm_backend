@@ -87,6 +87,17 @@ const rowsFor = (account, level, breakdowns, since, until) => {
   return rows;
 };
 const PAGE = 7; // small pages, so paging is used
+// the campaigns and ads themselves (their status on Meta, the ads' pictures) — changed by the checks below
+const metaStatus = {}; // Meta campaign / ad id → effective_status (ACTIVE when not set)
+const stopTime = {}; // Meta campaign id → stop_time
+const pictureOf = { 501: { thumbnail_url: 'https://scontent.test/501_480.jpg' }, 502: { image_url: 'https://scontent.test/502_full.jpg', thumbnail_url: 'https://scontent.test/502_480.jpg' } };
+const entityCalls = [];
+const entitiesOf = (account, edge) =>
+  edge === 'campaigns'
+    ? CAMPAIGNS.filter((c) => c.account === account).map((c) => ({ id: c.id, name: c.name, effective_status: metaStatus[c.id] ?? 'ACTIVE', ...(stopTime[c.id] ? { stop_time: stopTime[c.id] } : {}) }))
+    : account === 'act_111'
+      ? ['501', '502'].map((id) => ({ id, campaign_id: '3001', effective_status: metaStatus[id] ?? 'ACTIVE', creative: { ...pictureOf[id], id: `c${id}` } }))
+      : [];
 let failOn = null; // { breakdowns?: string, level?: string, code: 'token' | 'down' }
 const calls = [];
 _setMetaFetch(async (url) => {
@@ -97,6 +108,13 @@ _setMetaFetch(async (url) => {
   if (u.searchParams.get('appsecret_proof') !== crypto.createHmac('sha256', SECRET).update(token ?? '').digest('hex')) return json(400, { error: { code: 100, message: 'Invalid appsecret_proof' } });
   if (token !== TOKEN) return json(400, { error: { code: 190, message: 'Invalid OAuth access token' } });
   const [ver, account, edge] = u.pathname.split('/').filter(Boolean);
+  if (ver === 'v25.0' && ['campaigns', 'ads'].includes(edge) && ['act_111', 'act_222'].includes(account)) {
+    const fields = u.searchParams.get('fields') ?? '';
+    entityCalls.push({ account, edge, fields });
+    if (!fields.includes('effective_status')) return json(400, { error: { code: 100, message: 'missing effective_status' } });
+    if (edge === 'ads' && !/creative\.thumbnail_width\(\d+\)\.thumbnail_height\(\d+\)\{thumbnail_url,image_url\}/.test(fields)) return json(400, { error: { code: 100, message: 'bad creative fields' } });
+    return json(200, { data: entitiesOf(account, edge), paging: {} });
+  }
   if (ver !== 'v25.0' || edge !== 'insights' || !['act_111', 'act_222'].includes(account)) return json(400, { error: { code: 803, message: 'Unknown path' } });
   const level = u.searchParams.get('level');
   const breakdowns = u.searchParams.get('breakdowns') ?? '';
@@ -174,6 +192,9 @@ await CampaignDailyMetric.create({ campaignId: keralaNov._id, day: day(40), spen
 // a Meta lead that came through "Party Season" before it was linked
 const partyLead = await Lead.create({ name: 'Nila', phone: '+919800000001', source: 'Paid Ads Leads' });
 await MetaLeadEvent.create({ leadgenId: '7001', status: 'created', leadId: partyLead._id, metaCampaignId: '3005' });
+// a Meta lead from "Bridal Reels" (3002) before the CRM campaign of that title had Meta's id
+const bridalLead = await Lead.create({ name: 'Ameena', phone: '+919800000002', source: 'Paid Ads Leads' });
+await MetaLeadEvent.create({ leadgenId: '7002', status: 'created', leadId: bridalLead._id, metaCampaignId: '3002' });
 
 const metric = (c, d) => CampaignDailyMetric.findOne({ campaignId: c._id ?? c, day: d }).lean();
 console.log('Meta ad spend sync');
@@ -229,6 +250,11 @@ await check('a CRM campaign found by its title takes Meta\'s id (so the next syn
   assert.equal(await CampaignDailyMetric.countDocuments({ campaignId: bridal._id }), 20);
 });
 
+await check('…and the Meta leads of that campaign that came before it was known take it too', async () => {
+  assert.equal(String((await Lead.findById(bridalLead._id).lean()).campaignId), String(bridal._id));
+  assert.equal(String((await MetaLeadEvent.findOne({ leadgenId: '7002' }).lean()).campaignId), String(bridal._id));
+});
+
 await check('ads are added with their days; their figures add up; audience segments are stored by dimension', async () => {
   const ads = await CampaignAd.find({ campaignId: keralaNov._id }).lean();
   assert.deepEqual(ads.map((a) => a.metaAdId).sort(), ['501', '502']);
@@ -241,6 +267,55 @@ await check('ads are added with their days; their figures add up; audience segme
   assert.deepEqual(segs.map((s) => s.dimension).sort(), ['age+gender', 'age+gender', 'placement', 'placement']);
   assert.ok(segs.some((s) => s.placement === 'Instagram · Instagram Reels'));
   assert.ok(segs.some((s) => s.age === '25-34' && s.gender === 'female'));
+});
+
+await check('each run reads the campaigns and ads themselves: status from Meta, each ad\'s picture', async () => {
+  assert.deepEqual(entityCalls.filter((c) => c.edge === 'campaigns').map((c) => c.account).slice(0, 2).sort(), ['act_111', 'act_222']);
+  const c = await Campaign.findById(keralaNov._id).lean();
+  assert.deepEqual([c.status, c.metaStatus], ['active', 'ACTIVE']);
+  assert.ok(c.metaStatusAt);
+  const ads = await CampaignAd.find({ campaignId: keralaNov._id }).lean();
+  const reel = ads.find((a) => a.metaAdId === '501');
+  const carousel = ads.find((a) => a.metaAdId === '502');
+  assert.deepEqual([reel.thumbUrl, reel.thumbSource, reel.metaStatus], ['https://scontent.test/501_480.jpg', 'meta', 'ACTIVE']);
+  assert.equal(carousel.thumbUrl, 'https://scontent.test/502_full.jpg', 'an image ad\'s own picture before its thumbnail');
+  const list = await call(`/marketing/campaign-hub/ads?from=${day(19)}&to=${TODAY}&brand=all`, { token: member.token });
+  assert.equal(list.status, 200, list.text);
+  const row = (list.body.items ?? list.body.rows).find((r) => r.metaAdId === '501');
+  assert.deepEqual([row.thumbFromMeta, row.metaStatus], [true, 'Active']);
+});
+
+await check('Meta pauses, rejects and ends: the CRM follows; a thumbnail the team typed is kept; a changed picture is refreshed', async () => {
+  metaStatus['3001'] = 'PAUSED';
+  metaStatus['501'] = 'ADSET_PAUSED';
+  metaStatus['502'] = 'DISAPPROVED';
+  pictureOf[501] = { thumbnail_url: 'https://scontent.test/501_new.jpg' };
+  await CampaignAd.updateOne({ metaAdId: '502' }, { $set: { thumbUrl: 'https://drive.test/our-own.jpg', thumbSource: '' } });
+  const r = await call('/meta/ads/sync', { token: member.token, method: 'POST', body: { days: 1 } });
+  assert.equal(r.body.run.ok, true, r.body.run.problem);
+  assert.equal(r.body.run.statusChanges, 3, 'the campaign and both ads');
+  const c = await Campaign.findById(keralaNov._id).lean();
+  assert.deepEqual([c.status, c.metaStatus], ['paused', 'PAUSED']);
+  const reel = await CampaignAd.findOne({ metaAdId: '501' }).lean();
+  const carousel = await CampaignAd.findOne({ metaAdId: '502' }).lean();
+  assert.deepEqual([reel.status, reel.metaStatus, reel.thumbUrl], ['paused', 'ADSET_PAUSED', 'https://scontent.test/501_new.jpg']);
+  assert.deepEqual([carousel.status, carousel.metaStatus, carousel.thumbUrl, carousel.thumbSource], ['paused', 'DISAPPROVED', 'https://drive.test/our-own.jpg', '']);
+  const camps = await call(`/marketing/campaign-hub/campaigns?from=${day(19)}&to=${TODAY}&brand=all`, { token: member.token });
+  const kn = (camps.body.items ?? camps.body.rows).find((x) => x.id === String(keralaNov._id));
+  assert.deepEqual([kn.status, kn.metaStatus], ['paused', 'Paused']);
+  const ads = await call(`/marketing/campaign-hub/ads?from=${day(19)}&to=${TODAY}&brand=all`, { token: member.token });
+  assert.equal((ads.body.items ?? ads.body.rows).find((x) => x.metaAdId === '502').metaStatus, 'Rejected by Meta');
+  // running again, but its end date has passed: ended
+  metaStatus['3001'] = 'ACTIVE';
+  stopTime['3001'] = new Date(Date.now() - 864e5).toISOString();
+  await call('/meta/ads/sync', { token: member.token, method: 'POST', body: { days: 1 } });
+  const ended = await Campaign.findById(keralaNov._id).lean();
+  assert.deepEqual([ended.status, ended.metaStatus], ['completed', 'COMPLETED']);
+  delete stopTime['3001'];
+  for (const k of ['501', '502']) delete metaStatus[k];
+  const back = await call('/meta/ads/sync', { token: member.token, method: 'POST', body: { days: 1 } });
+  assert.equal(back.body.run.statusChanges, 3);
+  assert.equal((await Campaign.findById(keralaNov._id).lean()).status, 'active');
 });
 
 await check('Meta campaigns no CRM campaign matches are listed with their account\'s brand — not counted', async () => {
@@ -258,12 +333,13 @@ await check('Meta campaigns no CRM campaign matches are listed with their accoun
 await check('the same days again change nothing (no second day, ad or segment); a changed figure from Meta replaces the old', async () => {
   const counts = async () => [await CampaignDailyMetric.countDocuments(), await CampaignAd.countDocuments(), await CampaignAdDailyMetric.countDocuments(), await CampaignBreakdownMetric.countDocuments()];
   const before = await counts();
+  const logsBefore = await MetaImportLog.countDocuments({ source: 'api' });
   bump = 10;
   const r = await call('/meta/ads/sync', { token: member.token, method: 'POST', body: { days: 20 } });
   assert.equal(r.body.run.ok, true);
   assert.deepEqual(await counts(), before);
   assert.equal((await metric(keralaNov, day(2))).spend, 110 + Number(day(2).slice(8)));
-  assert.equal(await MetaImportLog.countDocuments({ source: 'api' }), 2, 'one history entry per run');
+  assert.equal(await MetaImportLog.countDocuments({ source: 'api' }), logsBefore + 1, 'one history entry per run');
 });
 
 await check('link: "Party Season" is that CRM campaign — its days come in from the first day seen, and its Meta lead takes it', async () => {
@@ -343,9 +419,13 @@ await check('one run at a time: a running sync refuses another; one dead for 30 
   assert.equal((await MetaAdsSync.findOne({ key: 'ads' }).lean()).running, false);
 });
 
-await check('the automatic run: due 6 hours after the last, the last 3 days; off when switched off — which only a manager can do', async () => {
+await check('the automatic run: due 30 minutes after the last, the last 3 days; off when switched off — which only a manager can do', async () => {
   assert.equal(await autoSyncTick(), null, 'just ran: not due');
-  await MetaAdsSync.updateOne({ key: 'ads' }, { $set: { 'lastRun.at': new Date(Date.now() - 7 * 3600000) } });
+  await MetaAdsSync.updateOne({ key: 'ads' }, { $set: { 'lastRun.at': new Date(Date.now() - 10 * 60000) } });
+  assert.equal(await autoSyncTick(), null, '10 minutes ago: not yet');
+  const status = await call('/meta/ads/status', { token: member.token });
+  assert.deepEqual([status.body.settings.everyMinutes, status.body.settings.everyHours], [30, 0.5]);
+  await MetaAdsSync.updateOne({ key: 'ads' }, { $set: { 'lastRun.at': new Date(Date.now() - 31 * 60000) } });
   const run = await autoSyncTick();
   assert.equal(run.ok, true);
   assert.deepEqual([run.trigger, run.byName, run.from, run.to], ['auto', 'Automatic sync', day(2), TODAY]);
@@ -380,6 +460,51 @@ await check('add all; status shows the history and never a secret; only the Mark
   assert.equal((await call('/meta/ads/status', { token: artist.token })).status, 403);
   assert.equal((await call('/meta/ads/sync', { method: 'POST', body: { days: 1 } })).status, 401);
   assert.equal((await call('/meta/ads/sync', { token: member.token, method: 'POST', body: { days: 93 } })).status, 400);
+});
+
+await check('a Meta campaign with the name of a campaign linked to ANOTHER Meta campaign is listed, never written over it', async () => {
+  CAMPAIGNS.push({ id: '3006', name: 'Already linked', account: 'act_222', objective: 'OUTCOME_LEADS', base: 9 });
+  const r = await call('/meta/ads/sync', { token: member.token, method: 'POST', body: { days: 2 } });
+  assert.equal(r.body.run.ok, true, r.body.run.problem);
+  assert.equal(await CampaignDailyMetric.countDocuments({ campaignId: other._id }), 0, '"Already linked" (Meta 9999) keeps no days of Meta 3006');
+  const s = await call('/meta/ads/status', { token: member.token });
+  const u = s.body.unlinked.find((x) => x.metaId === '3006');
+  assert.equal(u.reason, 'other_meta_id');
+});
+
+await check('a Meta ID typed on a campaign: the Meta leads of that campaign that came before take it', async () => {
+  const lead = await Lead.create({ name: 'Fida', phone: '+919800000003', source: 'Paid Ads Leads' });
+  await MetaLeadEvent.create({ leadgenId: '7010', status: 'created', leadId: lead._id, metaCampaignId: '3010' });
+  const made = await call('/marketing/campaign-hub/campaigns', { token: member.token, method: 'POST', body: { title: 'Typed by hand', brand: 'kerala', platform: 'meta', metaCampaignId: '3010' } });
+  assert.equal(made.status, 201, made.text);
+  assert.equal(String((await Lead.findById(lead._id).lean()).campaignId), made.body.id);
+  // the same when the ID is added later on an existing campaign
+  const lead2 = await Lead.create({ name: 'Rida', phone: '+919800000004', source: 'Paid Ads Leads' });
+  await MetaLeadEvent.create({ leadgenId: '7011', status: 'created', leadId: lead2._id, metaCampaignId: '3011' });
+  const later = await Campaign.create({ title: 'ID added later', brand: 'kerala' });
+  const put = await call(`/marketing/campaign-hub/campaigns/${later._id}`, { token: member.token, method: 'PUT', body: { metaCampaignId: '3011' } });
+  assert.equal(put.status, 200, put.text);
+  assert.equal(String((await Lead.findById(lead2._id).lean()).campaignId), String(later._id));
+  // a lead the team gave another campaign by hand keeps it
+  const mine = await Campaign.create({ title: 'Chosen by hand', brand: 'kerala' });
+  const lead3 = await Lead.create({ name: 'Sana', phone: '+919800000005', source: 'Paid Ads Leads', campaignId: mine._id });
+  await MetaLeadEvent.create({ leadgenId: '7012', status: 'created', leadId: lead3._id, metaCampaignId: '3012' });
+  await call('/marketing/campaign-hub/campaigns', { token: member.token, method: 'POST', body: { title: 'Another', brand: 'kerala', metaCampaignId: '3012' } });
+  assert.equal(String((await Lead.findById(lead3._id).lean()).campaignId), String(mine._id));
+});
+
+await check('a file without ad IDs: an ad name two ads share is not guessed — no third ad, the day not counted twice', async () => {
+  const twins = await Campaign.create({ title: 'Twins campaign', brand: 'kerala' });
+  await CampaignAd.create([{ campaignId: twins._id, name: 'Twin Reel', metaAdId: 'T1', dailyFigures: true }, { campaignId: twins._id, name: 'Twin Reel', metaAdId: 'T2', dailyFigures: true }]);
+  const row = { campaign: 'Twins campaign', day: day(1), spend: 120, reach: 500, impressions: 1000, clicks: 20, results: 2, ad: 'Twin Reel' };
+  const r = await call('/marketing/campaign-hub/import', { token: member.token, method: 'POST', body: { level: 'ad', rows: [row, { ...row, ad: 'Solo Reel', spend: 30 }] } });
+  assert.equal(r.status, 200, r.text);
+  assert.deepEqual(r.body.adsSkipped.map((s) => [s.ad, s.spend]), [['Twin Reel', 120]]);
+  assert.equal(await CampaignAd.countDocuments({ campaignId: twins._id, name: 'Twin Reel' }), 2, 'no third "Twin Reel"');
+  assert.equal((await metric(twins, day(1))).spend, 30, 'the day counts the solo ad only — not the twins twice');
+  // the same file twice changes nothing
+  await call('/marketing/campaign-hub/import', { token: member.token, method: 'POST', body: { level: 'ad', rows: [row, { ...row, ad: 'Solo Reel', spend: 30 }] } });
+  assert.equal((await metric(twins, day(1))).spend, 30);
 });
 
 server.close();

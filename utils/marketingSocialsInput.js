@@ -107,6 +107,11 @@ export const cleanAssetInput = (b = {}, existing = null) => {
   if (has('isFinal')) out.isFinal = b.isFinal === true;
   if (has('ownerName')) out.ownerName = str(b.ownerName, 100);
   if (has('shootId')) out.shootId = b.shootId && mongoose.isValidObjectId(String(b.shootId)) ? String(b.shootId) : null;
+  // the work (CRM booking) it shows — its client's review then shows with it in the gallery; null = none
+  if (has('bookingId')) {
+    if (b.bookingId && !mongoose.isValidObjectId(String(b.bookingId))) return fail('That booking was not found.', 'bookingId');
+    out.bookingId = b.bookingId ? String(b.bookingId) : null;
+  }
   // a video / reel / film / bts clip is video unless the sender said otherwise
   if (!has('media') && !existing && out.kind) out.media = ['reel', 'film', 'bts'].includes(out.kind) ? 'video' : out.kind === 'design' ? 'design' : out.kind === 'document' ? 'document' : 'image';
   return { ok: true, value: out };

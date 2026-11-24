@@ -5,20 +5,27 @@
 //    half-way writes nothing — then writes campaign days (Meta's own figure; a campaign found by its title takes Meta's id), ad days and
 //    audience segments. Re-running the same days replaces them, so nothing is counted twice. Meta campaigns no CRM campaign matches are
 //    listed (unlinked) and their spend is not counted until someone links or adds them.
-//  • startMetaAdsSync: when the server is set up, every 30 minutes it checks whether an automatic run is due (6 hours since the last
-//    run) and brings in the last 3 days again.
+//    Each run also reads the campaigns and ads themselves: a linked campaign's status follows Meta's (active / paused / ended), each ad's
+//    status too, and each ad gets its picture from Meta (unless the team typed its own thumbnail).
+//  • startMetaAdsSync: when the server is set up, every 5 minutes it checks whether an automatic run is due (30 minutes since the last
+//    run — the document's "every 30 minutes") and brings in the last 3 days again.
 // Nothing here returns or logs the token.
 import Campaign from '../models/Campaign.js';
-import Lead from '../models/Lead.js';
+import CampaignAd from '../models/CampaignAd.js';
 import MetaImportLog from '../models/MetaImportLog.js';
 import MetaAdsSync from '../models/MetaAdsSync.js';
-import MetaLeadEvent from '../models/MetaLeadEvent.js';
+import { tagMetaLeads } from './metaLeadTags.js';
 import { MetaProblem, graphList } from './metaGraph.js';
 import { r2, writeImportRows } from './campaignMetricsImport.js';
 import { cleanImportInput } from '../utils/marketingCampaignInput.js';
 import {
   ADS_NOT_CONFIGURED,
+  ENTITY_FIELDS,
   INSIGHT_BREAKDOWNS,
+  adPictureOf,
+  adStatusOf,
+  campaignMetaStatus,
+  campaignStatusOf,
   INSIGHT_FIELDS,
   META_SYNC_DAYS_BACK,
   META_SYNC_MAX_DAYS,
@@ -67,15 +74,72 @@ const readInsights = (cfg, account, level, w, breakdowns = '') =>
     { timeoutMs: INSIGHTS_TIMEOUT_MS, maxPages: 100 },
   );
 
+/** The account's campaigns or ads themselves (their status; an ad's picture) — every one, not only those that spent in the days. */
+const readEntities = (cfg, account, kind) =>
+  graphList(cfg, `${account.id}/${kind}`, { fields: ENTITY_FIELDS[kind], limit: 200 }, cfg.token, { timeoutMs: INSIGHTS_TIMEOUT_MS, maxPages: 50 });
+
+/**
+ * Meta's status on each linked campaign and ad, and each ad's picture. Only what changed is written. A thumbnail the team typed is kept;
+ * one from Meta is refreshed every run (Meta's picture links expire). → { statusChanges, pictures }
+ */
+export const applyMetaEntities = async ({ campaigns = [], ads = [] }, now = new Date()) => {
+  let statusChanges = 0;
+  let pictures = 0;
+  const byCampaign = new Map(campaigns.filter((c) => c?.id).map((c) => [String(c.id), c]));
+  if (byCampaign.size) {
+    const linked = await Campaign.find({ metaCampaignId: { $in: [...byCampaign.keys()] } }).select('status metaCampaignId metaStatus').lean();
+    const ops = [];
+    for (const c of linked) {
+      const m = byCampaign.get(c.metaCampaignId);
+      const status = campaignStatusOf(m.effective_status, m.stop_time, now);
+      const metaStatus = campaignMetaStatus(m.effective_status, m.stop_time, now);
+      const set = { metaStatusAt: now };
+      if (metaStatus && metaStatus !== c.metaStatus) set.metaStatus = metaStatus;
+      if (status && status !== c.status) {
+        set.status = status;
+        statusChanges += 1;
+      }
+      ops.push({ updateOne: { filter: { _id: c._id }, update: { $set: set } } });
+    }
+    if (ops.length) await Campaign.bulkWrite(ops);
+  }
+  const byAd = new Map(ads.filter((a) => a?.id).map((a) => [String(a.id), a]));
+  if (byAd.size) {
+    const known = await CampaignAd.find({ metaAdId: { $in: [...byAd.keys()] } }).select('status metaAdId metaStatus thumbUrl thumbSource').lean();
+    const ops = [];
+    for (const a of known) {
+      const m = byAd.get(a.metaAdId);
+      const set = {};
+      const metaStatus = String(m.effective_status ?? '').trim().toUpperCase();
+      if (metaStatus && metaStatus !== a.metaStatus) set.metaStatus = metaStatus;
+      const status = adStatusOf(metaStatus);
+      if (status && status !== a.status) {
+        set.status = status;
+        statusChanges += 1;
+      }
+      const pic = adPictureOf(m);
+      if (pic && (a.thumbSource === 'meta' || !a.thumbUrl)) {
+        if (pic !== a.thumbUrl) set.thumbUrl = pic;
+        if (a.thumbSource !== 'meta') set.thumbSource = 'meta';
+        pictures += 1;
+      }
+      if (Object.keys(set).length) ops.push({ updateOne: { filter: { _id: a._id }, update: { $set: set } } });
+    }
+    if (ops.length) await CampaignAd.bulkWrite(ops);
+  }
+  return { statusChanges, pictures };
+};
+
 /** One level's rows through the import's writer, in batches of 500. */
 const writeLevel = async (level, rows, { log, actor, today }, opts) => {
-  const total = { written: 0, adsCreated: 0, unmatched: [], spend: 0, campaigns: new Set() };
+  const total = { written: 0, adsCreated: 0, adsSkipped: 0, unmatched: [], spend: 0, campaigns: new Set() };
   for (const batch of batches(rows)) {
     const v = cleanImportInput({ level, rows: batch }, { today });
     if (!v.ok) continue;
     const r = await writeImportRows({ ...v.value, actor, source: 'api', log, ...opts });
     total.written += r.written;
     total.adsCreated += r.adsCreated;
+    total.adsSkipped += r.adsSkipped?.length ?? 0;
     total.unmatched.push(...r.unmatched);
     for (const m of r.matched) {
       total.spend += m.spend;
@@ -125,14 +189,20 @@ export const runAdsSync = async ({ range = null, trigger = 'manual', actor = nul
     adsCreated: 0,
     spend: 0,
     unlinkedSpend: 0,
+    statusChanges: 0,
+    pictures: 0,
+    adsSkipped: 0,
     importId: null,
   };
   let log = null;
   try {
     // 1. read everything (nothing is written if Meta refuses any of it)
     const read = { campaign: [], ad: [], breakdown: [] };
+    const entities = { campaigns: [], ads: [] };
     const accountOf = new Map(); // Meta campaign id → its ad account
     for (const account of cfg.accounts) {
+      entities.campaigns.push(...(await readEntities(cfg, account, 'campaigns')));
+      entities.ads.push(...(await readEntities(cfg, account, 'ads')));
       for (const w of chunkRange(from, to)) {
         const campaignRows = await readInsights(cfg, account, 'campaign', w);
         const objectiveOf = new Map(campaignRows.map((r) => [String(r.campaign_id ?? ''), String(r.objective ?? '')]));
@@ -163,6 +233,8 @@ export const runAdsSync = async ({ range = null, trigger = 'manual', actor = nul
     const c = await writeLevel('campaign', read.campaign, ctx, { stampMetaIds: true });
     const a = await writeLevel('ad', read.ad, ctx, { campaignDaysFromAds: false });
     const b = await writeLevel('breakdown', read.breakdown, ctx, { fillFromBreakdown: false });
+    // after the ads exist (a new ad was just made from its figures): Meta's statuses and pictures
+    const e = await applyMetaEntities(entities);
 
     // 3. Meta campaigns that match no CRM campaign
     const seen = combineUnmatched(c.unmatched).map((u) => ({ ...u, accountId: accountOf.get(u.metaId)?.id ?? '', brand: accountOf.get(u.metaId)?.brand ?? 'kerala', runFrom: from, runTo: to }));
@@ -181,6 +253,9 @@ export const runAdsSync = async ({ range = null, trigger = 'manual', actor = nul
       adsCreated: a.adsCreated,
       spend: r2(c.spend),
       unlinkedSpend: r2(seen.reduce((t, u) => t + u.spend, 0)),
+      statusChanges: e.statusChanges,
+      pictures: e.pictures,
+      adsSkipped: a.adsSkipped,
       importId: log._id,
     });
     await MetaAdsSync.updateOne({ key: 'ads' }, { $set: { lastRun, lastOkAt: lastRun.doneAt, unlinked, running: false, runningSince: null } });
@@ -198,15 +273,6 @@ export const runAdsSync = async ({ range = null, trigger = 'manual', actor = nul
 };
 
 // ── linking a Meta campaign ──────────────────────────────────────────────────
-
-/** Meta leads that came from this Meta campaign take the CRM campaign (only those with none yet). → how many leads were tagged */
-const tagLeads = async (metaId, campaignId) => {
-  await MetaLeadEvent.updateMany({ metaCampaignId: metaId }, { $set: { campaignId } });
-  const ids = (await MetaLeadEvent.find({ metaCampaignId: metaId, leadId: { $ne: null }, status: 'created' }).select('leadId').lean()).map((e) => e.leadId);
-  if (!ids.length) return 0;
-  const r = await Lead.updateMany({ _id: { $in: ids }, campaignId: null }, { $set: { campaignId } });
-  return r.modifiedCount ?? 0;
-};
 
 /** The days to bring in once a Meta campaign is linked: from the first day it was seen (at most 92 days back) to today. */
 const rangeFor = (entries, today = istToday()) => {
@@ -253,7 +319,7 @@ export const addMetaCampaigns = async ({ metaIds, actor }) => {
 
 const afterLink = async (entries, links, actor) => {
   let leadsTagged = 0;
-  for (const l of links) leadsTagged += await tagLeads(l.metaId, l.campaignId);
+  for (const l of links) leadsTagged += await tagMetaLeads(l.metaId, l.campaignId);
   await forget(entries.map((e) => e.metaId));
   const run = adsConfig().ready ? await runAdsSync({ range: rangeFor(entries), trigger: 'link', actor }) : null;
   return { linked: links.map((l) => ({ metaId: l.metaId, campaignId: String(l.campaignId) })), leadsTagged, run };
@@ -275,11 +341,11 @@ export const autoSyncTick = async (now = new Date()) => {
 };
 
 let timer = null;
-/** Called once at server start: when the sync is set up, check every 30 minutes (and a minute after start) whether a run is due. */
+/** Called once at server start: when the sync is set up, check every 5 minutes (and a minute after start) whether a run is due. */
 export const startMetaAdsSync = () => {
   if (timer || !adsConfig().ready) return;
   const tick = () => autoSyncTick().catch((err) => console.error('[Meta sync] automatic run failed:', err?.message ?? err));
   setTimeout(tick, 60_000).unref?.();
-  timer = setInterval(tick, 30 * 60 * 1000);
+  timer = setInterval(tick, 5 * 60 * 1000);
   timer.unref?.();
 };

@@ -14,7 +14,8 @@ import { metaConfig } from './metaLeads.js';
 export const META_SYNC_MAX_DAYS = 92; // one "Sync now" reaches back at most this far
 export const META_SYNC_CHUNK_DAYS = 15; // one Graph call asks for at most this many days (big ranges are slow for Meta)
 export const META_SYNC_DAYS_BACK = 3; // an automatic run: today and the 2 days before (Meta keeps adjusting recent days)
-export const META_SYNC_EVERY_HOURS = 6;
+// the document's "sync from Meta every 30 minutes" (Marketing ERP UX and SRS, Campaigns): an automatic run every 30 minutes
+export const META_SYNC_EVERY_MINUTES = 30;
 export const META_SYNC_BRANDS = ['main', 'kerala'];
 
 const trim = (v) => String(v ?? '').trim();
@@ -88,8 +89,8 @@ export const chunkRange = (from, to, size = META_SYNC_CHUNK_DAYS) => {
   return out;
 };
 
-/** Is an automatic run due: never run, or the last run started at least META_SYNC_EVERY_HOURS ago. */
-export const autoSyncDue = (lastRunAt, now = new Date()) => !lastRunAt || now - new Date(lastRunAt) >= META_SYNC_EVERY_HOURS * 3600 * 1000 - 60 * 1000;
+/** Is an automatic run due: never run, or the last run started at least META_SYNC_EVERY_MINUTES ago (a minute's slack for the timer). */
+export const autoSyncDue = (lastRunAt, now = new Date()) => !lastRunAt || now - new Date(lastRunAt) >= META_SYNC_EVERY_MINUTES * 60 * 1000 - 60 * 1000;
 
 // ── Meta's rows → the import's rows ─────────────────────────────────────────
 
@@ -135,6 +136,71 @@ export const INSIGHT_FIELDS = {
   ad: 'campaign_id,campaign_name,adset_id,adset_name,ad_id,ad_name,spend,reach,impressions,inline_link_clicks,actions,date_start',
   breakdown: 'campaign_id,campaign_name,spend,reach,impressions,inline_link_clicks,actions,date_start',
 };
+// ── campaign and ad status, the ads' pictures ───────────────────────────────
+
+/** What each run reads about the campaigns and ads themselves (not their figures): their status on Meta, and each ad's picture. */
+export const ENTITY_FIELDS = {
+  campaigns: 'id,name,effective_status,stop_time',
+  // the picture at a size a card can show (Meta's default thumbnail is 64 px); an image ad's own picture when it has one
+  ads: 'id,campaign_id,effective_status,creative.thumbnail_width(480).thumbnail_height(480){thumbnail_url,image_url}',
+};
+
+/** Meta's status words → what the team reads. */
+export const META_STATUS_WORDS = {
+  ACTIVE: 'Active',
+  PAUSED: 'Paused',
+  CAMPAIGN_PAUSED: 'Campaign paused',
+  ADSET_PAUSED: 'Ad set paused',
+  ARCHIVED: 'Archived',
+  DELETED: 'Deleted',
+  IN_PROCESS: 'Being set up',
+  WITH_ISSUES: 'Has issues',
+  DISAPPROVED: 'Rejected by Meta',
+  PENDING_REVIEW: 'In review',
+  PREAPPROVED: 'Approved, not started',
+  PENDING_BILLING_INFO: 'Billing details needed',
+  COMPLETED: 'Ended',
+};
+export const metaStatusWord = (s) => META_STATUS_WORDS[trim(s).toUpperCase()] ?? (trim(s) ? metaLabel(trim(s).toLowerCase()) : '');
+
+/**
+ * A CRM campaign's status from Meta's: running → 'active' (or 'completed' once its end date has passed), paused → 'paused', archived /
+ * deleted → 'completed'. null = keep the CRM's (being set up, or a word Meta added later).
+ */
+export const campaignStatusOf = (effective, stopTime = '', now = new Date()) => {
+  const s = trim(effective).toUpperCase();
+  if (s === 'ACTIVE' || s === 'WITH_ISSUES') {
+    const stop = stopTime ? new Date(stopTime) : null;
+    return stop && !Number.isNaN(stop.getTime()) && stop < now ? 'completed' : 'active';
+  }
+  if (s === 'PAUSED') return 'paused';
+  if (s === 'ARCHIVED' || s === 'DELETED') return 'completed';
+  return null;
+};
+
+/** The status Meta shows for a campaign: "Ended" for a running one whose end date has passed (as Ads Manager shows it). */
+export const campaignMetaStatus = (effective, stopTime = '', now = new Date()) =>
+  campaignStatusOf(effective, stopTime, now) === 'completed' && /^(ACTIVE|WITH_ISSUES)$/i.test(trim(effective)) ? 'COMPLETED' : trim(effective).toUpperCase();
+
+/** An ad's status from Meta's: running → 'active', paused (itself, its ad set or campaign) or rejected → 'paused', gone → 'ended'. */
+export const adStatusOf = (effective) => {
+  const s = trim(effective).toUpperCase();
+  if (s === 'ACTIVE' || s === 'WITH_ISSUES') return 'active';
+  if (['PAUSED', 'CAMPAIGN_PAUSED', 'ADSET_PAUSED', 'DISAPPROVED'].includes(s)) return 'paused';
+  if (s === 'ARCHIVED' || s === 'DELETED') return 'ended';
+  return null;
+};
+
+/** An ad's picture: the image ad's own picture, else its thumbnail (a video's frame). Only an https address; '' when there is none. */
+export const adPictureOf = (ad) => {
+  const c = ad?.creative ?? {};
+  for (const u of [c.image_url, c.thumbnail_url]) {
+    const v = trim(u);
+    if (/^https:\/\//i.test(v) && v.length <= 2000) return v;
+  }
+  return '';
+};
+
 /** The two breakdowns read for the Audiences view (each its own call: Meta does not combine these). */
 export const INSIGHT_BREAKDOWNS = ['age,gender', 'publisher_platform,platform_position'];
 

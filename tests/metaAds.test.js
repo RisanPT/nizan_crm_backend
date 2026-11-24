@@ -3,6 +3,13 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   META_SYNC_MAX_DAYS,
+  META_SYNC_EVERY_MINUTES,
+  ENTITY_FIELDS,
+  adPictureOf,
+  adStatusOf,
+  campaignMetaStatus,
+  campaignStatusOf,
+  metaStatusWord,
   adAccountsFrom,
   adsConfig,
   autoSyncDue,
@@ -64,11 +71,44 @@ test('pieces of at most 15 days, end to end, nothing missed', () => {
   ]);
 });
 
-test('an automatic run is due 6 hours after the last one started', () => {
+test('an automatic run is due 30 minutes after the last one started (the document\'s "every 30 minutes")', () => {
   const now = new Date('2026-11-18T12:00:00Z');
+  assert.equal(META_SYNC_EVERY_MINUTES, 30);
   assert.equal(autoSyncDue(null, now), true);
+  assert.equal(autoSyncDue(new Date('2026-11-18T11:30:00Z'), now), true);
+  assert.equal(autoSyncDue(new Date('2026-11-18T11:29:30Z'), now), true, 'a minute of slack for the timer');
+  assert.equal(autoSyncDue(new Date('2026-11-18T11:35:00Z'), now), false);
   assert.equal(autoSyncDue(new Date('2026-11-18T06:00:00Z'), now), true);
-  assert.equal(autoSyncDue(new Date('2026-11-18T07:00:00Z'), now), false);
+});
+
+test('a campaign\'s status follows Meta\'s: running, paused, ended (end date passed, archived, deleted); being set up keeps ours', () => {
+  const now = new Date('2026-11-24T06:00:00Z');
+  assert.equal(campaignStatusOf('ACTIVE', '', now), 'active');
+  assert.equal(campaignStatusOf('ACTIVE', '2026-12-31T00:00:00+0530', now), 'active');
+  assert.equal(campaignStatusOf('ACTIVE', '2026-11-20T00:00:00+0530', now), 'completed', 'its end date has passed');
+  assert.equal(campaignMetaStatus('ACTIVE', '2026-11-20T00:00:00+0530', now), 'COMPLETED');
+  assert.equal(campaignStatusOf('WITH_ISSUES', '', now), 'active');
+  assert.equal(campaignStatusOf('paused', '', now), 'paused');
+  assert.equal(campaignStatusOf('ARCHIVED', '', now), 'completed');
+  assert.equal(campaignStatusOf('DELETED', '', now), 'completed');
+  assert.equal(campaignStatusOf('IN_PROCESS', '', now), null);
+  assert.equal(campaignStatusOf('', '', now), null);
+});
+
+test('an ad\'s status follows Meta\'s; a rejected ad counts as paused; in review keeps ours', () => {
+  assert.deepEqual(['ACTIVE', 'PAUSED', 'ADSET_PAUSED', 'CAMPAIGN_PAUSED', 'DISAPPROVED', 'ARCHIVED', 'DELETED', 'PENDING_REVIEW', 'WITH_ISSUES'].map(adStatusOf), ['active', 'paused', 'paused', 'paused', 'paused', 'ended', 'ended', null, 'active']);
+  assert.equal(metaStatusWord('DISAPPROVED'), 'Rejected by Meta');
+  assert.equal(metaStatusWord('ADSET_PAUSED'), 'Ad set paused');
+  assert.equal(metaStatusWord('SOMETHING_NEW'), 'Something New', 'a word Meta adds later is still readable');
+  assert.equal(metaStatusWord(''), '');
+});
+
+test('an ad\'s picture: the image ad\'s own, else the thumbnail; only https', () => {
+  assert.equal(adPictureOf({ creative: { image_url: 'https://fb.test/img.jpg', thumbnail_url: 'https://fb.test/t.jpg' } }), 'https://fb.test/img.jpg');
+  assert.equal(adPictureOf({ creative: { thumbnail_url: 'https://fb.test/t.jpg' } }), 'https://fb.test/t.jpg');
+  assert.equal(adPictureOf({ creative: { thumbnail_url: 'http://fb.test/t.jpg' } }), '');
+  assert.equal(adPictureOf({}), '');
+  assert.match(ENTITY_FIELDS.ads, /thumbnail_width\(480\)/, 'a picture a card can show, not Meta\'s 64 px default');
 });
 
 test('results as Ads Manager counts them, by the campaign\'s objective', () => {
