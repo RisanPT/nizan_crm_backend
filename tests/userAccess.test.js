@@ -13,13 +13,13 @@ const salesHead = u('S', 'sales', { isDepartmentHead: true });
 const ok = (requester, target, opts) => authorizeUserChange(requester, target, opts).ok;
 
 test('who counts as what is the test createUser uses', () => {
-  assert.deepEqual(requesterKind(admin), { admin: true, full: true, head: false });
-  assert.deepEqual(requesterKind(manager), { admin: false, full: true, head: false });
+  assert.deepEqual(requesterKind(admin), { admin: true, full: true, hr: false, head: false });
+  assert.deepEqual(requesterKind(manager), { admin: false, full: true, hr: false, head: false });
   assert.equal(requesterKind(fleet).head, true); // *_manager
   assert.equal(requesterKind(u('x', 'marketing_admin')).head, true); // *_admin
   assert.equal(requesterKind(salesHead).head, true); // the flag
-  assert.deepEqual(requesterKind(artist), { admin: false, full: false, head: false });
-  assert.deepEqual(requesterKind(undefined), { admin: false, full: false, head: false });
+  assert.deepEqual(requesterKind(artist), { admin: false, full: false, hr: false, head: false });
+  assert.deepEqual(requesterKind(undefined), { admin: false, full: false, hr: false, head: false });
   assert.equal(requesterKind(u('x', ' ADMIN ')).admin, true);
 });
 
@@ -144,4 +144,26 @@ test('mayGiveRole: admin, manager, CEO and Executive Director accounts are an ad
   for (const who of [admin, manager, salesHead, fleet]) {
     for (const role of ['artist', 'sales', 'accounts', 'employee', 'driver', 'finance_head', 'artist_head']) assert.equal(mayGiveRole(who, role), true, `${who?.role} → ${role}`);
   }
+});
+
+test('hr manages staff logins but never admin / manager / CEO ones, nor gives those roles', () => {
+  const hr = u('H', 'hr', { isDepartmentHead: true }); // the HR head keeps the hr rules
+  const hr2 = u('H2', 'hr');
+  assert.deepEqual(requesterKind(hr2), { admin: false, full: false, hr: true, head: false });
+  assert.equal(requesterKind(hr).hr, true);
+  assert.equal(canManageUsers(hr2), true);
+  // any staff login, not only ones they created
+  assert.equal(ok(hr2, u('X', 'artist')), true);
+  assert.equal(ok(hr2, u('X', 'sales', { managedBy: 'someone-else' })), true);
+  assert.equal(ok(hr2, u('X', 'artist'), { nextRole: 'accounts' }), true);
+  assert.equal(ok(hr2, u('X', 'artist'), { nextRole: 'hr' }), true);
+  // never escalate
+  assert.equal(ok(hr2, u('X', 'artist'), { nextRole: 'admin' }), false);
+  assert.equal(ok(hr2, u('X', 'artist'), { nextRole: 'manager' }), false);
+  assert.equal(ok(hr2, u('X', 'artist'), { nextRole: 'ceo' }), false);
+  assert.equal(ok(hr2, u('X', 'admin')), false);
+  assert.equal(ok(hr2, u('X', 'manager')), false);
+  assert.equal(ok(hr2, u('X', 'ceo')), false);
+  // not their own account
+  assert.equal(ok(hr2, hr2), false);
 });

@@ -2,7 +2,6 @@ import asyncHandler from 'express-async-handler';
 import Onboarding, { DEFAULT_ONBOARDING_TASKS } from '../models/Onboarding.js';
 import Employee from '../models/Employee.js';
 import Candidate from '../models/Candidate.js';
-import { linkHiredCandidateToOnboarding } from './recruitmentController.js';
 import { getHrScope, assertEmployeeInScope } from '../utils/hrDeptScope.js';
 
 // Dept heads only manage onboarding for their own department; these keys
@@ -75,24 +74,13 @@ const cleanDocuments = (docs) =>
 
 const getOnboardings = asyncHandler(async (req, res) => {
   guard(req, res);
-  // Auto-sync: ensure any candidate marked 'hired' is linked to an onboarding record
-  try {
-    const hiredCandidates = await Candidate.find({ stage: 'hired' });
-    for (const cand of hiredCandidates) {
-      const existing = await Onboarding.findOne({
-        $or: [{ candidateId: cand._id }, { employeeName: cand.name }],
-      });
-      if (!existing) {
-        await linkHiredCandidateToOnboarding(cand, req.user?._id);
-      }
-    }
-  } catch (err) {
-    console.error('Error auto-syncing hired candidates to onboarding:', err);
-  }
-
+  // Read-only (owner decision 2026-11-24). This used to run the hire flow for
+  // every 'hired' candidate with no onboarding on each load, creating
+  // employees and re-creating onboardings HR had deleted. A hire now creates
+  // its onboarding only when it happens (candidate moved to Hired, or offer
+  // accepted); moving a candidate to Hired again re-links one that is missing.
   let filter = {};
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
-  // The sync above stays company-wide; only what's returned is scoped.
   filter = { ...filter, ...(await onboardingScopeFilter(req)) };
   const rows = await Onboarding.find(filter).populate(empPopulate).sort({ createdAt: -1 }).limit(300);
   res.json(rows);
@@ -113,10 +101,10 @@ const createOnboarding = asyncHandler(async (req, res) => {
   const documents = Array.isArray(req.body.documents) && req.body.documents.length
     ? cleanDocuments(req.body.documents)
     : [
-        { name: 'Signed offer letter', owner: employee.name, required: true, status: 'Received' },
+        { name: 'Signed offer letter', owner: employee.name, required: true, status: 'Pending' },
         { name: 'Aadhaar & PAN', owner: employee.name, required: true, status: 'Pending' },
         { name: 'Bank account proof', owner: employee.name, required: true, status: 'Pending' },
-        { name: 'Previous experience letter', owner: employee.name, required: false, status: 'Not required' },
+        { name: 'Previous experience letter', owner: employee.name, required: false, status: 'Pending' },
         { name: 'Education certificates', owner: employee.name, required: true, status: 'Pending' },
       ];
 

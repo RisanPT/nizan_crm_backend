@@ -5,15 +5,19 @@ import { permissionsForRole, ensureDefaultRoles, homeRouteForRole } from './role
 import Role from '../models/Role.js';
 import Department from '../models/Department.js';
 import Employee from '../models/Employee.js';
+import JobRole from '../models/JobRole.js';
 import { syncUserToEmployee } from '../utils/syncUserEmployee.js';
 import { invalidateSalesRules } from '../utils/salesRules.js';
 import { transporter, sendMail } from '../utils/mailer.js';
 import {
   loginEmailFor, loginIdOf, expiryFromDay, loginExpired, canReuseDriverAccount, phoneDigits, EXPIRED_MESSAGE,
 } from '../utils/driverLogin.js';
+import { canManageUsers, authorizeUserChange, mayGiveRole, isAdminOnlyRole } from '../utils/userAccess.js';
+
 import { canManageUsers, authorizeUserChange, mayGiveRole } from '../utils/userAccess.js';
 import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 import { logChange } from '../utils/audit.js';
+
 
 const NOT_ALLOWED_TO_MANAGE_USERS = 'You are not allowed to manage users.';
 
@@ -255,11 +259,18 @@ export const createUser = async (req, res) => {
     requesterRole === 'marketing_admin';
   const fleetCanAddDriver =
     requesterRole === 'fleet_manager' && role === 'driver';
-  
-  if (!isFullAccess && !fleetCanAddDriver && !isDepartmentHeadReq) {
+  // HR creates staff logins of any role except admin / manager / CEO.
+  const isHrReq = String(requesterRole || '').toLowerCase() === 'hr';
+
+  if (!isFullAccess && !fleetCanAddDriver && !isDepartmentHeadReq && !isHrReq) {
     return res
       .status(403)
       .json({ message: 'You are not allowed to create this type of user.' });
+  }
+  if (isHrReq && !isFullAccess && isAdminOnlyRole(role)) {
+    return res
+      .status(403)
+      .json({ message: 'Only an administrator can create admin, manager or CEO logins.' });
   }
 
   // The schema no longer enums roles, so validate against the Role collection.
@@ -655,7 +666,8 @@ export const provisionEmployeeLogin = async (req, res) => {
     const requesterRole = String(req.user?.role || '').toLowerCase();
     const isFullAccess = requesterRole === 'admin' || requesterRole === 'manager';
     const isDeptHead = req.user?.isDepartmentHead === true;
-    if (!isFullAccess && !isDeptHead) {
+    const isHr = requesterRole === 'hr';
+    if (!isFullAccess && !isDeptHead && !isHr) {
       return res.status(403).json({ message: 'You are not allowed to provision logins.' });
     }
 
@@ -676,11 +688,27 @@ export const provisionEmployeeLogin = async (req, res) => {
     }
 
     await ensureDefaultRoles();
-    const role = String(req.body.role || 'employee').trim().toLowerCase() || 'employee';
     // Who may hand out which role: admin → any; manager → any but admin;
-    // department head → only the self-service 'employee' role.
+    // hr → any but admin / manager / CEO; department head → only the
+    // self-service 'employee' role.
+    const mayGrant = (r) =>
+      r === 'employee' ||
+      requesterRole === 'admin' ||
+      (requesterRole === 'manager' && r !== 'admin') ||
+      (requesterRole === 'hr' && !isAdminOnlyRole(r));
+    // No role sent → the CRM role linked to the employee's HRMS job role, when
+    // the requester may grant it; otherwise self-service.
+    let role = String(req.body.role || '').trim().toLowerCase();
+    if (!role && employee.jobRoleId) {
+      const jobRole = await JobRole.findById(employee.jobRoleId).select('crmRoleKey').lean();
+      const linked = String(jobRole?.crmRoleKey || '').trim().toLowerCase();
+      if (linked && mayGrant(linked) && mayGiveRole(req.user, linked) && (await Role.exists({ key: linked }))) {
+        role = linked;
+      }
+    }
+    if (!role) role = 'employee';
     if (role !== 'employee') {
-      const allowedRole = requesterRole === 'admin' || (requesterRole === 'manager' && role !== 'admin');
+      const allowedRole = mayGrant(role);
       if (!allowedRole) {
         return res.status(403).json({ message: `You are not allowed to grant the "${role}" role.` });
       }
@@ -752,8 +780,8 @@ export const provisionEmployeeLogin = async (req, res) => {
 export const bulkProvisionEmployees = async (req, res) => {
   try {
     const requesterRole = String(req.user?.role || '').toLowerCase();
-    if (!['admin', 'manager'].includes(requesterRole)) {
-      return res.status(403).json({ message: 'Only admins/managers can bulk-provision logins.' });
+    if (!['admin', 'manager', 'hr'].includes(requesterRole)) {
+      return res.status(403).json({ message: 'Only admins, managers or HR can bulk-provision logins.' });
     }
     await ensureDefaultRoles();
     const employees = await Employee.find({ status: 'active', email: { $ne: '' } })

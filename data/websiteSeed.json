@@ -1,0 +1,246 @@
+{
+  "exportedAt": "2026-11-20T10:51:54.579Z",
+  "source": "TeamNMakeovers/src/data/content",
+  "sections": {
+    "hero": {
+      "title": "Bridal beauty, defined.",
+      "subtitle": "Luxury bridal makeup and hairstyling by Feeniya Nizan, for brides in Kerala and across the world.",
+      "ctaLabel": "",
+      "stats": [
+        {
+          "value": 1000,
+          "suffix": "+",
+          "label": "brides styled"
+        },
+        {
+          "value": 10,
+          "suffix": "+",
+          "label": "years of expertise"
+        }
+      ]
+    },
+    "availabilityStrip": {
+      "eyebrow": "Open dates",
+      "title": "Book your slot",
+      "ctaLabel": "View full calendar"
+    },
+    "intro": {
+      "eyebrow": "The experience",
+      "title": "For brides who want more.",
+      "body": "Signature bridal looks, personalised styling, and a calm, thoughtful experience from trial to the big day.",
+      "highlights": [
+        {
+          "label": "Personalised",
+          "text": "Every look is built around you — your face, your style, your story."
+        },
+        {
+          "label": "Calm & unhurried",
+          "text": "We pace every session so you feel relaxed and radiant."
+        },
+        {
+          "label": "Trial to big day",
+          "text": "Full support from your trial session through the wedding morning."
+        }
+      ]
+    },
+    "recentBrides": {
+      "eyebrow": "Portfolio",
+      "title": "Recent brides"
+    },
+    "packagesPreview": {
+      "eyebrow": "Services",
+      "title": "Our packages"
+    },
+    "about": {
+      "eyebrow": "About Feeniya",
+      "title": "The artist behind Team N",
+      "quote": "My approach has always been simple — to bring out the most confident, beautiful version of every bride.",
+      "body": "Founder and lead artist at Team N Makeovers, Feeniya Nizan brings over a decade of experience in bridal makeup and hairstyling, creating timeless looks for brides in Kerala and around the world.",
+      "stats": [
+        {
+          "number": "1000+",
+          "label": "Brides styled"
+        },
+        {
+          "number": "10+",
+          "label": "Years of expertise"
+        },
+        {
+          "number": "Kerala",
+          "label": "& worldwide"
+        }
+      ]
+    },
+    "howItWorks": {
+      "eyebrow": "The process",
+      "title": "How booking works",
+      "steps": [
+        {
+          "title": "Pick date & package",
+          "text": "Check the live calendar, choose an open slot and the package that fits your vision."
+        },
+        {
+          "title": "Send your request",
+          "text": "Share your details in a minute — no payment is taken on the website."
+        },
+        {
+          "title": "We call you",
+          "text": "Our team gets in touch to confirm the date, talk through your look and answer questions."
+        },
+        {
+          "title": "Pay advance & confirm",
+          "text": "Pay the advance directly to our team to lock your date — the rest is settled on the day."
+        }
+      ]
+    },
+    "faq": {
+      "eyebrow": "FAQs",
+      "title": "Frequently asked questions",
+      "items": [
+        {
+          "question": "How do I book a slot?",
+          "answer": "Choose a package, pick an available date and slot on the calendar, enter your details and pay a small advance online. You receive a booking reference straight away."
+        },
+        {
+          "question": "Is a trial session included?",
+          "answer": "A trial is included with the Platinum package. For Airbrush and Custom you can add one as an extra while booking."
+        },
+        {
+          "question": "Can I book for a destination wedding?",
+          "answer": "Yes. Choose the Custom package and tell us the venue and dates. Travel and stay for the team are agreed with you before the booking is confirmed."
+        },
+        {
+          "question": "What is your cancellation policy?",
+          "answer": "You can reschedule or cancel from the Manage booking page using your booking reference and phone number. The refund depends on how far ahead you cancel; the full terms are on the Policies page."
+        }
+      ]
+    },
+    "packagesPage": {
+      "title": "Bridal Packages & Styling",
+      "intro": "Tailored makeup, hair design, and couture styling crafted by Feeniya Nizan and Team N. Every package is thoughtfully paced to make you feel radiant, serene, and confident.",
+      "comparison": [
+        {
+          "feature": "Lead Artist",
+          "values": {}
+        },
+        {
+          "feature": "Skin Prep & Makeup Base",
+          "values": {}
+        },
+        {
+          "feature": "Hair Styling & Design",
+          "values": {}
+        },
+        {
+          "feature": "Lashes & Eye Artistry",
+          "values": {}
+        },
+        {
+          "feature": "Saree & Veil Placement",
+          "values": {}
+        },
+        {
+          "feature": "Trial Session",
+          "values": {}
+        },
+        {
+          "feature": "Touch-up Kit",
+          "values": {}
+        },
+        {
+          "feature": "Travel Coverage",
+          "values": {}
+        }
+      ],
+      "guarantees": [
+        {
+          "title": "100% Luxury Products",
+          "text": "Exclusively using Charlotte Tilbury, Dior, NARS, MAC, and Huda Beauty for seamless, non-cakey perfection."
+        },
+        {
+          "title": "Hospital-Grade Hygiene",
+          "text": "Strict brush sanitization, disposable applicators, and UV sterilization for immaculate safety."
+        },
+        {
+          "title": "Calm & Punctual Pacing",
+          "text": "We buffer every bridal morning with generous margins so you are calm, unhurried, and on time."
+        },
+        {
+          "title": "Camera & Flash Calibrated",
+          "text": "Crafted specifically to look effortlessly natural in person while translating flawlessly under studio flashes and 4K cameras."
+        }
+      ]
+    },
+    "policies": {
+      "title": "Studio Policies & Guidelines",
+      "lastUpdated": "",
+      "sections": [
+        {
+          "heading": "Booking & Advance Deposit",
+          "body": "A 25% non-refundable advance is required to lock and guarantee date exclusivity on our calendar.\nSlots are allotted strictly on a first-come, first-served basis upon advance receipt.\nThe remaining balance is payable on the wedding day prior to the artist's departure."
+        },
+        {
+          "heading": "Punctuality & Wedding Morning Timeline",
+          "body": "We prepare a customized time buffer for your bridal look (usually 3.5 to 4.5 hours depending on the package).\nThe bride is requested to have clean, washed, and completely dried hair without heavy oils before the artist arrives.\nTimely start ensures stress-free photography and calm transitions to the ceremony stage."
+        },
+        {
+          "heading": "Rescheduling & Date Changes",
+          "body": "Rescheduling is accommodated subject to artist availability on the new date.\nRequests made at least 30 days prior to the original wedding date incur zero rescheduling fees.\nIn the unforeseen event of government restrictions or force majeure, advances can be rolled forward up to 12 months."
+        },
+        {
+          "heading": "Travel & Destination Weddings",
+          "body": "Travel within Kozhikode city limits is included in all standard bridal packages.\nFor outstation bookings across Kerala, Pan-India, or abroad, round-trip transport and safe stay for Feeniya Nizan & assistant are arranged by the client or billed transparently at actuals.\nEarly morning muhurthams (before 6:00 AM) may require the team to stay in close proximity the night before."
+        },
+        {
+          "heading": "Hygiene & Skin Safety",
+          "body": "All brushes, beauty blenders, and tool kits undergo thorough hospital-grade sanitization between every client.\nDisposable mascara wands and lip applicators are utilized at all times.\nPlease alert our team during the pre-wedding consultation regarding any skin sensitivities or allergies."
+        }
+      ]
+    },
+    "contact": {
+      "phone": "+91 96454 24281",
+      "whatsapp": "919645424281",
+      "email": "inquiry@teamnmakeovers.com",
+      "address": "Kozhikode (Calicut), Kerala, India",
+      "mapUrl": "",
+      "hours": "Mon – Sun: 9:00 AM – 7:00 PM IST",
+      "instagramUrl": "https://instagram.com/teamnmakeovers",
+      "facebookUrl": "",
+      "youtubeUrl": ""
+    },
+    "seo": {
+      "siteTitle": "Team N | Luxury South Asian Bridal Experience",
+      "siteDescription": "Luxury bridal makeup and hairstyling by Feeniya Nizan in Kozhikode, Kerala — for brides across Kerala and destination weddings worldwide."
+    },
+    "seoHome": {
+      "title": "Bridal Makeup Artist in Kozhikode, Kerala | Team N Makeovers",
+      "description": "Luxury bridal makeup and hairstyling by Feeniya Nizan & Team N in Kozhikode — airbrush, HD and destination wedding looks across Kerala. Check dates online.",
+      "keywords": "bridal makeup Kozhikode, bridal makeup artist Kerala, Feeniya Nizan, airbrush bridal makeup, Muslim bridal makeup, wedding makeup Calicut"
+    },
+    "seoPackages": {
+      "title": "Bridal Makeup Packages & Prices | Team N Makeovers Kerala",
+      "description": "Compare Team N bridal makeup packages — Airbrush, Platinum and more — with prices for your wedding location in Kerala, plus add-ons like trials and draping.",
+      "keywords": "bridal makeup packages Kerala, bridal makeup price Kozhikode, airbrush makeup price, wedding makeup packages"
+    },
+    "seoPortfolio": {
+      "title": "Bridal Makeup Portfolio | Real Brides by Team N Makeovers",
+      "description": "See real brides styled by Feeniya Nizan & Team N — bridal makeup, hairstyling, saree draping and reception looks from weddings across Kerala.",
+      "keywords": "bridal makeup portfolio, Kerala bride makeup, bridal hairstyle Kerala, reception makeup looks"
+    },
+    "seoBook": {
+      "title": "Check Dates & Book Your Bridal Makeup | Team N Makeovers",
+      "description": "Check open dates, choose your package for your wedding location and send a booking request to Team N Makeovers. Our team will call you to confirm.",
+      "keywords": "book bridal makeup Kerala, bridal makeup booking Kozhikode, wedding makeup availability"
+    },
+    "seoContact": {
+      "title": "Contact Team N Makeovers | Bridal Studio in Kozhikode",
+      "description": "Visit or call the Team N Makeovers bridal studio in Kozhikode. Talk to us on WhatsApp about your wedding date, trial or destination wedding.",
+      "keywords": "Team N Makeovers contact, bridal studio Kozhikode, makeup studio Calicut"
+    },
+    "seoPolicies": {
+      "title": "Booking & Payment Policies | Team N Makeovers",
+      "description": "Read Team N Makeovers' booking, advance payment, rescheduling and cancellation policies before confirming your bridal date.",
+      "keywords": ""
+    }
+  }
+}

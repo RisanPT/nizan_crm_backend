@@ -4,7 +4,8 @@ import Employee from '../models/Employee.js';
 
 // Full-access roles can manage the org structure; department heads may read it.
 const isAdmin = (u) => u?.role === 'admin' || u?.role === 'manager';
-const canRead = (u) => isAdmin(u) || u?.isDepartmentHead;
+// HR (role `hr`) reads the org structure too — pickers and the org chart need it.
+const canRead = (u) => isAdmin(u) || u?.isDepartmentHead || String(u?.role || '').trim().toLowerCase() === 'hr';
 
 // Weekly offs: 0 = Sunday … 6 = Saturday; anything else is dropped.
 const cleanWeeklyOffs = (v) =>

@@ -19,6 +19,8 @@ import {
   createCompOff,
   getLeavePayrollFeed,
   handleExternalLeaveRequest,
+  handleExternalLeaveCancel,
+  getExternalHolidays,
   decideLeaveDirectly,
   retryLeaveCallback,
 } from '../controllers/leaveController.js';
@@ -29,6 +31,8 @@ const router = express.Router();
 // Authenticated via Bearer token or X-API-Key (does not require CRM user JWT)
 router.post('/external-request', handleExternalLeaveRequest);
 router.post('/webhook', handleExternalLeaveRequest); // convenience alias
+router.post('/external-cancel', handleExternalLeaveCancel); // employee cancels in Timebox
+router.get('/external-holidays', getExternalHolidays); // Timebox syncs holidays daily
 
 // ── Authenticated CRM Routes ────────────────────────────────────────────────
 // attachRolePermissions so canManageLeave() can honour the `leave`/`staff`

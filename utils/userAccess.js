@@ -11,6 +11,8 @@
 //   manager               everything except an admin account, and cannot give the admin / manager role
 //   department head       only their own team (see above) — never an admin or manager account, never
 //                         their own account, and never the admin / manager role
+//   hr                    every account except admin / manager / CEO accounts and their own; may give
+//                         any role except admin / manager / CEO
 //   anyone else           nothing (a fleet manager is a department head whose delegated role is `driver`)
 
 import { LEADERSHIP_ROLES, isLeadershipRole } from './leadership.js';
@@ -41,6 +43,9 @@ const GROUP_ROLES = {
   inventory: ['inventory_manager', 'inventorymanager'],
   marketing: ['marketing_admin', 'marketingadmin', 'marketing_manager', 'marketing_executive'],
 };
+/// Roles only an administrator (or, for some, a manager) may hand out.
+export const isAdminOnlyRole = (role) => ADMIN_ONLY_ROLES.includes(lc(role));
+
 export const delegatedRoles = (role) => GROUP_ROLES[ROLE_GROUP[lc(role)]] ?? [];
 
 // admin / manager = full access; a department head is the flag, or a *manager / *admin role
@@ -49,8 +54,11 @@ export const requesterKind = (user) => {
   const role = lc(user?.role);
   const admin = role === 'admin';
   const full = admin || role === 'manager';
-  const head = !full && (user?.isDepartmentHead === true || role.endsWith('manager') || role.endsWith('admin'));
-  return { admin, full, head };
+  // HR (owner decision 2026-11-16): manages every login except admin / manager / CEO
+  // accounts and their own, and may give any role except admin / manager / CEO.
+  const hr = !full && role === 'hr';
+  const head = !full && !hr && (user?.isDepartmentHead === true || role.endsWith('manager') || role.endsWith('admin'));
+  return { admin, full, hr, head };
 };
 
 /// The admin, manager, CEO and Executive Director roles are an administrator's to give, whichever way an account is made (create,
@@ -58,8 +66,8 @@ export const requesterKind = (user) => {
 export const mayGiveRole = (requester, role) => !ADMIN_ONLY_ROLES.includes(lc(role)) || requesterKind(requester).admin;
 
 export const canManageUsers = (user) => {
-  const { full, head } = requesterKind(user);
-  return full || head;
+  const { full, hr, head } = requesterKind(user);
+  return full || hr || head;
 };
 
 const no = (message) => ({ ok: false, message });
@@ -71,7 +79,7 @@ const no = (message) => ({ ok: false, message });
  */
 export const authorizeUserChange = (requester, target, { nextRole } = {}) => {
   const me = requesterKind(requester);
-  if (!me.full && !me.head) return no('You are not allowed to manage users.');
+  if (!me.full && !me.hr && !me.head) return no('You are not allowed to manage users.');
 
   const targetRole = lc(target?.role);
   if (!me.admin && targetRole === 'admin') return no('Only an administrator can change an administrator account.');
@@ -80,7 +88,9 @@ export const authorizeUserChange = (requester, target, { nextRole } = {}) => {
     return no('Only an administrator or manager can change a manager account.');
   }
 
-  if (!me.full) {
+  if (me.hr && idOf(requester?._id) === idOf(target?._id)) return no('You cannot change your own account here.');
+
+  if (!me.full && !me.hr) {
     // A department head: their own team only, and not themselves (a head cannot widen their own
     // role / territory — the Team screen never lists them either).
     if (idOf(requester?._id) === idOf(target?._id)) return no('You cannot change your own account here.');
@@ -92,9 +102,15 @@ export const authorizeUserChange = (requester, target, { nextRole } = {}) => {
 
   const role = lc(nextRole);
   if (role && role !== targetRole) {
+
+    if (!me.admin && ADMIN_ONLY_ROLES.includes(role)) return no('Only an administrator can give the admin, manager or CEO role.');
+    const delegated = me.full || me.hr ? [] : delegatedRoles(requester?.role);
+    if (!me.full && !me.hr && delegated.length && !delegated.includes(role)) {
+
     if (!me.admin && ADMIN_ONLY_ROLES.includes(role)) return no('Only an administrator can give the admin, manager, CEO or Executive Director role.');
     const delegated = me.full ? [] : delegatedRoles(requester?.role);
     if (!me.full && delegated.length && !delegated.includes(role)) {
+
       return no(`You can only give your team these roles: ${delegated.join(', ')}.`);
     }
   }

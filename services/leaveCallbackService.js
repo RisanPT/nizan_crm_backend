@@ -13,6 +13,10 @@
 
 import LeaveRequest from '../models/LeaveRequest.js';
 
+/// Timebox has confirmed leave_callback.php accepts status "cancelled".
+export const timeboxCancelEnabled = () =>
+  String(process.env.TIMEBOX_SEND_CANCEL || '').trim().toLowerCase() === 'true';
+
 export async function dispatchLeaveCallback(leaveRequest, options = {}) {
   if (!leaveRequest) return { sent: false, reason: 'No leave request provided' };
 
@@ -23,7 +27,20 @@ export async function dispatchLeaveCallback(leaveRequest, options = {}) {
     return { sent: false, reason: 'Not an external request (no callbackUrl or externalRequestId)' };
   }
 
-  const status = leaveRequest.status === 'approved' ? 'approved' : 'rejected';
+  // approved / rejected always; cancelled only once Timebox has confirmed its
+  // leave_callback.php accepts it (TIMEBOX_SEND_CANCEL=true). Never map a
+  // cancelled or pending leave onto "rejected".
+  let status;
+  if (leaveRequest.status === 'approved' || leaveRequest.status === 'rejected') {
+    status = leaveRequest.status;
+  } else if (leaveRequest.status === 'cancelled') {
+    if (!timeboxCancelEnabled()) {
+      return { sent: false, skipped: true, reason: 'Sending cancellations to Timebox is switched off (TIMEBOX_SEND_CANCEL).' };
+    }
+    status = 'cancelled';
+  } else {
+    return { sent: false, skipped: true, reason: `Nothing to send for a ${leaveRequest.status} request.` };
+  }
   const approver = String(
     options.approver ||
     options.approverName ||

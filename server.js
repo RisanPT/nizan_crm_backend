@@ -65,6 +65,8 @@ import clientAuthRoutes from './routes/clientAuthRoutes.js';
 import clientRoutes from './routes/clientRoutes.js';
 import chatRoutes from './routes/chatRoutes.js';
 import staffClientRoutes from './routes/staffClientRoutes.js';
+import websitePublicRoutes from './routes/websitePublicRoutes.js';
+import websiteAdminRoutes from './routes/websiteAdminRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import salaryRoutes from './routes/salaryRoutes.js';
 import salesReturnRoutes from './routes/salesReturnRoutes.js';
@@ -323,6 +325,8 @@ app.use('/api/client/auth', clientAuthRoutes);        // Client app: phone-OTP /
 app.use('/api/client', clientRoutes);                 // Client app: my-profile / my-bookings (protectClient)
 app.use('/api/chat', chatRoutes);                     // Concierge chat (client + staff)
 app.use('/api/app-clients', staffClientRoutes);       // Staff: view bridal app clients (brides)
+app.use('/api/website/public', websitePublicRoutes); // Public website: content, packages, availability (read-only, no login)
+app.use('/api/website/admin', websiteAdminRoutes);   // Team N Website menu (staff, 'website' permission)
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });

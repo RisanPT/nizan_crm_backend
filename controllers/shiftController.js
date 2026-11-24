@@ -36,7 +36,9 @@ const getShifts = asyncHandler(async (req, res) => {
   const filter = {};
   if (req.query.active === 'true') filter.active = true;
   let shifts = await Shift.find(filter).sort({ name: 1 }).lean();
-  if (!shifts || shifts.length === 0) {
+  // Starter shifts only for a brand-new install (no shift at all), not when
+  // the filtered list (e.g. ?active=true) happens to be empty.
+  if ((!shifts || shifts.length === 0) && (await Shift.estimatedDocumentCount()) === 0) {
     const defaultShifts = [
       { name: 'General Shift', code: 'GS', startTime: '09:30', endTime: '18:30', graceInMin: 15, graceOutMin: 15, color: '#3B82F6', active: true },
       { name: 'Morning Shift', code: 'MS', startTime: '08:00', endTime: '16:30', graceInMin: 15, graceOutMin: 15, color: '#10B981', active: true },

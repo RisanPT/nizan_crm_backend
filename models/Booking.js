@@ -489,6 +489,35 @@ const bookingSchema = mongoose.Schema(
     advanceLedgerAccount: { type: mongoose.Schema.Types.ObjectId, ref: 'ChartOfAccount', default: null },
     advanceVerifiedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     advanceVerifiedAt: { type: Date, default: null },
+    // Every edit made through "Edit advance" (PUT /api/booking-advances/:id/amount):
+    // old → new amount, why, by whom. Newest last. Not written by the booking form.
+    advanceHistory: {
+      type: [
+        new mongoose.Schema(
+          {
+            from: { type: Number, default: 0 },
+            to: { type: Number, default: 0 },
+            reason: { type: String, default: '', trim: true },
+            // Per-package change on a multi-package booking.
+            items: {
+              type: [
+                new mongoose.Schema(
+                  { index: Number, service: String, from: Number, to: Number },
+                  { _id: false }
+                ),
+              ],
+              default: [],
+            },
+            previousStatus: { type: String, default: '' },
+            changedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+            changedByName: { type: String, default: '' },
+            changedAt: { type: Date, default: Date.now },
+          },
+          { _id: false }
+        ),
+      ],
+      default: [],
+    },
     // ── Tax invoice number ────────────────────────────────────────────────
     // Issued once, the moment the booking is fully paid (utils/invoiceNumber.js),
     // e.g. "TN/26-27/0001" — sequential per Indian financial year. Never

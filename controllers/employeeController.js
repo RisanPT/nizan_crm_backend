@@ -1,3 +1,4 @@
+import { escapeRegex } from '../utils/escapeRegex.js';
 import Employee from '../models/Employee.js';
 import User from '../models/User.js';
 import Department from '../models/Department.js';
@@ -6,6 +7,7 @@ import SalaryIncrement from '../models/SalaryIncrement.js';
 import mongoose from 'mongoose';
 import { flatGeoMatch, isFullGeoAccess } from '../utils/geoScope.js';
 import { performTimeboxEmployeeSync } from './timeboxController.js';
+import TimeboxIgnoredEmployee from '../models/TimeboxIgnoredEmployee.js';
 import { redactEmployee } from '../utils/hrAccess.js';
 import { getHrScope } from '../utils/hrDeptScope.js';
 import { logChange, snapshot } from '../utils/audit.js';
@@ -105,7 +107,7 @@ export const getEmployees = async (req, res) => {
           ]
         });
       } else {
-        andConditions.push({ department: new RegExp(`^${deptTerm}$`, 'i') });
+        andConditions.push({ department: new RegExp(`^${escapeRegex(deptTerm)}$`, 'i') });
       }
     }
 
@@ -130,7 +132,7 @@ export const getEmployees = async (req, res) => {
     }
 
     if (req.query.search) {
-      const searchRegex = new RegExp(req.query.search, 'i');
+      const searchRegex = new RegExp(escapeRegex(String(req.query.search).trim()), 'i');
       const orList = [
         { employeeCode: searchRegex },
         { name: searchRegex },
@@ -585,6 +587,14 @@ export const deleteEmployee = async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
+    // A Timebox-linked person HR deletes must not be re-imported by the sync.
+    if (employee.timeboxEmployeeId != null) {
+      await TimeboxIgnoredEmployee.updateOne(
+        { timeboxEmployeeId: Number(employee.timeboxEmployeeId) },
+        { $set: { name: employee.name || '', email: employee.email || '', deletedBy: req.user?._id || null } },
+        { upsert: true }
+      );
+    }
     await employee.deleteOne();
     res.json({ message: 'Employee removed' });
   } catch (error) {

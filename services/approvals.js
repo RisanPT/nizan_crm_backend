@@ -132,17 +132,22 @@ export function isOwnApproval(approval, user) {
   return false;
 }
 
-export function canActOnApproval(approval, user) {
+/// `opts.leaveDesk`: the caller is an admin or hr login (utils/leaveDesk.js,
+/// computed async by the caller). Leave is decided ONLY by the leave desk,
+/// whatever the chain says (older leave approvals still name a manager).
+export function canActOnApproval(approval, user, { leaveDesk = false } = {}) {
   if (!approval || approval.status !== 'pending') return false;
   const step = approval.chain[approval.currentLevel];
   if (!step) return false;
   // Nobody approves their own leave / claim / raise. Only the owner account
   // (admin) is exempt, since nobody sits above it.
   if (String(user.role || '') !== 'admin' && isOwnApproval(approval, user)) return false;
+  if (approval.module === 'leave' || approval.refModel === 'LeaveRequest') return leaveDesk === true;
   if (step.approverUserId && idStr(step.approverUserId) === idStr(user._id)) return true;
   if (step.approverRole && String(user.role || '') === step.approverRole) return true;
-  // Admin / manager can always unblock a stuck request.
-  if (['admin', 'manager'].includes(String(user.role || ''))) return true;
+  // Admin / manager / HR can always unblock a stuck request (never their own —
+  // checked above).
+  if (['admin', 'manager', 'hr'].includes(String(user.role || '').trim().toLowerCase())) return true;
   return false;
 }
 

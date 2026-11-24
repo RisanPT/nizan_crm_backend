@@ -125,6 +125,20 @@ export const getPackageById = async (req, res) => {
   }
 };
 
+// { technique, products, included: [label] } from the package form, or null.
+const normalizeQuoteInclusions = (value) => {
+  if (!value || typeof value !== 'object') return null;
+  const text = (v) => (typeof v === 'string' ? v.trim() : '');
+  const included = Array.isArray(value.included)
+    ? [...new Set(value.included.map(text).filter(Boolean))]
+    : [];
+  return {
+    technique: text(value.technique),
+    products: text(value.products),
+    included,
+  };
+};
+
 export const savePackage = async (req, res) => {
   const {
     id,
@@ -156,6 +170,10 @@ export const savePackage = async (req, res) => {
       // a partial update never wipes stored regional/district overrides.
       if (req.body.regionPrices !== undefined) servicePackage.regionPrices = normalizedRegionPrices;
       if (req.body.districtPrices !== undefined) servicePackage.districtPrices = normalizedDistrictPrices;
+      // Same for quote inclusions: only the package form sends them.
+      if (req.body.quoteInclusions !== undefined) {
+        servicePackage.quoteInclusions = normalizeQuoteInclusions(req.body.quoteInclusions);
+      }
       await servicePackage.save();
     } else {
       // Once an order exists, a new package joins the end of it.
@@ -171,6 +189,7 @@ export const savePackage = async (req, res) => {
         description,
         regionPrices: normalizedRegionPrices,
         districtPrices: normalizedDistrictPrices,
+        quoteInclusions: normalizeQuoteInclusions(req.body.quoteInclusions),
       });
     }
 

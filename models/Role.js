@@ -46,6 +46,9 @@ export const PERMISSION_KEYS = [
   'settings',
   // The CEO home: the "needs your decision" inbox and the company-at-a-glance screen (a view-and-decide role).
   'ceo',
+  // Team N Website (public site CMS). Sub-keys: website.content, website.gallery,
+  // website.packages, website.enquiries. Plain 'website' grants all of them.
+  'website',
 ];
 
 const roleSchema = new mongoose.Schema(

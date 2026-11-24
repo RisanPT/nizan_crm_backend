@@ -1,7 +1,7 @@
 import SlotCapacity from '../models/SlotCapacity.js';
 import Booking from '../models/Booking.js';
 import BlockedDate from '../models/BlockedDate.js';
-import { slotHalf, consumesSlot, dayKey } from '../utils/slots.js';
+import { slotHalf, consumesSlot, dayKey, dayWindow } from '../utils/slots.js';
 
 // HR (and full-access) manage capacity; any authenticated user may read it.
 const MANAGE_ROLES = ['admin', 'manager', 'hr'];
@@ -94,16 +94,16 @@ export const getMonth = async (req, res) => {
     const end = new Date(Date.UTC(year, month, 1)); // exclusive
 
     const def = await getDefaultRow();
-    const overrides = await SlotCapacity.find({ date: { $gte: start, $lt: end } }).lean();
+    const overrides = await SlotCapacity.find({ date: dayWindow(start, end) }).lean();
     const capByDay = new Map(overrides.map((o) => [dayKey(o.date).toISOString(), o]));
 
     // HR-blocked dates for this month (the shared Blocked Dates list).
-    const blockedRows = await BlockedDate.find({ active: true, date: { $gte: start, $lt: end } })
+    const blockedRows = await BlockedDate.find({ active: true, date: dayWindow(start, end) })
       .select('date')
       .lean();
     const blockedSet = new Set(blockedRows.map((b) => dayKey(b.date).toISOString()));
 
-    const bookings = await Booking.find({ bookingDate: { $gte: start, $lt: end } })
+    const bookings = await Booking.find({ bookingDate: dayWindow(start, end) })
       .select('bookingDate eventSlot status')
       .lean();
     const booked = new Map(); // dayIso -> { morning, evening }
@@ -173,12 +173,44 @@ export const slotAvailability = async (bookingDate, _eventSlot, excludeBookingId
   const end = new Date(day.getTime() + 24 * 60 * 60 * 1000);
 
   // HR-blocked dates (the Blocked Dates list) take no bookings at all.
-  const blocked = !!(await BlockedDate.exists({ active: true, date: { $gte: day, $lt: end } }));
+  const blocked = !!(await BlockedDate.exists({ active: true, date: dayWindow(day, end) }));
 
-  const filter = { bookingDate: { $gte: day, $lt: end } };
+  const filter = { bookingDate: dayWindow(day, end) };
   if (excludeBookingId) filter._id = { $ne: excludeBookingId };
   const sameDay = await Booking.find(filter).select('status').lean();
   const booked = sameDay.filter(consumesSlot).length;
 
   return { full: blocked || booked >= capacity, blocked, capacity, booked };
+};
+
+// Which of [dates] fall on an active HR-blocked day (IST calendar day, see
+// utils/slots dayKey). Returns [{ date: 'YYYY-MM-DD', reason }], sorted. Used
+// to refuse a booking on ANY blocked date, not just its first.
+export const blockedDatesAmong = async (dates = []) => {
+  const keys = [...new Set(
+    (Array.isArray(dates) ? dates : [dates])
+      .filter((d) => d !== null && d !== undefined && d !== '')
+      .map((d) => dayKey(d))
+      .filter((d) => !Number.isNaN(d.getTime()))
+      .map((d) => d.toISOString()),
+  )].sort();
+  if (keys.length === 0) return [];
+  const first = new Date(keys[0]);
+  const afterLast = new Date(new Date(keys[keys.length - 1]).getTime() + 24 * 60 * 60 * 1000);
+  const rows = await BlockedDate.find({ active: true, date: dayWindow(first, afterLast) })
+    .select('date reason')
+    .lean();
+  const reasonByDay = new Map(rows.map((r) => [dayKey(r.date).toISOString(), r.reason || '']));
+  return keys
+    .filter((k) => reasonByDay.has(k))
+    .map((k) => ({ date: k.slice(0, 10), reason: reasonByDay.get(k) }));
+};
+
+// "This date is blocked by HR (30 Nov 2026 — Training) …" for a 409 reply.
+export const blockedDatesMessage = (blocked) => {
+  const fmt = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-IN', {
+    day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC',
+  });
+  const list = blocked.map((b) => `${fmt(b.date)}${b.reason ? ` — ${b.reason}` : ''}`).join(', ');
+  return `${blocked.length === 1 ? 'This date has' : 'These dates have'} been blocked by HR — no bookings can be added: ${list}. Please choose another date.`;
 };

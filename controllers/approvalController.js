@@ -1,6 +1,7 @@
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import { canActOnApproval, decideApproval } from '../services/approvals.js';
 import { getHrScope } from '../utils/hrDeptScope.js';
+import { isLeaveDesk } from '../utils/leaveDesk.js';
 
 const populate = [
   { path: 'requesterEmployeeId', select: 'name department profileImage' },
@@ -18,7 +19,15 @@ export const getApprovalInbox = async (req, res) => {
       .lean();
 
     // Same rule as approving: never your own requests (admin excepted).
-    const inbox = all.filter((a) => canActOnApproval(a, req.user));
+    // Leave is handled in HRMS → Leave Management, not in this inbox
+    // (owner decision 2026-11-13); `?module=leave` returns only leave, for
+    // the leave desk.
+    const leaveDesk = await isLeaveDesk(req);
+    const onlyLeave = req.query.module === 'leave';
+    const isLeave = (a) => a.module === 'leave' || a.refModel === 'LeaveRequest';
+    const inbox = all.filter(
+      (a) => (onlyLeave ? isLeave(a) : !isLeave(a)) && canActOnApproval(a, req.user, { leaveDesk })
+    );
     res.json(inbox);
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -64,6 +73,10 @@ export const getApprovalHistory = async (req, res) => {
       ];
     }
     if (module && module !== 'all') filter.module = module;
+    // Other people's leave is visible to the leave desk (admin + hr role) only.
+    if (!(await isLeaveDesk(req))) {
+      filter.module = filter.module === 'leave' ? '__none__' : (filter.module || { $ne: 'leave' });
+    }
     if (status && status !== 'all') filter.status = status;
     const list = await ApprovalRequest.find(filter)
       .populate(populate)
@@ -79,7 +92,7 @@ const act = (decision) => async (req, res) => {
   try {
     const approval = await ApprovalRequest.findById(req.params.id);
     if (!approval) return res.status(404).json({ message: 'Approval not found' });
-    if (!canActOnApproval(approval, req.user)) {
+    if (!canActOnApproval(approval, req.user, { leaveDesk: await isLeaveDesk(req) })) {
       return res.status(403).json({ message: 'You cannot act on this request' });
     }
     await decideApproval(approval, req.user, decision, req.body?.note || '');

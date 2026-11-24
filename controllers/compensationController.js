@@ -37,7 +37,9 @@ const guardMaster = async (req, res) => {
 };
 
 // ── Salary bands ─────────────────────────────────────────────────────────────
-const getBands = asyncHandler(async (_req, res) => {
+// Pay ranges: only people who may manage compensation (it was open to every login).
+const getBands = asyncHandler(async (req, res) => {
+  guard(req, res);
   const bands = await SalaryBand.find({}).sort({ level: 1, name: 1 }).lean();
   res.json(bands);
 });
