@@ -368,3 +368,67 @@ test('the client page lists calls and gathers the images the caller may see', as
   assert.equal('referenceImages' in r.body.calls[0], false);
   assert.equal(r.body.progress.done, 2);
 });
+
+// ── Royal package bookings (stylist included) ───────────────────────────────
+import ServicePackage from '../models/Package.js';
+import { todayIst, addDays } from '../utils/istDate.js';
+
+test('royal: package detection from service text or linked package', () => {
+  const royalId = oid();
+  assert.deepEqual(ctl.royalPackagesOf({ service: 'Team N Royal Package' }), ['Team N Royal Package']);
+  assert.deepEqual(
+    ctl.royalPackagesOf({ service: 'x', bookingItems: [{ service: 'Platinum' }, { service: 'royal bridal' }] }),
+    ['royal bridal']
+  );
+  assert.deepEqual(ctl.royalPackagesOf({ service: 'Bridal', packageId: royalId }, new Set([String(royalId)])), ['Bridal']);
+  assert.deepEqual(ctl.royalPackagesOf({ service: 'Platinum' }), []);
+});
+
+test('royal: lists upcoming Royal bookings, soonest first, and marks who already took them', async (t) => {
+  const today = todayIst();
+  const me = stylist();
+  const otherOwner = { _id: oid(), name: 'Lakshmi' };
+  const b1 = {
+    _id: oid(), customerName: 'Client One', phone: '900', bookingNumber: 'BK-1', service: 'Team N Royal',
+    selectedDates: [addDays(today, 10)], bookingDate: new Date(), status: 'confirmed', assignedStaff: [],
+  };
+  const b2 = {
+    _id: oid(), customerName: 'Client Two', phone: '901', bookingNumber: 'BK-2', service: 'Combo',
+    bookingItems: [{ service: 'Royal Package', selectedDates: [addDays(today, -3), addDays(today, 2)] }],
+    selectedDates: [], bookingDate: new Date(), status: 'pending',
+  };
+  const past = {
+    _id: oid(), customerName: 'Old', service: 'Team N Royal', selectedDates: [addDays(today, -1)],
+    bookingDate: new Date(Date.now() - 86400000 * 5),
+  };
+  let bookingFilter;
+  stub(t, ServicePackage, 'find', () => chain([]));
+  stub(t, Booking, 'find', (f) => ((bookingFilter = f), chain([b1, b2, past])));
+  stub(t, StylistClient, 'find', () =>
+    chain([{ _id: oid(), bookingId: b1._id, stylistId: otherOwner }])
+  );
+
+  const { code, body } = await call(ctl.listRoyalBookings, { user: me });
+  assert.equal(code, 200);
+  assert.deepEqual(body.map((r) => r.name), ['Client Two', 'Client One']); // past one dropped
+  assert.equal(body[0].nextEventDay, addDays(today, 2));
+  assert.equal(body[0].clientId, null);
+  assert.equal(body[1].stylistName, 'Lakshmi');
+  assert.equal(body[1].clientIsOwn, false); // another stylist's client
+  assert.ok(bookingFilter.status.$nin.includes('cancelled'));
+  assert.ok(bookingFilter.status.$nin.includes('Postponed'));
+});
+
+test('royal: a linked Royal package by id is included even if the text says otherwise', async (t) => {
+  const today = todayIst();
+  const royalId = oid();
+  const b = { _id: oid(), customerName: 'By Id', service: 'Bridal', packageId: royalId, selectedDates: [today] };
+  let bookingFilter;
+  stub(t, ServicePackage, 'find', () => chain([{ _id: royalId }]));
+  stub(t, Booking, 'find', (f) => ((bookingFilter = f), chain([b])));
+  stub(t, StylistClient, 'find', () => chain([]));
+  const { body } = await call(ctl.listRoyalBookings, { user: leadUser() });
+  assert.equal(body.length, 1);
+  assert.equal(body[0].packageName, 'Bridal');
+  assert.ok(JSON.stringify(bookingFilter).includes('packageId'));
+});

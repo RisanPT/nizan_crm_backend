@@ -47,10 +47,10 @@ const onboardingSchema = new mongoose.Schema(
         },
       ],
       default: [
-        { name: 'Signed offer letter', required: true, status: 'Received' },
+        { name: 'Signed offer letter', required: true, status: 'Pending' },
         { name: 'Aadhaar & PAN', required: true, status: 'Pending' },
         { name: 'Bank account proof', required: true, status: 'Pending' },
-        { name: 'Previous experience letter', required: false, status: 'Not required' },
+        { name: 'Previous experience letter', required: false, status: 'Pending' },
         { name: 'Education certificates', required: true, status: 'Pending' },
       ],
     },

@@ -133,10 +133,24 @@ export const mapRoleToDepartmentAndCategory = (roleSlug, customTitle = '') => {
   };
 };
 
+const isBlankDept = (d) => !String(d || '').trim() || String(d).trim() === 'Staff';
+
 /**
  * Synchronizes a User record with a corresponding Employee record.
+ *
+ * HR owns the employee record (owner decision 2026-11-24). For an EXISTING
+ * employee this never overwrites department, departmentId or category set by
+ * HR. It only:
+ *  - fills department / category / role / specialization when they are blank;
+ *  - keeps the login's driver / artist role working (artistRole + operations
+ *    category), because driver and artist screens depend on it;
+ *  - (explicit calls only, i.e. an admin creating / editing / provisioning a
+ *    login) copies the login name and active flag. An exited employee is never
+ *    re-activated.
+ * `{ boot: true }` (the startup migration) changes nothing else: no name and no
+ * status, so a restart can't undo HR's edits.
  */
-export const syncUserToEmployee = async (user) => {
+export const syncUserToEmployee = async (user, { boot = false } = {}) => {
   if (!user || !user.email) return null;
 
   const email = user.email.trim().toLowerCase();
@@ -152,28 +166,33 @@ export const syncUserToEmployee = async (user) => {
   }
 
   if (employee) {
-    // If it's a driver or artist, ensure operational category
-    if (employee.artistRole === 'driver' || mapping.artistRole === 'driver') {
+    // A driver / artist login must stay a driver / artist employee (driver and
+    // artist screens depend on artistRole); department is left to HR.
+    if (mapping.artistRole === 'driver' || employee.artistRole === 'driver') {
       employee.category = 'operations';
-      employee.department = 'Operations';
       employee.artistRole = 'driver';
-    } else if (employee.artistRole === 'artist' || employee.artistRole === 'assistant' || mapping.artistRole === 'artist') {
+    } else if (mapping.artistRole === 'artist' || employee.artistRole === 'artist' || employee.artistRole === 'assistant') {
       employee.category = 'operations';
-      employee.department = 'Operations';
-    } else {
+      if (employee.artistRole !== 'assistant') employee.artistRole = 'artist';
+    } else if (!employee.category) {
       employee.category = mapping.category;
-      employee.department = mapping.department;
-      employee.artistRole = mapping.artistRole;
-      if (!employee.role || employee.role === 'Staff' || employee.role === 'MUA') {
-        employee.role = mapping.role;
-      }
-      if (!employee.specialization || employee.specialization === 'Staff') {
-        employee.specialization = mapping.specialization;
-      }
+    }
+    // Fill blanks only — never replace what HR set.
+    if (isBlankDept(employee.department) && !employee.departmentId) employee.department = mapping.department;
+    if (!employee.role || employee.role === 'Staff' || employee.role === 'MUA') {
+      employee.role = mapping.role;
+    }
+    if (!employee.specialization || employee.specialization === 'Staff') {
+      employee.specialization = mapping.specialization;
     }
 
-    employee.name = user.name || employee.name;
-    employee.status = user.active ? 'active' : 'inactive';
+    if (!boot) {
+      employee.name = user.name || employee.name;
+      const exited = employee.employmentStatus === 'exited';
+      employee.status = user.active && !exited ? 'active' : 'inactive';
+    } else if (!employee.name) {
+      employee.name = user.name || employee.name;
+    }
     if (user.zoneId) employee.zoneId = user.zoneId;
     if (user.stateId) employee.stateId = user.stateId;
     if (user.regionId) employee.regionId = user.regionId;
@@ -234,7 +253,7 @@ export const migrateAndSyncAll = async () => {
         user.isDepartmentHead = true;
         roleUpdated = true;
       }
-      await syncUserToEmployee(user);
+      await syncUserToEmployee(user, { boot: true });
       if (roleUpdated) {
         await user.save();
       }
@@ -256,18 +275,24 @@ export const migrateAndSyncAll = async () => {
       String(emp.role || '').toLowerCase().includes('driver') ||
       String(emp.specialization || '').toLowerCase().includes('driver');
 
+    // Only what driver / artist features need (artistRole + category), and a
+    // department only when it is blank. HR's department and titles are kept.
     if (isDriver) {
-      if (emp.category !== 'operations' || emp.department !== 'Operations' || emp.artistRole !== 'driver') {
+      if (emp.category !== 'operations' || emp.artistRole !== 'driver') {
         emp.category = 'operations';
-        emp.department = 'Operations';
         emp.artistRole = 'driver';
-        emp.role = 'Fleet Driver';
-        emp.specialization = 'Fleet Driver';
+        updated = true;
+      }
+      if (isBlankDept(emp.department) && !emp.departmentId) {
+        emp.department = 'Operations';
         updated = true;
       }
     } else if (emp.artistRole === 'artist' || emp.artistRole === 'assistant' || emp.category === 'creative') {
-      if (emp.category !== 'operations' || emp.department !== 'Operations') {
+      if (emp.category !== 'operations') {
         emp.category = 'operations';
+        updated = true;
+      }
+      if (isBlankDept(emp.department) && !emp.departmentId) {
         emp.department = 'Operations';
         updated = true;
       }

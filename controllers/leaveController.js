@@ -1,3 +1,4 @@
+import { escapeRegex } from '../utils/escapeRegex.js';
 import mongoose from 'mongoose';
 import LeaveType from '../models/LeaveType.js';
 import LeaveRequest from '../models/LeaveRequest.js';
@@ -9,7 +10,9 @@ import ApprovalRequest from '../models/ApprovalRequest.js';
 import { createApproval } from '../services/approvals.js';
 import { dispatchLeaveCallback } from '../services/leaveCallbackService.js';
 import Department from '../models/Department.js';
-import { scopeFilter, canManageEmployee, isHrWide } from '../utils/hrDeptScope.js';
+import { scopeFilter } from '../utils/hrDeptScope.js';
+import { isLeaveDesk, leaveDeskUserIds } from '../utils/leaveDesk.js';
+import { notify } from '../utils/notify.js';
 import {
   asOfForYear,
   computeTypeBalance,
@@ -22,9 +25,13 @@ import {
 
 const empPopulate = { path: 'employeeId', select: 'name department profileImage' };
 
-/// Admin / manager / dept-head / anyone granted the `staff` module may manage
-/// leave for others. NOT the plain `leave` key — that is the self-service key
-/// every employee and artist has, so it must never unlock others' leave.
+/// Leave of OTHER people (list, approve/reject, cancel, file on behalf,
+/// balances, comp-offs, leave types, holidays) is the leave desk's job only:
+/// admin + hr role (see utils/leaveDesk.js, owner decisions 2026-11-13/16).
+/// The desk is company-wide, so there is no department scoping.
+
+/// Legacy manager rule — now used ONLY for the read-only payroll feed, so a
+/// payroll role that relied on it keeps working.
 const canManageLeave = (user) => {
   const role = String(user?.role || '');
   if (role === 'admin' || role === 'manager') return true;
@@ -44,12 +51,11 @@ const withLeaveScope = async (req, filter) => {
   return Object.keys(scope).length ? { $and: [filter, scope] } : filter;
 };
 
-/// Manager AND the target employee is in their department (HR-wide: anyone).
-const canManageLeaveFor = async (req, employeeId) =>
-  canManageLeave(req.user) && canManageEmployee(req, employeeId, LEAVE_KEYS);
+/// Leave desk (admin / hr role) — any employee.
+const canManageLeaveFor = async (req, _employeeId) => isLeaveDesk(req);
 
-/// Leave types / holidays are company master data — HR-wide only.
-const canEditLeaveMaster = async (req) => canManageLeave(req.user) && isHrWide(req, LEAVE_KEYS);
+/// Leave types / holidays are company master data — leave desk only.
+const canEditLeaveMaster = async (req) => isLeaveDesk(req);
 
 const parseDateMiddayUtc = (d) => {
   if (!d) return null;
@@ -65,6 +71,32 @@ const parseDateMiddayUtc = (d) => {
 
 const escapeRegExp = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const DAY_MS = 86400000;
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+/// 'YYYY-MM-DD' (IST day key) → '23 Nov 2026'.
+const fmtDayKey = (key) => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(key || ''));
+  return m ? `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]} ${m[1]}` : '';
+};
+
+/// One-line text for the Approvals card: type, days, leave dates and the
+/// employee's reason, so the approver sees what they are deciding.
+function leaveApprovalSummary({ typeName, days, from, to, halfDay, reason, extra }) {
+  const fromKey = toDayKey(from);
+  const toKey = toDayKey(to);
+  const dates = !fromKey ? '' : fromKey === toKey || !toKey
+    ? fmtDayKey(fromKey)
+    : `${fmtDayKey(fromKey)} – ${fmtDayKey(toKey)}`;
+  const half = halfDay && halfDay !== 'none' ? ` (${halfDay} half)` : '';
+  let why = String(reason || '').replace(/\s+/g, ' ').trim();
+  if (why.length > 140) why = `${why.slice(0, 137)}…`;
+  return [
+    `${typeName || 'Leave'} · ${days} day(s)`,
+    dates ? `${dates}${half}` : '',
+    extra || '',
+    why ? `Reason: ${why}` : '',
+  ].filter(Boolean).join(' · ');
+}
 
 /// An employee's weekly offs = their department's (by departmentId, else by the
 /// free-text department name), else Sunday.
@@ -162,25 +194,31 @@ const toObjectId = (v) => {
 };
 
 /// Single-level approval chain: reporting manager → dept head → any manager.
-async function buildLeaveChain(employee) {
-  let approverUserId = null;
-  if (employee.reportingManagerId) {
-    const mgr = await User.findOne({
-      employeeId: employee.reportingManagerId,
-      active: { $ne: false },
-    }).select('_id');
-    if (mgr) approverUserId = mgr._id;
+/// Every leave goes to the leave desk (admin + hr role) — one step.
+/// The role on the step only drives the engine's own notification (admins);
+/// who may actually decide is enforced by isLeaveDesk().
+function buildLeaveChain() {
+  return [{ label: 'HR', approverRole: 'admin' }];
+}
+
+/// Tell the hr-role logins about a new leave request (admins are notified by
+/// the approval engine through the chain step).
+async function notifyLeaveDesk({ title, body, actor }) {
+  try {
+    const ids = await leaveDeskUserIds();
+    if (!ids.length) return;
+    await notify({
+      recipients: ids,
+      type: 'approval_requested',
+      title,
+      body,
+      link: '/hr/leave',
+      createdBy: actor || null,
+      excludeUserId: actor || null,
+    });
+  } catch (err) {
+    console.error('[Leave] HR notification failed:', err?.message || err);
   }
-  if (!approverUserId && employee.departmentId) {
-    const head = await User.findOne({
-      departmentId: employee.departmentId,
-      isDepartmentHead: true,
-      active: { $ne: false },
-    }).select('_id');
-    if (head) approverUserId = head._id;
-  }
-  if (approverUserId) return [{ label: 'Reporting manager', approverUserId }];
-  return [{ label: 'Manager', approverRole: 'manager' }];
 }
 
 // ─── Leave types ──────────────────────────────────────────────────────────
@@ -209,7 +247,8 @@ export const getLeaveTypes = async (_req, res) => {
 // @route GET /api/leave/types/access
 export const getLeaveMasterAccess = async (req, res) => {
   try {
-    res.json({ canEdit: await canEditLeaveMaster(req) });
+    // canDecide: may see everyone's leave requests and approve/reject them.
+    res.json({ canEdit: await canEditLeaveMaster(req), canDecide: await isLeaveDesk(req) });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -414,20 +453,23 @@ export const applyLeave = async (req, res) => {
       createdBy: req.user?._id || null,
     });
 
-    const chain = await buildLeaveChain(employee);
+    const chain = buildLeaveChain();
     const approval = await createApproval({
       module: 'leave',
       title: `Leave — ${employee.name}`,
-      summary: `${leaveType?.name || 'Leave'} · ${days} day(s)`,
+      summary: leaveApprovalSummary({
+        typeName: leaveType?.name, days, from, to, halfDay: half, reason,
+      }),
       requesterEmployeeId: employee._id,
       requesterUserId: req.user?._id || null,
       subjectEmployeeId: employee._id,
       refModel: 'LeaveRequest',
       refId: lr._id,
       chain,
-      link: '/hr/approvals',
+      link: '/hr/leave',
       createdBy: req.user?._id || null,
     });
+    await notifyLeaveDesk({ title: approval.title, body: approval.summary, actor: req.user?._id });
     lr.approvalId = approval._id;
     await lr.save();
 
@@ -465,10 +507,10 @@ export const getLeaveRequests = async (req, res) => {
     if (employeeId && employeeId !== 'all') filter.employeeId = employeeId;
     if (department && department !== 'all') filter.department = department;
 
-    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
+    // Other people's leave: admin + hr role only (company-wide).
+    if (!(await isLeaveDesk(req))) return res.status(403).json({ message: 'Only HR or admin can view leave requests' });
 
-    // Dept heads see only their own department's requests.
-    const list = await LeaveRequest.find(await withLeaveScope(req, filter))
+    const list = await LeaveRequest.find(filter)
       .populate(empPopulate)
       .sort({ fromDate: -1 })
       .limit(500);
@@ -526,9 +568,129 @@ export const cancelLeave = async (req, res) => {
         await co.save();
       }
     }
-    res.json(lr);
+    // A Timebox leave cancelled in the CRM: tell Timebox (status "cancelled").
+    // Skipped quietly until TIMEBOX_SEND_CANCEL=true (see leaveCallbackService).
+    let callback = null;
+    if (lr.callbackUrl && lr.externalRequestId != null) {
+      callback = await dispatchLeaveCallback(lr, {
+        approver: req.user?.name || 'HR',
+        note: lr.cancelReason || 'Cancelled in Nizan CRM',
+      }).catch((e) => ({ sent: false, error: e?.message || String(e) }));
+    }
+    const fresh = await LeaveRequest.findById(lr._id);
+    res.json(callback ? { ...fresh.toObject(), callback } : fresh);
   } catch (err) {
     res.status(500).json({ message: err.message });
+  }
+};
+
+// ─── Timebox: employee cancels in Timebox ──────────────────────────────────
+// @route POST /api/leave/external-cancel  (CRM key, like external-request)
+// Pending → cancelled any time. Approved → cancelled only before it starts;
+// once started HR must cancel it in the CRM. No callback is sent back.
+export const handleExternalLeaveCancel = async (req, res) => {
+  try {
+    const auth = verifyWebhookAuth(req);
+    if (!auth.valid) return res.status(401).json({ ok: false, message: auth.reason || 'Unauthorized' });
+
+    const { request_id, cancelled_by, reason } = req.body || {};
+    const extReqId = Number(request_id);
+    if (request_id == null || request_id === '' || !Number.isFinite(extReqId)) {
+      return res.status(422).json({ ok: false, message: 'request_id is required' });
+    }
+
+    const lr = await LeaveRequest.findOne({ externalRequestId: extReqId });
+    if (!lr) return res.status(404).json({ ok: false, message: 'Unknown request_id', request_id: extReqId });
+
+    const previous = lr.status;
+    if (previous === 'cancelled') {
+      return res.json({ ok: true, request_id: extReqId, status: 'cancelled', previous_status: 'cancelled' });
+    }
+    if (previous === 'rejected') {
+      return res.status(409).json({
+        ok: false, request_id: extReqId, status: previous,
+        message: 'This leave was rejected — there is nothing to cancel.',
+      });
+    }
+    if (previous === 'approved' && toDayKey(lr.fromDate) <= todayKey()) {
+      return res.status(409).json({
+        ok: false, request_id: extReqId, status: previous,
+        message: 'This leave has already started — HR must cancel it in the CRM.',
+      });
+    }
+
+    const by = cancelled_by && typeof cancelled_by === 'object' ? cancelled_by : {};
+    const byName = String(by.name || '').trim();
+    lr.status = 'cancelled';
+    lr.cancelledBy = null; // not a CRM user
+    lr.cancelledAt = new Date();
+    lr.cancelReason = [String(reason || '').trim(), byName ? `(cancelled in Timebox by ${byName})` : '(cancelled in Timebox)']
+      .filter(Boolean)
+      .join(' ');
+    await lr.save();
+    if (lr.approvalId) {
+      await ApprovalRequest.updateOne(
+        { _id: lr.approvalId, status: { $in: ['pending', 'approved'] } },
+        { $set: { status: 'cancelled' } }
+      );
+    }
+    if (previous === 'approved' && lr.compOffId) {
+      const co = await CompOff.findOne({ _id: lr.compOffId, status: 'used' });
+      if (co && (!co.usedInLeaveId || String(co.usedInLeaveId) === String(lr._id))) {
+        co.status = co.expiresOn && co.expiresOn < new Date() ? 'expired' : 'available';
+        co.usedInLeaveId = null;
+        await co.save();
+      }
+    }
+    console.log(`[Leave Webhook] Timebox cancelled request #${extReqId} (${previous} → cancelled)`);
+    res.json({ ok: true, request_id: extReqId, status: 'cancelled', previous_status: previous });
+  } catch (err) {
+    console.error('[Leave Webhook] external-cancel failed:', err);
+    res.status(500).json({ ok: false, message: err.message || 'Internal server error' });
+  }
+};
+
+// ─── Timebox: holiday feed (CRM is the master list) ────────────────────────
+// @route GET /api/leave/external-holidays?year=2026  (CRM key)
+// Timebox replaces its holiday list for the year with this. Recurring
+// holidays are given on their date in the requested year. Optional holidays
+// are listed but do not count as days off (counts_as_holiday: false).
+export const getExternalHolidays = async (req, res) => {
+  try {
+    const auth = verifyWebhookAuth(req);
+    if (!auth.valid) return res.status(401).json({ ok: false, message: auth.reason || 'Unauthorized' });
+
+    const year = Number(req.query.year) || yearOf(todayKey());
+    if (year < 2000 || year > 2100) return res.status(422).json({ ok: false, message: 'year is invalid' });
+
+    const rows = await Holiday.find({ $or: [{ year }, { recurring: true }] }).sort({ date: 1 }).lean();
+    const out = [];
+    const seen = new Set();
+    let updatedAt = null;
+    for (const h of rows) {
+      const key = toDayKey(h.date);
+      if (!key) continue;
+      const date = h.recurring ? `${year}-${key.slice(5)}` : key;
+      if (!date.startsWith(`${year}-`)) continue;
+      const id = String(h._id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      const u = h.updatedAt || h.createdAt;
+      if (u && (!updatedAt || u > updatedAt)) updatedAt = u;
+      out.push({
+        id,
+        date,
+        name: h.name,
+        type: h.type || 'national',
+        counts_as_holiday: (h.type || 'national') !== 'optional',
+        recurring: !!h.recurring,
+      });
+    }
+    out.sort((a, b) => a.date.localeCompare(b.date));
+    res.json({ ok: true, year, updated_at: updatedAt, count: out.length, holidays: out });
+  } catch (err) {
+    console.error('[Leave Webhook] external-holidays failed:', err);
+    res.status(500).json({ ok: false, message: err.message || 'Internal server error' });
   }
 };
 
@@ -612,16 +774,14 @@ export const deleteHoliday = async (req, res) => {
 export const getCompOffs = async (req, res) => {
   try {
     const filter = {};
-    if (!canManageLeave(req.user)) {
+    if (!(await isLeaveDesk(req))) {
       if (!req.user.employeeId) return res.json([]);
       filter.employeeId = req.user.employeeId;
     } else if (req.query.employeeId && req.query.employeeId !== 'all') {
       filter.employeeId = req.query.employeeId;
     }
-    // Managers are limited to their department (self-service already is own id).
-    const scoped = canManageLeave(req.user) ? await withLeaveScope(req, filter) : filter;
     res.json(
-      await CompOff.find(scoped).populate({ path: 'employeeId', select: 'name department' }).sort({ createdAt: -1 })
+      await CompOff.find(filter).populate({ path: 'employeeId', select: 'name department' }).sort({ createdAt: -1 })
     );
   } catch (err) {
     res.status(500).json({ message: err.message });
@@ -632,14 +792,10 @@ export const getCompOffs = async (req, res) => {
 // @route POST /api/leave/comp-offs
 export const createCompOff = async (req, res) => {
   try {
-    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
+    if (!(await isLeaveDesk(req))) return res.status(403).json({ message: 'Only HR or admin can grant comp-offs' });
     const { employeeId, workedOn, reason, grantedDays, expiresOn } = req.body;
     if (!employeeId || !workedOn) {
       return res.status(400).json({ message: 'Employee and worked-on date are required' });
-    }
-    // Dept heads may only grant comp-offs inside their own department.
-    if (!(await canManageEmployee(req, employeeId, LEAVE_KEYS))) {
-      return res.status(403).json({ message: 'This employee is not in your department' });
     }
     const employee = await Employee.findById(employeeId);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
@@ -672,8 +828,10 @@ export const getLeavePayrollFeed = async (req, res) => {
     const year = Number(req.query.year);
     if (!month || !year) return res.status(400).json({ message: 'month and year are required' });
     // Was open to any signed-in user; now managers only, scoped to department.
-    if (!canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
-    const reqs = await LeaveRequest.find(await withLeaveScope(req, { status: 'approved', month, year })).populate({
+    const desk = await isLeaveDesk(req);
+    if (!desk && !canManageLeave(req.user)) return res.status(403).json({ message: 'Not allowed' });
+    const feedFilter = { status: 'approved', month, year };
+    const reqs = await LeaveRequest.find(desk ? feedFilter : await withLeaveScope(req, feedFilter)).populate({
       path: 'leaveTypeId',
       select: 'paid name',
     });
@@ -821,7 +979,7 @@ export const handleExternalLeaveRequest = async (req, res) => {
       crmEmp = await Employee.findOne({ email: empEmail });
     }
     if (!crmEmp && empName) {
-      crmEmp = await Employee.findOne({ name: new RegExp(`^${empName}$`, 'i') });
+      crmEmp = await Employee.findOne({ name: new RegExp(`^${escapeRegex(empName)}$`, 'i') });
     }
 
     if (!crmEmp) {
@@ -865,15 +1023,8 @@ export const handleExternalLeaveRequest = async (req, res) => {
     const extCtx = await leaveDayContext(crmEmp, fromDate, toDate);
     const days = countLeaveDays({ from: startKey, to: endKey, ...extCtx, halfDay: extHalf }).days;
 
-    // 7. Configure Department Head Approver if provided
-    let designatedApproverUserId = null;
-    if (department_head && (department_head.email || department_head.name)) {
-      const deptHeadEmail = String(department_head.email || '').trim().toLowerCase();
-      if (deptHeadEmail) {
-        const headUser = await User.findOne({ email: deptHeadEmail, active: { $ne: false } }).select('_id');
-        if (headUser) designatedApproverUserId = headUser._id;
-      }
-    }
+    // 7. Timebox's `department_head` is kept in externalPayload for reference
+    //    only — every leave is decided by the leave desk (admin + HR).
 
     // 8. Create LeaveRequest document
     const lr = await LeaveRequest.create({
@@ -899,24 +1050,26 @@ export const handleExternalLeaveRequest = async (req, res) => {
     });
 
     // 9. Route into CRM Approvals Engine
-    const chain = designatedApproverUserId
-      ? [{ label: 'Department Head', approverUserId: designatedApproverUserId }]
-      : await buildLeaveChain(crmEmp);
+    const chain = buildLeaveChain();
 
     const approval = await createApproval({
       module: 'leave',
       title: `Leave — ${crmEmp.name}`,
-      summary: `${lr.leaveTypeName} · ${days} day(s) · External Req #${extReqId}`,
+      summary: leaveApprovalSummary({
+        typeName: lr.leaveTypeName, days, from: startKey, to: endKey, halfDay: extHalf,
+        reason, extra: `Timebox Req #${extReqId}`,
+      }),
       requesterEmployeeId: crmEmp._id,
       subjectEmployeeId: crmEmp._id,
       refModel: 'LeaveRequest',
       refId: lr._id,
       chain,
-      link: '/hr/approvals',
+      link: '/hr/leave',
     });
 
     lr.approvalId = approval._id;
     await lr.save();
+    await notifyLeaveDesk({ title: approval.title, body: approval.summary });
 
     console.log(`[Leave Webhook] Successfully created LeaveRequest ${lr._id} for external request #${extReqId} (Employee: ${crmEmp.name})`);
 
@@ -939,14 +1092,14 @@ export const handleExternalLeaveRequest = async (req, res) => {
 };
 
 /**
- * @desc  Directly approve or reject a leave request (HR / Manager), triggering callback.
+ * @desc  Directly approve or reject a leave request (HR / Admin), triggering callback.
  * @route POST /api/leave/:id/decide
- * @access Private (HR/Admin/Manager)
+ * @access Private (hr role / admin)
  */
 export const decideLeaveDirectly = async (req, res) => {
   try {
-    if (!canManageLeave(req.user)) {
-      return res.status(403).json({ message: 'Not authorized to decide leave requests' });
+    if (!(await isLeaveDesk(req))) {
+      return res.status(403).json({ message: 'Only HR or admin can approve or reject leave' });
     }
 
     const { status, note } = req.body;
@@ -956,9 +1109,6 @@ export const decideLeaveDirectly = async (req, res) => {
 
     const lr = await LeaveRequest.findById(req.params.id);
     if (!lr) return res.status(404).json({ message: 'Leave request not found' });
-    if (!(await canManageEmployee(req, lr.employeeId, LEAVE_KEYS))) {
-      return res.status(403).json({ message: 'This employee is not in your department' });
-    }
 
     // Only a pending request can be decided — no flipping approved ↔ rejected.
     if (lr.status !== 'pending') {
@@ -1018,15 +1168,12 @@ export const decideLeaveDirectly = async (req, res) => {
  */
 export const retryLeaveCallback = async (req, res) => {
   try {
-    if (!canManageLeave(req.user)) {
-      return res.status(403).json({ message: 'Not allowed' });
+    if (!(await isLeaveDesk(req))) {
+      return res.status(403).json({ message: 'Only HR or admin can re-send leave callbacks' });
     }
 
     const lr = await LeaveRequest.findById(req.params.id);
     if (!lr) return res.status(404).json({ message: 'Leave request not found' });
-    if (!(await canManageEmployee(req, lr.employeeId, LEAVE_KEYS))) {
-      return res.status(403).json({ message: 'This employee is not in your department' });
-    }
 
     if (!lr.callbackUrl || lr.externalRequestId == null) {
       return res.status(400).json({
@@ -1045,6 +1192,9 @@ export const retryLeaveCallback = async (req, res) => {
       note: lr.decisionNote,
     });
 
+    if (result.skipped) {
+      return res.status(400).json({ message: result.reason, result });
+    }
     const updated = await LeaveRequest.findById(lr._id);
     res.json({
       message: result.sent ? 'Callback delivered successfully' : 'Callback dispatch failed',

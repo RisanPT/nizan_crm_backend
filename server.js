@@ -89,6 +89,8 @@ import { startMetaAdsSync } from './services/metaAdsSync.js';
 import { startMetaCapi } from './services/metaCapi.js';
 import { startMetaIgSync } from './services/metaIgSync.js';
 import { startLeadResponseWatch } from './services/leadResponse.js';
+import websitePublicRoutes from './routes/websitePublicRoutes.js';
+import websiteAdminRoutes from './routes/websiteAdminRoutes.js';
 import subscriptionRoutes from './routes/subscriptionRoutes.js';
 import salaryRoutes from './routes/salaryRoutes.js';
 import salesReturnRoutes from './routes/salesReturnRoutes.js';
@@ -368,6 +370,8 @@ app.use('/api/meta', metaLeadRoutes);                  // Meta: Lead Ads (who ge
 app.use('/api/allocation', allocationRoutes);          // smart booking allocation: suggestions, confirm, the Allocation Board, extras
 app.use('/api/artist-teams', artistTeamRoutes);       // Artist Management: the in-house teams (main artist, assistants, places, rotation)
 app.use('/api/crm', crmRoutes);                       // CRM team: queue, assigning work, cases, re-engagement, settings
+app.use('/api/website/public', websitePublicRoutes); // Public website: content, packages, availability (read-only, no login)
+app.use('/api/website/admin', websiteAdminRoutes);   // Team N Website menu (staff, 'website' permission)
 
 app.get('/api', (req, res) => {
   res.json({ message: 'API is running...' });

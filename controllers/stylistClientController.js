@@ -3,6 +3,8 @@ import Booking from '../models/Booking.js';
 import Consultation from '../models/Consultation.js';
 import Lead from '../models/Lead.js';
 import StylistClient from '../models/StylistClient.js';
+import ServicePackage from '../models/Package.js';
+import { isDay, istDayKey, istStart, todayIst } from '../utils/istDate.js';
 import {
   createClientFile,
   findTeamNClient,
@@ -221,6 +223,133 @@ export const searchTeamN = async (req, res) => {
       row.clientIsOwn = match ? canActOnClient(req.consultAccess, req.user, match) : false;
     }
     res.json(list);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+};
+
+// ── GET /api/stylist-clients/royal-bookings ─────────────────────────────────
+// Team N Royal package bookings (the package includes a stylist) whose event
+// is today or later and that aren't cancelled / postponed — so stylists can
+// take them as clients in one tap (POST / with company 'Team N' + bookingId;
+// every detail then fills in from the booking). Each row says whether a
+// client file already exists and whose it is. Read-only: nothing is created
+// here. Manual "add a client" is unchanged.
+export const ROYAL_RX = /royal/i;
+const DEAD_STATUSES = ['cancelled', 'canceled', 'rejected', 'postponed'];
+const ROYAL_LIMIT = 300;
+
+/// Every event day of a booking (IST 'YYYY-MM-DD'), sorted.
+export const bookingDays = (b) => {
+  const days = [
+    ...(b?.selectedDates ?? []),
+    ...(b?.bookingItems ?? []).flatMap((it) => it?.selectedDates ?? []),
+  ]
+    .map(clean)
+    .filter(isDay);
+  if (days.length === 0 && b?.bookingDate) days.push(istDayKey(new Date(b.bookingDate)));
+  return [...new Set(days)].sort();
+};
+
+/// The booking's package names that contain "Royal" (from the booking's own
+/// service text or its linked package's name).
+export const royalPackagesOf = (b, royalPackageIds = new Set()) => {
+  const names = [];
+  const add = (service, packageId) => {
+    const s = clean(service);
+    if (ROYAL_RX.test(s) || (packageId && royalPackageIds.has(String(packageId)))) names.push(s || 'Team N Royal');
+  };
+  const items = Array.isArray(b?.bookingItems) ? b.bookingItems : [];
+  if (items.length) items.forEach((it) => add(it?.service, it?.packageId));
+  add(b?.service, b?.packageId);
+  return [...new Set(names)];
+};
+
+export const listRoyalBookings = async (req, res) => {
+  try {
+    const today = todayIst();
+    const royalPackages = await ServicePackage.find({ name: ROYAL_RX }).select('_id').lean();
+    const royalIds = royalPackages.map((p) => p._id);
+    const royalIdSet = new Set(royalIds.map(String));
+
+    const bookings = await Booking.find({
+      status: { $nin: DEAD_STATUSES.flatMap((s) => [s, s[0].toUpperCase() + s.slice(1), s.toUpperCase()]) },
+      $and: [
+        {
+          $or: [
+            { service: ROYAL_RX },
+            { 'bookingItems.service': ROYAL_RX },
+            ...(royalIds.length
+              ? [{ packageId: { $in: royalIds } }, { 'bookingItems.packageId': { $in: royalIds } }]
+              : []),
+          ],
+        },
+        {
+          // Upcoming: any event day today or later (dates are 'YYYY-MM-DD').
+          $or: [
+            { selectedDates: { $gte: today } },
+            { 'bookingItems.selectedDates': { $gte: today } },
+            { bookingDate: { $gte: istStart(today) } },
+          ],
+        },
+      ],
+    })
+      .select(
+        'customerName phone bookingNumber service packageId bookingItems selectedDates bookingDate district address status leadId assignedStaff'
+      )
+      .sort({ bookingDate: 1 })
+      .limit(ROYAL_LIMIT)
+      .lean();
+
+    const rows = [];
+    for (const b of bookings) {
+      const days = bookingDays(b);
+      const upcoming = days.filter((d) => d >= today);
+      const packages = royalPackagesOf(b, royalIdSet);
+      if (upcoming.length === 0 || packages.length === 0) continue;
+      rows.push({
+        bookingId: b._id,
+        leadId: b.leadId || null,
+        bookingNumber: b.bookingNumber ?? '',
+        name: clean(b.customerName),
+        phone: clean(b.phone),
+        district: clean(b.district),
+        venue: clean(b.address),
+        status: clean(b.status),
+        packageName: packages.join(', '),
+        eventDates: days,
+        nextEventDay: upcoming[0],
+        artistNames: snapshotFromTeamN(null, b).artistNames,
+      });
+    }
+    rows.sort((a, b) => a.nextEventDay.localeCompare(b.nextEventDay));
+
+    // Which already have a client file (by booking, or by its lead).
+    const existing = rows.length
+      ? await StylistClient.find({
+          $or: [
+            { bookingId: { $in: rows.map((r) => r.bookingId) } },
+            { leadId: { $in: rows.map((r) => r.leadId).filter((id) => isId(String(id))) } },
+          ],
+        })
+          .select('_id leadId bookingId stylistId')
+          .populate('stylistId', 'name')
+          .lean()
+      : [];
+    for (const row of rows) {
+      const match = existing.find(
+        (c) =>
+          (c.bookingId && String(c.bookingId) === String(row.bookingId)) ||
+          (row.leadId && c.leadId && String(c.leadId) === String(row.leadId))
+      );
+      const ownerId = match?.stylistId?._id ?? match?.stylistId ?? null;
+      row.clientId = match?._id ?? null;
+      row.stylistName = match?.stylistId?.name ?? '';
+      row.clientIsOwn = match
+        ? canActOnClient(req.consultAccess, req.user, { ...match, stylistId: ownerId })
+        : false;
+    }
+    res.json(rows);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }

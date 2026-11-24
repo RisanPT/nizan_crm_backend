@@ -125,6 +125,22 @@ const reviewSchema = mongoose.Schema(
     autoMessageId: { type: String, default: '' },
     autoSendError: { type: String, default: '' },
 
+    // Every time staff send the link by hand from the CRM (first send is also
+    // manualSentAt). Lets the "Not submitted" list show resends.
+    manualSendCount: { type: Number, default: 0 },
+    lastManualSentAt: { type: Date, default: null },
+
+    // Form engagement, reported by the form page's own script once it has
+    // loaded on the client's phone (link-preview bots never run it), so a
+    // WhatsApp preview fetch doesn't count as an open. No personal data —
+    // only times and how many questions were answered.
+    openedAt: { type: Date, default: null }, // first open
+    lastOpenedAt: { type: Date, default: null },
+    openCount: { type: Number, default: 0 },
+    answeredCount: { type: Number, default: 0 }, // furthest progress reached
+    totalQuestions: { type: Number, default: 0 },
+    progressAt: { type: Date, default: null },
+
     // ── Bride answers (ratings 1-5; 0 = N/A or unanswered) ──
     overall: { type: Number, default: 0 },
     makeup: { type: Number, default: 0 },

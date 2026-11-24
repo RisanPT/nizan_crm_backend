@@ -23,6 +23,7 @@ import { timeboxFetch, timeboxMode } from '../services/timeboxClient.js';
 import Employee from '../models/Employee.js';
 import Salary from '../models/Salary.js';
 import Department from '../models/Department.js';
+import TimeboxIgnoredEmployee from '../models/TimeboxIgnoredEmployee.js';
 import LeaveRequest from '../models/LeaveRequest.js';
 import AttendanceRegularization from '../models/AttendanceRegularization.js';
 import { isPayrollLocked } from '../models/PayrollLock.js';
@@ -271,12 +272,26 @@ export const getTimeboxDays = async (req, res) => {
  * reported and skipped; it does not stop the others.
  * Returns a summary: { ok, mode, created, synced, alreadySynced, unmatched, failed, conflictCount, conflicts, results, message }
  */
+// Rules (2026-11-24):
+//  - Demo mode (no TIMEBOX_API_URL): nothing is written. The demo fixtures are
+//    never imported as real staff.
+//  - Match by the permanent Timebox id first, then email, then name, so a
+//    renamed or re-emailed person is not duplicated.
+//  - New staff are created only when HR runs the sync ({ createMissing: true },
+//    the "Sync employees" button). The automatic runs (boot, every 30 min,
+//    after an employee is added) only link existing records.
+//  - People HR deleted (TimeboxIgnoredEmployee) are never re-created.
 let syncRunning = null; // the sync in progress
 let syncQueued = null; // the one run after it, shared by every call made meanwhile
 
-export function performTimeboxEmployeeSync() {
+export async function performTimeboxEmployeeSync({ createMissing = false, _fetch = timeboxFetch, _mode = timeboxMode } = {}) {
+  // _fetch / _mode are test hooks only (no network in unit tests).
+  if (_mode !== timeboxMode || _fetch !== timeboxFetch) {
+    return runTimeboxEmployeeSync({ createMissing, _fetch, _mode });
+  }
+
   if (!syncRunning) {
-    syncRunning = runTimeboxEmployeeSync().finally(() => {
+    syncRunning = runTimeboxEmployeeSync({ createMissing, _fetch, _mode }).finally(() => {
       syncRunning = null;
     });
     return syncRunning;
@@ -286,7 +301,7 @@ export function performTimeboxEmployeeSync() {
       .catch(() => {})
       .then(() => {
         syncQueued = null;
-        return performTimeboxEmployeeSync();
+        return performTimeboxEmployeeSync({ createMissing, _fetch, _mode });
       });
   }
   return syncQueued;
@@ -304,47 +319,44 @@ export async function timeboxSyncIdle() {
 export function syncTimeboxInBackground(after) {
   const log = (err) => console.error(`[Timebox] Background sync after ${after} failed:`, err?.message || err);
   try {
-    performTimeboxEmployeeSync().catch(log);
+    performTimeboxEmployeeSync({ createMissing: false }).catch(log);
   } catch (err) {
     log(err);
   }
 }
 
-const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+async function runTimeboxEmployeeSync({ createMissing = false, _fetch = timeboxFetch, _mode = timeboxMode } = {}) {
+  if (_mode() !== 'live') {
+    return {
+      ok: false,
+      mode: _mode(),
+      created: 0,
+      synced: 0,
+      alreadySynced: 0,
+      unmatched: 0,
+      conflictCount: 0,
+      conflicts: [],
+      results: [],
+      message: 'Timebox is not connected on this server (TIMEBOX_API_URL is not set), so nothing was synced.',
+    };
+  }
 
-/** The CRM record for a Timebox person as the database has it NOW (the run's picture may be minutes old): id, then email, then name. */
-async function findCrmNow({ id, email, name }) {
-  const exactly = (s) => new RegExp(`^\\s*${escapeRegex(String(s).trim())}\\s*$`, 'i');
-  const or = [{ timeboxEmployeeId: id }];
-  if (email) or.push({ email: exactly(email) });
-  if (norm(name)) or.push({ name: exactly(name) });
-  const found = await Employee.find({ $or: or }).limit(50).lean();
-  return matchCrm(
-    {
-      byTimeboxId: new Map(found.filter((e) => e.timeboxEmployeeId != null).map((e) => [Number(e.timeboxEmployeeId), e])),
-      byEmail: new Map(found.filter((e) => e.email).map((e) => [norm(e.email), e])),
-      byName: new Map(found.filter((e) => e.name).map((e) => [norm(e.name), e])),
-    },
-    { id, email, name }
-  );
-}
-
-/** A problem with one person's record (skip them, carry on) — as opposed to losing the database (stop the run). */
-const isRecordError = (err) =>
-  err?.code === 11000 || ['ValidationError', 'CastError', 'StrictModeError', 'VersionError', 'DocumentNotFoundError'].includes(err?.name);
-
-async function runTimeboxEmployeeSync() {
-  const empRes = await timeboxFetch('employees');
+  const empRes = await _fetch('employees');
   const tbEmployees = empRes.data || [];
 
-  // Picture of the CRM for this run, kept up to date as the run creates and links people.
-  const index = { byTimeboxId: new Map(), byEmail: new Map(), byName: new Map() };
-  const remember = (e) => {
-    if (e.timeboxEmployeeId != null) index.byTimeboxId.set(Number(e.timeboxEmployeeId), e);
-    if (e.email) index.byEmail.set(norm(e.email), e);
-    if (e.name) index.byName.set(norm(e.name), e);
-  };
-  for (const e of await Employee.find({}).lean()) remember(e);
+  const crmEmps = await Employee.find({}).lean();
+  const byTbId = new Map();
+  const byEmail = new Map();
+  const byName = new Map();
+  for (const e of crmEmps) {
+    if (e.timeboxEmployeeId != null) byTbId.set(Number(e.timeboxEmployeeId), e);
+    if (e.email) byEmail.set(norm(e.email), e);
+    if (e.name) byName.set(norm(e.name), e);
+  }
+  const ignored = new Set(
+    (await TimeboxIgnoredEmployee.find({}).select('timeboxEmployeeId').lean()).map((r) => Number(r.timeboxEmployeeId))
+  );
+  let skippedDeleted = 0;
 
   // Map a Timebox department name → our Department entity id (by name or key).
   const departments = await Department.find({}).lean();
@@ -359,20 +371,40 @@ async function runTimeboxEmployeeSync() {
   let created = 0;
   let alreadySynced = 0;
   let unmatched = 0;
-  let failed = 0;
   const conflicts = [];
   const results = [];
 
-  const syncOne = async (tb, tbId, tbEmail, tbName) => {
-    let { crm: crmMatch, matchedBy } = matchCrm(index, { id: tbId, email: tbEmail, name: tbName });
+  for (const tb of tbEmployees) {
+    const tbId = Number(tb.id);
+    const tbEmail = norm(tb.email || '');
+    const tbName = tb.full_name || tb.name || '';
 
-    // Not in this run's picture — but someone may have added them since it was taken (HR, the associate quick-add, another
-    // server). Look again right before creating, so the same person is never saved twice.
-    if (!crmMatch) ({ crm: crmMatch, matchedBy } = await findCrmNow({ id: tbId, email: tbEmail, name: tbName }));
+    // Attempt match: Timebox id first, then email, then name
+    let crmMatch = byTbId.get(tbId) || null;
+    let matchedBy = crmMatch ? 'timeboxId' : null;
+    if (!crmMatch && tbEmail) {
+      crmMatch = byEmail.get(tbEmail) || null;
+      if (crmMatch) matchedBy = 'email';
+    }
+
+    if (!crmMatch && tbName) {
+      crmMatch = byName.get(norm(tbName));
+      if (crmMatch) matchedBy = 'name';
+    }
 
     // No CRM match → CREATE the Timebox person as an administrative Employee,
     // slotted into their department. This is how Timebox staff are saved into
     // our DB and shown under the departments.
+    if (!crmMatch && ignored.has(tbId)) {
+      skippedDeleted += 1;
+      results.push({ timeboxId: tbId, timeboxName: tbName, matched: false, reason: 'deleted_in_crm' });
+      continue;
+    }
+    if (!crmMatch && !createMissing) {
+      unmatched += 1;
+      results.push({ timeboxId: tbId, timeboxName: tbName, matched: false, reason: 'not_in_crm' });
+      continue;
+    }
     if (!crmMatch) {
       const newEmp = await Employee.create({
         name: tbName || tb.email || `Timebox #${tbId}`,
@@ -386,7 +418,6 @@ async function runTimeboxEmployeeSync() {
         timeboxEmployeeId: tbId,
         timeboxName: tbName,
       });
-      remember(newEmp.toObject());
       created += 1;
       results.push({
         timeboxId: tbId,
@@ -397,7 +428,7 @@ async function runTimeboxEmployeeSync() {
         action: 'created',
         department: newEmp.department,
       });
-      return;
+      continue;
     }
 
     // Check for conflicts: two Timebox employees binding to the same CRM employee
@@ -416,7 +447,7 @@ async function runTimeboxEmployeeSync() {
         matched: false,
         reason: 'conflict',
       });
-      return;
+      continue;
     }
 
     // Already synced with the same ID — backfill department if unset and sync active status.
@@ -443,7 +474,7 @@ async function runTimeboxEmployeeSync() {
         matchedBy,
         action: 'already_synced',
       });
-      return;
+      continue;
     }
 
     // Write the binding back to CRM (+ slot into their department if unset and sync active status).
@@ -457,8 +488,6 @@ async function runTimeboxEmployeeSync() {
       if (crmMatch.status !== tbStatus) patch.status = tbStatus;
     }
     await Employee.findByIdAndUpdate(crmMatch._id, patch);
-    // now linked: a second Timebox record matching the same person is a conflict, not a silent re-link
-    remember({ ...crmMatch, ...patch });
 
     synced += 1;
     results.push({
@@ -470,20 +499,6 @@ async function runTimeboxEmployeeSync() {
       matchedBy,
       action: 'synced',
     });
-  };
-
-  for (const tb of tbEmployees) {
-    const tbId = Number(tb.id);
-    const tbEmail = norm(tb.email || '');
-    const tbName = tb.full_name || tb.name || '';
-    try {
-      await syncOne(tb, tbId, tbEmail, tbName);
-    } catch (err) {
-      if (!isRecordError(err)) throw err;
-      failed += 1;
-      console.error(`[Timebox] sync: could not save Timebox #${tbId} (${tbName}):`, err?.message || err);
-      results.push({ timeboxId: tbId, timeboxName: tbName, matched: false, reason: 'error' });
-    }
   }
 
   return {
@@ -493,17 +508,18 @@ async function runTimeboxEmployeeSync() {
     synced,
     alreadySynced,
     unmatched,
-    failed,
     conflictCount: conflicts.length,
     conflicts,
     results,
-    message: `Imported ${created} new staff, linked ${synced}, ${alreadySynced} already up to date${conflicts.length ? `, ${conflicts.length} conflicts` : ''}${failed ? `, ${failed} could not be saved` : ''}.`,
+    skippedDeleted,
+    message: `Imported ${created} new staff, linked ${synced}, ${alreadySynced} already up to date${unmatched ? `, ${unmatched} not in the CRM yet` : ''}${skippedDeleted ? `, ${skippedDeleted} skipped (deleted in the CRM)` : ''}${conflicts.length ? `, ${conflicts.length} conflicts` : ''}.`,
   };
 }
 
 export const syncEmployees = async (req, res) => {
   try {
-    const summary = await performTimeboxEmployeeSync();
+    // HR pressed "Sync employees": new Timebox staff may be imported.
+    const summary = await performTimeboxEmployeeSync({ createMissing: true });
     res.json(summary);
   } catch (err) {
     sendTimeboxError(res, err, 'Timebox sync error');

@@ -51,7 +51,8 @@ const DEFAULT_ROLES = [
     key: 'manager',
     label: 'Manager',
     homeRoute: '/clients',
-    permissions: ALL.filter((p) => p !== 'dashboard'),
+    // Team N Website is admin + marketing_admin only (decided 2026-11-16).
+    permissions: ALL.filter((p) => p !== 'dashboard' && p !== 'website'),
   },
   // The CRM team. `staff` is NOT given: it opens every employee's pay and bank details (utils/hrAccess.js). The CRM Head
   // manages their own team through department-head scoping instead.
@@ -136,7 +137,7 @@ const DEFAULT_ROLES = [
     key: 'marketing_admin',
     label: 'Marketing Admin',
     homeRoute: '/marketing/dashboard',
-    permissions: ['marketing'],
+    permissions: ['marketing', 'website'],
   },
   {
     key: 'it',
@@ -296,6 +297,12 @@ export const ensureDefaultRoles = async () => {
   await Role.updateMany(
     { key: { $in: ['admin', 'manager'] } },
     { $addToSet: { permissions: { $each: HR_MODULE_KEYS } } }
+  );
+  // Team N Website menu for existing deployments: admin + marketing_admin.
+  // $addToSet only adds the key; nothing else on the role changes.
+  await Role.updateMany(
+    { key: { $in: ['admin', 'marketing_admin'] } },
+    { $addToSet: { permissions: 'website' } }
   );
 };
 

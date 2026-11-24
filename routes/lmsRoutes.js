@@ -12,6 +12,7 @@ import {
   getOrientationPlans,
   createOrientationPlan,
   updateOrientationPlan,
+  deleteOrientationPlan,
   getActiveOrientations,
   assignOrientation,
   updateOrientationProgress,
@@ -32,7 +33,7 @@ router.route('/enrollments/:id').put(updateEnrollment).delete(deleteEnrollment);
 
 // ── Orientation Plans (1-Week Doc & Syllabus) & Active Tracking
 router.route('/orientations/plans').get(getOrientationPlans).post(createOrientationPlan);
-router.route('/orientations/plans/:id').put(updateOrientationPlan);
+router.route('/orientations/plans/:id').put(updateOrientationPlan).delete(deleteOrientationPlan);
 router.route('/orientations/active').get(getActiveOrientations);
 router.route('/orientations/assign').post(assignOrientation);
 router.route('/orientations/active/:id').put(updateOrientationProgress);

@@ -1,4 +1,4 @@
-// Next-day review auto-send, with the models and TeamN Chat stubbed out:
+// Day-after-the-event review auto-send, with the models and TeamN Chat stubbed out:
 // no database, no network.   node --test tests/reviewAutoSend.test.js
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -7,8 +7,9 @@ import Booking from '../models/Booking.js';
 import {
   MAX_ATTEMPTS,
   classifyResult,
-  dueWindow,
+  eventTiming,
   formatWorkDate,
+  lastEventDay,
   runReviewAutoSend,
 } from '../services/reviewAutoSend.js';
 
@@ -70,13 +71,14 @@ const review = (over = {}) => ({
 // Wires the stubs for one run. `reviews` are the due ones; returns what the
 // run did: the sends made and the final $set per review id.
 const setup = (t, reviews, { booking = { status: 'Completed' }, claim = true } = {}) => {
+  const bookingFor = (r) => ({ _id: r.booking, phone: '', customerName: '', selectedDates: ['2026-11-05'], ...booking });
   withEnv(t, { REVIEW_AUTO_SEND_FROM: '2026-11-05', TEAMN_CHAT_KEY: 'tnm_test' });
   const byId = new Map(reviews.map((r) => [String(r._id), r]));
   const finals = new Map();
   let findQuery = null;
   stub(t, Review, 'find', (q) => {
     findQuery = q;
-    return chain(reviews.map((r) => ({ _id: r._id, autoSendStatus: r.autoSendStatus })));
+    return chain(reviews.map((r) => ({ _id: r._id, autoSendStatus: r.autoSendStatus, booking: r.booking })));
   });
   stub(t, Review, 'findOneAndUpdate', async (filter, update) => {
     if (!claim) return null;
@@ -88,7 +90,7 @@ const setup = (t, reviews, { booking = { status: 'Completed' }, claim = true } =
   stub(t, Review, 'updateOne', async (filter, update) => {
     finals.set(String(filter._id), update.$set);
   });
-  stub(t, Booking, 'findById', () => chain(booking ? { phone: '', customerName: '', ...booking } : null));
+  stub(t, Booking, 'find', () => chain(booking ? reviews.map(bookingFor) : []));
   return { finals, query: () => findQuery };
 };
 
@@ -101,12 +103,23 @@ test('formatWorkDate gives the long IST date the template expects', () => {
   assert.equal(formatWorkDate(new Date('2026-11-03T20:00:00.000Z')), '4 November 2026');
 });
 
-test('due window starts at the go-live day, ends before today, and is capped at 7 days', () => {
-  const w = dueWindow('2026-11-06', '2026-11-05');
-  assert.equal(w.$gte.toISOString(), '2026-11-04T18:30:00.000Z'); // 5 Nov 00:00 IST
-  assert.equal(w.$lt.toISOString(), '2026-11-05T18:30:00.000Z'); // 6 Nov 00:00 IST
-  const capped = dueWindow('2026-12-20', '2026-11-05');
-  assert.equal(capped.$gte.toISOString(), '2026-12-12T18:30:00.000Z'); // 13 Dec IST
+test("the event's last day is the latest selected date, else the booking date", () => {
+  assert.equal(lastEventDay({ selectedDates: ['2026-12-14'], bookingItems: [{ selectedDates: ['2026-12-15'] }] }), '2026-12-15');
+  assert.equal(lastEventDay({ selectedDates: ['2026-12-15', '2026-12-14'] }), '2026-12-15');
+  // No selected dates: the booking date, as an IST day (18:30Z = midnight IST).
+  assert.equal(lastEventDay({ selectedDates: [], bookingDate: new Date('2026-11-10T18:30:00.000Z') }), '2026-11-11');
+  assert.equal(lastEventDay({}), null);
+});
+
+test('a review goes out the morning after the event, never before or weeks later', () => {
+  const from = '2026-11-11';
+  assert.equal(eventTiming('2026-11-12', '2026-11-13', from), 'send'); // ended yesterday
+  assert.equal(eventTiming('2026-11-13', '2026-11-13', from), 'wait'); // event is today
+  assert.equal(eventTiming('2026-12-25', '2026-11-13', from), 'wait'); // booked for later
+  assert.equal(eventTiming('2026-11-10', '2026-11-13', from), 'stale'); // before go-live
+  assert.equal(eventTiming('2026-11-11', '2026-11-19', from), 'stale'); // 8 days ago
+  assert.equal(eventTiming('2026-11-12', '2026-11-19', from), 'send'); // 7 days ago
+  assert.equal(eventTiming(null, '2026-11-13', from), 'stale');
 });
 
 test('the feature is off without REVIEW_AUTO_SEND_FROM or the TeamN Chat key', async (t) => {
@@ -143,19 +156,53 @@ test('sends the review_request template with the right values and records it', a
   assert.equal(set.autoSendStatus, 'sent');
   assert.equal(set.autoMessageId, 'wamid.1');
 
-  // Only pending, never-hand-sent reviews inside the window are looked at.
+  // Only pending, never-hand-sent reviews made since go-live are looked at.
   const q = query();
   assert.equal(q.status, 'pending');
   assert.equal(q.manualSentAt, null);
-  assert.ok(q.createdAt.$gte && q.createdAt.$lt);
+  assert.equal(q.createdAt.$gte.toISOString(), '2026-11-04T18:30:00.000Z'); // 5 Nov IST
 });
 
-test('skips bookings that are no longer completed, legacy, or have no phone', async (t) => {
+test('a booking marked Completed before its event waits for the day after it', async (t) => {
   const calls = [];
+  // Booked for 25 Dec and marked Completed early by mistake.
+  const early = review();
+  const s = setup(t, [early], { booking: { status: 'Completed', selectedDates: ['2026-12-25'] } });
+  const summary = await runReviewAutoSend({ now: NOW, send: okSend(calls), gapMs: 0 });
+  assert.equal(calls.length, 0);
+  assert.equal(summary.waiting, 1);
+  assert.equal(s.finals.has(String(early._id)), false); // untouched: tried again on 26 Dec
+});
+
+test("a wedding and reception on two days waits until after the second day", async (t) => {
+  const calls = [];
+  const r = review();
+  setup(t, [r], {
+    booking: { status: 'Completed', selectedDates: ['2026-11-05'], bookingItems: [{ selectedDates: ['2026-11-06'] }] },
+  });
+  const summary = await runReviewAutoSend({ now: NOW, send: okSend(calls), gapMs: 0 }); // 6 Nov
+  assert.equal(calls.length, 0);
+  assert.equal(summary.waiting, 1);
+});
+
+test('an old booking re-saved after go-live is never sent', async (t) => {
+  const calls = [];
+  const old = review();
+  const s = setup(t, [old], { booking: { status: 'Completed', selectedDates: ['2026-08-14'] } });
+  await runReviewAutoSend({ now: NOW, send: okSend(calls), gapMs: 0 });
+  assert.equal(calls.length, 0);
+  assert.equal(s.finals.get(String(old._id)).autoSendStatus, 'skipped');
+  assert.match(s.finals.get(String(old._id)).autoSendError, /before go-live or more than 7 days ago/);
+});
+
+test('waits on a booking not completed; skips legacy bookings and missing phones', async (t) => {
+  const calls = [];
+  // Not completed (yet): left alone, it may still be marked completed.
   const notDone = review();
   let s = setup(t, [notDone], { booking: { status: 'Confirmed' } });
-  await runReviewAutoSend({ now: NOW, send: okSend(calls), gapMs: 0 });
-  assert.equal(s.finals.get(String(notDone._id)).autoSendStatus, 'skipped');
+  const waited = await runReviewAutoSend({ now: NOW, send: okSend(calls), gapMs: 0 });
+  assert.equal(waited.waiting, 1);
+  assert.equal(s.finals.has(String(notDone._id)), false);
 
   const noPhone = review({ customerPhone: '' });
   s = setup(t, [noPhone]);

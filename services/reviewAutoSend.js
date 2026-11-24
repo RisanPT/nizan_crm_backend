@@ -3,27 +3,29 @@ import Booking from '../models/Booking.js';
 import { IST_OFFSET_MS, addDays, isDay, istDayKey, istStart, todayIst } from '../utils/istDate.js';
 import { isTeamnChatConfigured, sendTeamnChatTemplate, toWhatsAppPhone } from '../utils/teamnChat.js';
 
-// Next-day review request. Once a day (default 10:00 IST) the CRM sends the
-// approved `review_request` WhatsApp template, from the CRM number through
-// TeamN Chat, to every client whose booking was completed on an earlier day
-// and who hasn't been sent the review link by hand.
+// Day-after-the-event review request. Once a day (default 10:00 IST) the CRM
+// sends the approved `review_request` WhatsApp template, from the CRM number
+// through TeamN Chat, to clients whose EVENT finished on an earlier day — the
+// morning after the event's last day — and who haven't been sent the review
+// link by hand. When the booking was made, or when someone pressed Completed,
+// doesn't decide it: a booking marked Completed early waits for its event.
 //
 // Safety gates — nothing is sent unless ALL hold:
-//   • REVIEW_AUTO_SEND_FROM=YYYY-MM-DD is set. Only reviews created on or after
-//     that IST day are ever sent, so old clients are never messaged in bulk.
-//     Unset (or invalid) = the feature is off.
+//   • REVIEW_AUTO_SEND_FROM=YYYY-MM-DD is set. Only events whose last day is on
+//     or after that IST day (and reviews created since then) are ever sent, so
+//     old clients are never messaged in bulk. Unset (or invalid) = off.
 //   • TEAMN_CHAT_KEY is set.
 //   • The review is still pending, was never sent by hand (manualSentAt), and
-//     its booking is still completed and not a legacy import.
-//   • It is at most MAX_AGE_DAYS old — after downtime we don't thank someone
-//     weeks later.
+//     its booking is completed and not a legacy import.
+//   • The event's last day is before today and at most MAX_AGE_DAYS ago — a
+//     client isn't thanked weeks later (e.g. an old booking re-saved).
 // TeamN Chat refuses a second send of the same template + phone + reference,
 // and each review is claimed atomically before sending, so a retry or two
 // server processes can't message a client twice.
 
 export const MAX_AGE_DAYS = 7;
 export const MAX_ATTEMPTS = 3;
-const BATCH_LIMIT = 200;
+const BATCH_LIMIT = 500;
 const GAP_MS = 1500; // between sends, to stay gentle on TeamN Chat
 const STUCK_MS = 60 * 60 * 1000; // a 'sending' claim older than this was abandoned
 
@@ -48,12 +50,35 @@ const IST_LONG_DATE = new Intl.DateTimeFormat('en-IN', {
 /// "4 November 2026" — the work / wedding date for the template's {{2}}.
 export const formatWorkDate = (date) => IST_LONG_DATE.format(date);
 
-/// The window of review creation times that may be sent today: from the
-/// later of the go-live day and MAX_AGE_DAYS ago, up to (not including) today.
-export const dueWindow = (today, fromDay) => {
-  const oldest = addDays(today, -MAX_AGE_DAYS);
-  const startDay = fromDay > oldest ? fromDay : oldest;
-  return { $gte: istStart(startDay), $lt: istStart(today) };
+/// The booking's last event day as an IST 'YYYY-MM-DD': the latest of its
+/// selected dates (and each package's), else its booking date; null if none.
+export const lastEventDay = (booking) => {
+  const toDay = (v) => {
+    const t = String(v ?? '').trim();
+    if (isDay(t)) return t;
+    const d = new Date(t);
+    return t && !Number.isNaN(d.getTime()) ? istDayKey(d) : null;
+  };
+  const days = [
+    ...(booking?.selectedDates ?? []),
+    ...(booking?.bookingItems ?? []).flatMap((it) => it?.selectedDates ?? []),
+  ]
+    .map(toDay)
+    .filter(Boolean)
+    .sort();
+  if (days.length) return days[days.length - 1];
+  return booking?.bookingDate ? istDayKey(new Date(booking.bookingDate)) : null;
+};
+
+/// Whether a review may go out today, from the event's last day:
+///   'wait'  — the event hasn't finished (its last day is today or later)
+///   'send'  — it ended on or after go-live and within MAX_AGE_DAYS
+///   'stale' — it ended before go-live or too long ago: never sent
+export const eventTiming = (lastDay, today, fromDay) => {
+  if (!lastDay) return 'stale';
+  if (lastDay >= today) return 'wait';
+  if (lastDay < fromDay || lastDay < addDays(today, -MAX_AGE_DAYS)) return 'stale';
+  return 'send';
 };
 
 /// What to do with a TeamN Chat answer. Returns
@@ -81,7 +106,7 @@ const finish = (id, fields) => Review.updateOne({ _id: id }, { $set: fields });
  */
 export const runReviewAutoSend = async ({ now = new Date(), send = sendTeamnChatTemplate, gapMs = GAP_MS } = {}) => {
   const cfg = config();
-  const summary = { sent: 0, duplicate: 0, skipped: 0, failed: 0, retry: 0, stopped: '' };
+  const summary = { sent: 0, duplicate: 0, skipped: 0, failed: 0, retry: 0, waiting: 0, stopped: '' };
   if (!cfg.fromDay) return { ...summary, stopped: 'REVIEW_AUTO_SEND_FROM not set' };
   if (!isTeamnChatConfigured()) return { ...summary, stopped: 'TEAMN_CHAT_KEY not set' };
 
@@ -89,7 +114,8 @@ export const runReviewAutoSend = async ({ now = new Date(), send = sendTeamnChat
   const due = await Review.find({
     status: 'pending',
     manualSentAt: null,
-    createdAt: dueWindow(today, cfg.fromDay),
+    // Reviews made before go-live are never looked at.
+    createdAt: { $gte: istStart(cfg.fromDay) },
     $or: [
       { autoSendStatus: { $in: ['', 'retry'] } },
       // Left mid-send by a crash or restart. Safe to pick up: TeamN Chat
@@ -97,12 +123,32 @@ export const runReviewAutoSend = async ({ now = new Date(), send = sendTeamnChat
       { autoSendStatus: 'sending', updatedAt: { $lt: new Date(now.getTime() - STUCK_MS) } },
     ],
   })
-    .select('_id autoSendStatus')
+    .select('_id autoSendStatus booking')
     .sort({ createdAt: 1 })
     .limit(BATCH_LIMIT)
     .lean();
 
+  // Every candidate's booking in one query: its event dates decide.
+  const bookingIds = [...new Set(due.map((r) => String(r.booking ?? '')).filter(Boolean))];
+  const bookings = new Map(
+    (
+      await Booking.find({ _id: { $in: bookingIds } })
+        .select('status legacyBooking phone customerName bookingDate selectedDates bookingItems.selectedDates')
+        .lean()
+    ).map((b) => [String(b._id), b])
+  );
+
   for (let i = 0; i < due.length; i++) {
+    const booking = bookings.get(String(due[i].booking ?? '')) ?? null;
+    const timing = booking ? eventTiming(lastEventDay(booking), today, cfg.fromDay) : 'stale';
+    const completed = String(booking?.status ?? '').toLowerCase() === 'completed';
+    // Not yet: the event is still ahead, or the booking isn't completed (it
+    // may still be marked completed). Left untouched for a later run.
+    if (timing === 'wait' || (timing === 'send' && !completed)) {
+      summary.waiting += 1;
+      continue;
+    }
+
     // Claim it: only one run may move it out of ''/'retry'.
     const review = await Review.findOneAndUpdate(
       { _id: due[i]._id, autoSendStatus: due[i].autoSendStatus, status: 'pending', manualSentAt: null },
@@ -111,9 +157,6 @@ export const runReviewAutoSend = async ({ now = new Date(), send = sendTeamnChat
     );
     if (!review) continue;
 
-    const booking = review.booking
-      ? await Booking.findById(review.booking).select('status legacyBooking phone customerName').lean()
-      : null;
     const skip = (why) => {
       summary.skipped += 1;
       return finish(review._id, { autoSendStatus: 'skipped', autoSendError: why });
@@ -122,8 +165,8 @@ export const runReviewAutoSend = async ({ now = new Date(), send = sendTeamnChat
       await skip('Booking not found');
       continue;
     }
-    if (String(booking.status ?? '').toLowerCase() !== 'completed') {
-      await skip('Booking is no longer completed');
+    if (timing === 'stale') {
+      await skip('Event was before go-live or more than 7 days ago');
       continue;
     }
     if (booking.legacyBooking) {
@@ -202,6 +245,8 @@ export const startReviewAutoSend = () => {
   };
 
   const handle = setInterval(tick, 60 * 1000);
-  console.log(`[ReviewAutoSend] Scheduler started — daily at ${cfg.sendTime} IST for reviews from ${cfg.fromDay}.`);
+  console.log(
+    `[ReviewAutoSend] Scheduler started — daily at ${cfg.sendTime} IST, the morning after each event (events from ${cfg.fromDay}).`
+  );
   return handle;
 };

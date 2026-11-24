@@ -95,6 +95,13 @@ const employeeSchema = mongoose.Schema(
       ref: 'Employee',
       default: null,
     },
+    // HRMS job role this person was hired into (Recruitment -> Job Roles). Its
+    // crmRoleKey is pre-selected when HR issues the login.
+    jobRoleId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'JobRole',
+      default: null,
+    },
     // Formal designation/title (optional). `role` stays as the free-text label.
     designationId: {
       type: mongoose.Schema.Types.ObjectId,

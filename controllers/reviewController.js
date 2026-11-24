@@ -147,8 +147,12 @@ export const createReviewForBooking = async (req, res) => {
     const booking = await Booking.findById(req.params.bookingId);
     if (!booking) return res.status(404).json({ message: 'Booking not found' });
     const review = await ensureReviewForBooking(booking, req.user);
-    if (req.body?.markSent === true && !review.manualSentAt && review.autoSendStatus !== 'sent') {
-      review.manualSentAt = new Date();
+    if (req.body?.markSent === true && review.status !== 'submitted') {
+      const now = new Date();
+      // First hand send: the automatic next-day send skips this review.
+      if (!review.manualSentAt && review.autoSendStatus !== 'sent') review.manualSentAt = now;
+      review.manualSendCount = (review.manualSendCount || 0) + 1;
+      review.lastManualSentAt = now;
       // who sent it, for the CRM figures
       review.manualSentBy = req.user?._id ?? null;
       review.manualSentByName = req.user?.name ?? '';
@@ -277,31 +281,101 @@ export const submitReview = async (req, res) => {
   }
 };
 
+// @route POST /api/reviews/track/:token  (public)   body: { event, answered, total }
+// Called by the form page's script: event 'open' once the page has loaded on
+// the client's device, 'progress' each time another question is answered.
+// Only pending reviews are tracked; progress only ever moves forward.
+export const trackReview = async (req, res) => {
+  try {
+    const b = req.body || {};
+    const event = String(b.event || '');
+    if (!['open', 'progress'].includes(event)) {
+      return res.status(400).json({ message: 'Unknown event' });
+    }
+    const clamp = (v, max) => {
+      const n = Math.floor(Number(v));
+      return Number.isFinite(n) ? Math.min(Math.max(n, 0), max) : 0;
+    };
+    const total = clamp(b.total, 50);
+    const answered = Math.min(clamp(b.answered, 50), total || 50);
+    const now = new Date();
+
+    const pending = { token: req.params.token, status: 'pending' };
+    if (event === 'open') {
+      // First open only (openedAt starts null).
+      await Review.updateOne({ ...pending, openedAt: null }, { $set: { openedAt: now } });
+    }
+    const update =
+      event === 'open'
+        ? { $set: { lastOpenedAt: now }, $inc: { openCount: 1 } }
+        : {
+            $set: { progressAt: now, ...(total ? { totalQuestions: total } : {}) },
+            $max: { answeredCount: answered },
+          };
+    const r = await Review.updateOne(pending, update);
+    return res.json({ ok: r.matchedCount > 0 });
+  } catch (error) {
+    return res.status(500).json({ message: error.message });
+  }
+};
+
 // ── Staff: list / detail / update internal block ─────────────────────────────
 
 const isFullAccess = (u) => ['admin', 'manager'].includes(String(u?.role || '').toLowerCase());
 
+// A pending review whose link actually reached the client (sent by staff or
+// by the automatic WhatsApp send).
+const SENT_FILTER = { $or: [{ manualSentAt: { $ne: null } }, { autoSendStatus: 'sent' }] };
+
+const escapeRx = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+const dayRange = (from, to) => {
+  const range = {};
+  if (from) range.$gte = new Date(from);
+  if (to) {
+    const end = new Date(to);
+    end.setHours(23, 59, 59, 999);
+    range.$lte = end;
+  }
+  return Object.keys(range).length ? range : null;
+};
+
 // @route GET /api/reviews  (auth)
+// Query: status (all|submitted|pending), sent=true (pending reviews whose link
+// was sent), complaint, followUp, search, artist, from/to (YYYY-MM-DD — the
+// submitted date for submitted reviews, else the wedding date).
 export const getReviews = async (req, res) => {
   try {
-    const { status, complaint, followUp, search } = req.query;
-    const filter = {};
-    if (status && status !== 'all' && status !== 'All') filter.status = status;
-    if (complaint === 'true') filter.complaint = true;
-    if (followUp === 'true') filter.followUpRequired = true;
-    if (search) {
-      const rx = new RegExp(String(search).trim(), 'i');
-      filter.$or = [
-        { brideName: rx },
-        { bookingNumber: rx },
-        { artistName: rx },
-      ];
+    const { status, complaint, followUp, search, artist, from, to, sent } = req.query;
+    const and = [];
+    if (status && status !== 'all' && status !== 'All') and.push({ status });
+    if (sent === 'true') and.push(SENT_FILTER);
+    if (complaint === 'true') and.push({ complaint: true });
+    if (followUp === 'true') and.push({ followUpRequired: true });
+    if (search && String(search).trim()) {
+      const rx = new RegExp(escapeRx(String(search).trim()), 'i');
+      and.push({
+        $or: [{ brideName: rx }, { bookingNumber: rx }, { artistName: rx }, { customerPhone: rx }],
+      });
     }
-    const reviews = await Review.find(filter)
-      .sort({ submittedAt: -1, createdAt: -1 })
-      .limit(500)
+    if (artist && String(artist).trim()) {
+      const rx = new RegExp(`^${escapeRx(String(artist).trim())}$`, 'i');
+      and.push({ $or: [{ artistName: rx }, { artistNames: rx }] });
+    }
+    const range = dayRange(from, to);
+    if (range) {
+      and.push(status === 'submitted' ? { submittedAt: range } : { weddingDate: range });
+    }
+
+    const reviews = await Review.find(and.length ? { $and: and } : {})
+      .sort(status === 'submitted' ? { submittedAt: -1 } : { weddingDate: -1, createdAt: -1 })
+      .limit(1000)
       .lean();
-    res.json(reviews);
+    res.json(
+      reviews.map((r) =>
+        r.status === 'pending' ? { ...r, reviewUrl: reviewFormUrl(req, r.token) } : r,
+      ),
+    );
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -325,9 +399,11 @@ export const getReviewAnalytics = async (req, res) => {
       }
     }
 
-    const [reviews, pending] = await Promise.all([
+    const [reviews, pending, notSubmitted, notOpened] = await Promise.all([
       Review.find(filter).lean(),
       Review.countDocuments({ status: 'pending' }),
+      Review.countDocuments({ status: 'pending', ...SENT_FILTER }),
+      Review.countDocuments({ status: 'pending', openedAt: null, ...SENT_FILTER }),
     ]);
 
     const round1 = (v) => Math.round(v * 10) / 10;
@@ -375,9 +451,31 @@ export const getReviewAnalytics = async (req, res) => {
       }))
       .sort((x, y) => y.avgTeamScore - x.avgTeamScore || y.count - x.count);
 
+    // Average of each question, for the Insights breakdown.
+    const categoryAverages = {
+      overall: avgOf(reviews, (r) => r.overall || 0),
+      makeup: avgOf(reviews, (r) => r.makeup || 0),
+      hair: avgOf(reviews, (r) => r.hair || 0),
+      saree: avgOf(reviews, (r) => r.saree || 0),
+      punctuality: avgOf(reviews, (r) => r.teamBehaviour?.punctuality || 0),
+      professionalism: avgOf(reviews, (r) => r.teamBehaviour?.professionalism || 0),
+      communication: avgOf(reviews, (r) => r.teamBehaviour?.communication || 0),
+      politeness: avgOf(reviews, (r) => r.teamBehaviour?.politeness || 0),
+      handlingRequests: avgOf(reviews, (r) => r.teamBehaviour?.handlingRequests || 0),
+    };
+
+    // Response rate = submitted ÷ (submitted + sent-but-not-submitted). Not
+    // date-filtered on the pending side, so it's only shown for "all time".
+    const asked = reviews.length + notSubmitted;
+    const responseRate = asked ? Math.round((reviews.length / asked) * 100) : 0;
+
     res.json({
       totalSubmitted: reviews.length,
       pending,
+      notSubmitted,
+      notOpened,
+      responseRate,
+      categoryAverages,
       avgBrideScore: avgOf(reviews, (r) => r.brideScore),
       avgTeamScore: avgOf(reviews, (r) => r.teamMemberScore),
       nps,
@@ -873,8 +971,16 @@ export function renderForm(review) {
     var d=steps.filter(function(s){return s.classList.contains('done');}).length;
     bar.style.width=(d/total*100)+'%';count.textContent=d;
   }
+  // Tell the CRM the form was opened / how far the client got (best-effort;
+  // never blocks the form). Only real page loads run this — link-preview bots
+  // don't execute scripts.
+  function track(ev,n){
+    try{fetch('/api/reviews/track/'+TOKEN,{method:'POST',keepalive:true,headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({event:ev,answered:n||0,total:total})}).catch(function(){});}catch(e){}
+  }
   function complete(i){
     steps[i].classList.add('done');progress();
+    track('progress',steps.filter(function(s){return s.classList.contains('done');}).length);
     var next=steps[i+1];reveal(next||submitCard);
   }
 
@@ -901,6 +1007,7 @@ export function renderForm(review) {
     }
   });
   steps[0].classList.add('shown');setCurrent(steps[0]);progress();
+  track('open');
 
   var f=document.getElementById('f');
   f.addEventListener('submit',function(e){
