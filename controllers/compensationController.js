@@ -14,10 +14,22 @@ const COMP_KEYS = ['compensation'];
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   if (user?.isDepartmentHead) return true;
   const perms = user?.permissions || [];
   return perms.includes('compensation') || perms.includes('staff');
+};
+
+// The `hr` login role runs HR company-wide (like grievances / performance).
+const isHrRole = (user) => String(user?.role || '').trim().toLowerCase() === 'hr';
+const assertInScope = async (req, res, employeeId) => {
+  if (!isHrRole(req.user)) await assertEmployeeInScope(req, res, employeeId, COMP_KEYS);
+};
+
+// A band's minimum can't be above its maximum.
+const assertBandRange = (res, minSalary, maxSalary) => {
+  if (minSalary < 0 || maxSalary < 0) { res.status(400); throw new Error('Salary amounts cannot be negative'); }
+  if (minSalary > maxSalary) { res.status(400); throw new Error('Minimum salary cannot be more than the maximum'); }
 };
 
 const guard = (req, res) => {
@@ -30,7 +42,7 @@ const guard = (req, res) => {
 // Salary bands are company master data — HR-wide only (dept heads read-only).
 const guardMaster = async (req, res) => {
   guard(req, res);
-  if (!(await isHrWide(req, COMP_KEYS))) {
+  if (!isHrRole(req.user) && !(await isHrWide(req, COMP_KEYS))) {
     res.status(403);
     throw new Error('Only HR can create or change salary bands');
   }
@@ -48,11 +60,14 @@ const createBand = asyncHandler(async (req, res) => {
   await guardMaster(req, res);
   const name = String(req.body.name || '').trim();
   if (!name) { res.status(400); throw new Error('Please provide a band name'); }
+  const minSalary = Number(req.body.minSalary) || 0;
+  const maxSalary = Number(req.body.maxSalary) || 0;
+  assertBandRange(res, minSalary, maxSalary);
   const band = await SalaryBand.create({
     name,
     level: Number(req.body.level) || 1,
-    minSalary: Number(req.body.minSalary) || 0,
-    maxSalary: Number(req.body.maxSalary) || 0,
+    minSalary,
+    maxSalary,
     currency: String(req.body.currency || 'INR'),
     notes: String(req.body.notes || '').trim(),
     active: req.body.active !== false,
@@ -73,6 +88,7 @@ const updateBand = asyncHandler(async (req, res) => {
   if (b.currency !== undefined) band.currency = String(b.currency);
   if (b.notes !== undefined) band.notes = String(b.notes).trim();
   if (b.active !== undefined) band.active = Boolean(b.active);
+  assertBandRange(res, band.minSalary, band.maxSalary);
   await band.save();
   res.json(band);
 });
@@ -92,7 +108,7 @@ const getRevisions = asyncHandler(async (req, res) => {
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
   // Dept heads see only their own department ($and so a query employeeId
   // can't widen it).
-  const scope = await scopeFilter(req, COMP_KEYS);
+  const scope = isHrRole(req.user) ? {} : await scopeFilter(req, COMP_KEYS);
   const finalFilter = Object.keys(scope).length ? { $and: [filter, scope] } : filter;
   const rows = await CompensationRevision.find(finalFilter).populate(empPopulate).sort({ createdAt: -1 }).limit(300);
   res.json(rows);
@@ -111,10 +127,16 @@ const proposeRevision = asyncHandler(async (req, res) => {
     res.status(403);
     throw new Error('You cannot propose a revision for yourself');
   }
-  await assertEmployeeInScope(req, res, employeeId, COMP_KEYS);
+  await assertInScope(req, res, employeeId);
 
   const employee = await Employee.findById(employeeId);
   if (!employee) { res.status(404); throw new Error('Employee not found'); }
+  // One open proposal per employee: a second would be decided against a
+  // stale "current salary".
+  if (await CompensationRevision.exists({ employeeId: employee._id, status: 'pending' })) {
+    res.status(409);
+    throw new Error('This employee already has a pending revision. Cancel it or wait for the decision first.');
+  }
 
   const rev = await CompensationRevision.create({
     employeeId: employee._id,
@@ -159,7 +181,7 @@ const cancelRevision = asyncHandler(async (req, res) => {
   guard(req, res);
   const rev = await CompensationRevision.findById(req.params.id);
   if (!rev) { res.status(404); throw new Error('Revision not found'); }
-  await assertEmployeeInScope(req, res, rev.employeeId, COMP_KEYS);
+  await assertInScope(req, res, rev.employeeId);
   if (rev.status !== 'pending') { res.status(409); throw new Error('Only a pending revision can be cancelled'); }
   rev.status = 'cancelled';
   await rev.save();

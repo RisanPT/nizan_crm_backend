@@ -125,7 +125,7 @@ const pid = await (async () => {
 
 // ── asking ──────────────────────────────────────────────────────────────────
 let req1;
-await check('the project manager asks for people: it is filed, and HR (not the asker, not an admin) is told', async () => {
+await check('the project manager asks for people: it is filed, and HR (not the asker) is told; an admin gets one copy', async () => {
   const r = await ask(pid, mira.token, { urgency: 'urgent' });
   assert.equal(r.status, 201, JSON.stringify(r.body));
   req1 = r.body;
@@ -141,7 +141,7 @@ await check('the project manager asks for people: it is filed, and HR (not the a
     assert.equal(told[0].link, '/manpower');
   }
   assert.equal((await notes(mira.id, 'manpower_request')).length, 0);
-  assert.equal((await notes(boss.id, 'manpower_request')).length, 0);
+  assert.equal((await notes(boss.id, 'manpower_request')).length, 1, 'admins see every notification (2026-11-26): one copy');
   assert.equal((await notes(outsider.id, 'manpower_request')).length, 0);
 });
 

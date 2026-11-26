@@ -40,12 +40,13 @@ export const runMonthlyObjectiveReminders = async (now = new Date()) => {
   for (const p of reminderPlan({ departments: withHeads, thisMonth, lastMonth })) {
     if (p.set.length) {
       const t = reminderText('set', p.set, month);
-      await notify({ recipients: [p.userId], type: NOTIFICATION_TYPES.MONTHLY_OBJECTIVES_SET, title: t.title, body: t.body, link: LINK, forDate: monthKey(month), dedupe: true });
+      // a personal reminder sent to many: admins are not copied (copyAdmins, utils/notify.js)
+      await notify({ recipients: [p.userId], type: NOTIFICATION_TYPES.MONTHLY_OBJECTIVES_SET, title: t.title, body: t.body, link: LINK, forDate: monthKey(month), dedupe: true, copyAdmins: false });
       sent += 1;
     }
     if (p.close.length) {
       const t = reminderText('close', p.close, before);
-      await notify({ recipients: [p.userId], type: NOTIFICATION_TYPES.MONTHLY_OBJECTIVES_CLOSE, title: t.title, body: t.body, link: LINK, forDate: monthKey(before), dedupe: true });
+      await notify({ recipients: [p.userId], type: NOTIFICATION_TYPES.MONTHLY_OBJECTIVES_CLOSE, title: t.title, body: t.body, link: LINK, forDate: monthKey(before), dedupe: true, copyAdmins: false });
       sent += 1;
     }
   }

@@ -157,6 +157,6 @@ export const LEADERSHIP_READ_OK_MOUNTS = [
   '/api/shifts', '/api/slots', '/api/states', '/api/strategic-vision', '/api/stylist-clients', '/api/subscriptions',
   '/api/tax-filings', '/api/tickets', '/api/time-blocks', '/api/timebox', '/api/timesheets', '/api/travel',
   '/api/trial-packages', '/api/trials', '/api/upload', '/api/vehicles',
-  // the public website (no login) and its content editor: no pay or bank data, so leadership may look (never write)
+  // Team N website: the public enquiry form and the CMS (read-only for leadership; the guard refuses CMS writes).
   '/api/website/admin', '/api/website/public', '/api/whatsapp', '/api/work-footage', '/api/work-profit', '/api/zones',
 ];

@@ -10,7 +10,7 @@ import mongoose from 'mongoose';
 
 const canView = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   if (user?.isDepartmentHead) return true;
   const perms = user?.permissions || [];
   return perms.includes('hr_analytics') || perms.includes('staff');
@@ -30,6 +30,7 @@ const getSummary = asyncHandler(async (req, res) => {
 
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
 
   const [
     active,
@@ -49,7 +50,9 @@ const getSummary = asyncHandler(async (req, res) => {
       { $group: { _id: { $ifNull: ['$department', 'Unassigned'] }, count: { $sum: 1 } } },
       { $sort: { count: -1 } },
     ]),
-    Employee.countDocuments({ ...empSelf, createdAt: { $gte: monthStart } }),
+    // New hires = joined this month (createdAt also counted Timebox imports and
+    // back-dated records entered this month).
+    Employee.countDocuments({ ...empSelf, dateOfJoining: { $gte: monthStart, $lt: nextMonthStart } }),
     Onboarding.countDocuments({ ...byEmp(), status: 'in_progress' }),
     Offboarding.countDocuments({ ...byEmp(), status: 'in_progress' }),
     ApprovalRequest.countDocuments({ ...byEmp('subjectEmployeeId'), status: 'pending' }),

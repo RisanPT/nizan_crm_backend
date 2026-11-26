@@ -113,6 +113,7 @@ export const runCrmSweep = async ({ now = new Date(), force = false } = {}) => {
         title: 'CRM work is overdue',
         body: parts.join(' · '),
         link: heads.includes(id) ? '/crm/dashboard' : '/crm/my-work',
+        copyAdmins: false, // a personal reminder sent to many: admins are not copied (utils/notify.js)
       });
     } catch (e) {
       console.error('crm overdue notify failed:', e.message);

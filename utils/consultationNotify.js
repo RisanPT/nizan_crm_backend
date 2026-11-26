@@ -1,11 +1,5 @@
 import Consultation from '../models/Consultation.js';
-import {
-  MANAGER_AND_ADMIN_ROLES,
-  NOTIFICATION_TYPES,
-  getUserIdsByPermission,
-  getUserIdsByRoles,
-  notify,
-} from './notify.js';
+import { NOTIFICATION_TYPES, notify } from './notify.js';
 import {
   REMINDER_TIERS,
   buildConsultationNotice,
@@ -60,32 +54,8 @@ export const notifyStylist = async (
   }
 };
 
-/// A new enquiry arrived: tell the stylist leads (roles granted the whole
-/// `consultations` module, as opposed to a stylist's sub-permissions only) so
-/// someone can review it and arrange the consultation. Managers/admins already
-/// get the regular new-lead notice, so they are left out here.
-export const notifyStylistLeadsOfNewLead = async (lead, actor) => {
-  try {
-    const [leadIds, managerIds] = await Promise.all([
-      getUserIdsByPermission('consultations'),
-      getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES),
-    ]);
-    const managers = new Set(managerIds.map(String));
-    const recipients = leadIds.filter((id) => !managers.has(String(id)));
-    if (recipients.length === 0) return;
-    await notify({
-      recipients,
-      type: NOTIFICATION_TYPES.NEW_LEAD,
-      title: 'New enquiry',
-      body: `${lead.name} enquired${lead.source ? ` via ${lead.source}` : ''}${actor?.name ? ` (added by ${actor.name})` : ''}.`,
-      leadId: lead._id,
-      createdBy: actor?._id ?? null,
-      excludeUserId: actor?._id ?? null,
-    });
-  } catch (err) {
-    console.error('notifyStylistLeadsOfNewLead failed:', err.message);
-  }
-};
+// (Removed 2026-11-26: notifyStylistLeadsOfNewLead used to tell stylist leads
+// about every new enquiry. Sales enquiries now go to the sales team only.)
 
 // ── Time-based reminders ────────────────────────────────────────────────────
 // Like the lead follow-up sweep these have no user action to hang off, so they

@@ -101,7 +101,8 @@ test('the control group is unchanged: HR, payroll, Accounts and admins still see
   assert.equal(canSeeAllEmployeePay({ role: 'accounts', permissions: [] }), true);
   assert.equal(canManagePayroll({ role: 'finance_head', permissions: [] }), true);
   assert.equal(canManageHra({ role: 'crm', permissions: ['staff.salaries'] }), true);
-  assert.equal(canSeeEmployeePay({ role: 'crm', permissions: ['staff.evaluation'] }), true, 'any other role with a staff sub-key behaves as before');
+  // Owner 2026-11-26: a lone staff.* sub-key no longer opens HR (or pay); only the whole module does.
+  assert.equal(canSeeEmployeePay({ role: 'crm', permissions: ['staff.evaluation'] }), false, 'a lone staff sub-key is not a pay viewer');
 });
 
 const emp = (extra = {}) => ({
@@ -130,7 +131,8 @@ test('redactEmployee: a leader still sees their own record', () => {
 
 test('redactEmployee: HR (wide scope) and a department head (own team) are unchanged', () => {
   assert.equal(redactEmployee(emp(), { role: 'crm', permissions: ['staff'] }, { wide: true }).baseSalary, 73719.37);
-  assert.equal(redactEmployee(emp(), { role: 'sales', isDepartmentHead: true, permissions: [] }, { wide: false, employeeIds: ['e1'] }).baseSalary, 73719.37);
+  // Owner 2026-11-26: department heads get a team view WITHOUT pay.
+  assert.equal(redactEmployee(emp(), { role: 'sales', isDepartmentHead: true, permissions: [] }, { wide: false, employeeIds: ['e1'] }).baseSalary, undefined);
   assert.equal(redactEmployee(emp(), { role: 'sales', permissions: [] }, { wide: false, none: true, employeeIds: [] }).baseSalary, undefined);
 });
 

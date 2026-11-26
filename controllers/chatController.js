@@ -1,11 +1,14 @@
 import mongoose from 'mongoose';
 import Conversation from '../models/Conversation.js';
 import Message from '../models/Message.js';
-import { notify, getUserIdsByRoles, NOTIFICATION_TYPES } from '../utils/notify.js';
+import { notify, getUserIdsByRoles, getSalesLeadIds, NOTIFICATION_TYPES } from '../utils/notify.js';
 import { uploadChatFiles, previewFor } from '../utils/chatMedia.js';
 import { CRM_HEAD_ROLE, isCrmRole } from '../utils/crmAccess.js';
 
-const CHAT_STAFF_ROLES = ['crm', CRM_HEAD_ROLE, 'sales', 'accounts', 'manager'];
+// Who is NOTIFIED of a new client message: CRM (and the CRM Head) and the sales team (plus the
+// Sales leaders, see getSalesLeadIds; admins get a copy via notify()). Accounts
+// and other teams' managers can still open the inbox but are not pinged.
+const CHAT_NOTIFY_ROLES = ['crm', CRM_HEAD_ROLE, 'sales'];
 
 // Staff who may use the client-chat inbox (mirrors the Flutter sidebar guard
 // isFullAccess || crm || accounts || canSeeSales).
@@ -116,7 +119,8 @@ export const postClientMessage = async (req, res) => {
 
     // Surface in the CRM notification stream for client-facing staff.
     try {
-      const recipients = await getUserIdsByRoles(CHAT_STAFF_ROLES);
+      const [staff, salesLeads] = await Promise.all([getUserIdsByRoles(CHAT_NOTIFY_ROLES), getSalesLeadIds()]);
+      const recipients = [...staff, ...salesLeads];
       await notify({
         recipients,
         type: NOTIFICATION_TYPES.CLIENT_MESSAGE,

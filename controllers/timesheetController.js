@@ -13,7 +13,7 @@ const TS_KEYS = ['timesheet'];
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   if (user?.isDepartmentHead) return true;
   const perms = user?.permissions || [];
   return perms.includes('staff') || perms.includes('timesheet');
@@ -31,6 +31,22 @@ const cleanEntries = (entries) =>
       hours: Number(e.hours) || 0,
       note: String(e.note || '').trim(),
     }));
+
+/// Hours must be 0–24 per entry and per day. Returns an error message or null.
+export const hoursError = (entries) => {
+  const perDay = new Map();
+  for (const e of entries) {
+    const h = Number(e.hours);
+    if (!Number.isFinite(h) || h < 0 || h > 24) return 'Hours must be between 0 and 24 for each day.';
+    const key = Number.isNaN(e.date.getTime()) ? '' : e.date.toISOString().slice(0, 10);
+    perDay.set(key, (perDay.get(key) || 0) + h);
+  }
+  for (const total of perDay.values()) if (total > 24) return 'A day cannot have more than 24 hours.';
+  return null;
+};
+
+// Statuses the owner may still edit: a draft, or a rejected sheet being fixed.
+const EDITABLE = ['draft', 'rejected'];
 
 // @route GET /api/timesheets/mine
 const getMyTimesheets = asyncHandler(async (req, res) => {
@@ -70,10 +86,33 @@ const saveTimesheet = asyncHandler(async (req, res) => {
   const periodStart = new Date(req.body.periodStart);
   const entries = cleanEntries(req.body.entries);
 
-  let ts = await Timesheet.findOne({ employeeId, periodStart });
-  if (ts && ts.status !== 'draft') {
+  if (Number.isNaN(periodStart.getTime())) { res.status(400); throw new Error('Invalid period'); }
+  const hoursMsg = hoursError(entries);
+  if (hoursMsg) { res.status(400); throw new Error(hoursMsg); }
+
+  const samePeriod = await Timesheet.findOne({ employeeId, periodStart });
+  let ts = samePeriod;
+  if (req.body.id) {
+    // Editing a known sheet: changing its week moves it (never a second copy).
+    ts = await Timesheet.findById(req.body.id);
+    if (!ts || String(ts.employeeId) !== String(employeeId)) { res.status(404); throw new Error('Timesheet not found'); }
+    if (samePeriod && String(samePeriod._id) !== String(ts._id)) {
+      res.status(409);
+      throw new Error('There is already a timesheet for that week. Open that one instead.');
+    }
+    ts.periodStart = periodStart;
+  }
+  if (ts && !EDITABLE.includes(ts.status)) {
     res.status(409);
     throw new Error('This period is already submitted and can no longer be edited.');
+  }
+  if (ts && ts.status === 'rejected') {
+    // Fixing a rejected sheet: back to draft, ready to submit again. The
+    // rejection stays on the old approval request.
+    ts.approvalId = null;
+    ts.decidedBy = null;
+    ts.decidedAt = null;
+    ts.decisionNote = '';
   }
   if (!ts) {
     ts = new Timesheet({ employeeId, employeeName: employee.name, department: employee.department || '', periodStart });

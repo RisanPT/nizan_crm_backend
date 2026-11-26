@@ -438,8 +438,9 @@ await check('someone who leads two departments gets ONE message naming both', as
   assert.ok(dFleet);
 });
 
-await check('an administrator is never sent these (admins only get the month-end summary)', async () => {
-  assert.equal(await Notification.countDocuments({ recipient: admin.id }), 0);
+await check('an administrator is never sent these (a personal reminder sent to many does not copy the admins)', async () => {
+  // (the admin does get copies of other notices, e.g. "Ready to close": admins see every notification since 2026-11-26)
+  assert.equal(await Notification.countDocuments({ recipient: admin.id, type: { $in: ['monthly_objectives_set', 'monthly_objectives_close'] } }), 0);
 });
 
 await check('opening the notifications runs the sweep without trouble', async () => {
@@ -770,7 +771,7 @@ await check('the department\'s head is told once, when the last key result is do
   assert.match(got[0].body, /Every key result of “Hire two trainers” in IT is done \(itmember reported the last one\)/);
   assert.equal(got[0].link, '/monthly-objectives');
   assert.equal((await notes(itMember.id, 'monthly_objective_ready')).length, 0); // the one who reported it
-  assert.equal((await notes(admin.id, 'monthly_objective_ready')).length, 0); // admins only get the month-end summary
+  assert.equal((await notes(admin.id, 'monthly_objective_ready')).filter((n) => n.title.includes('Hire two trainers')).length, 1); // admins see every notification (2026-11-26): one copy
 });
 
 await check('…and not again for a report that changes nothing; but put one back and finish it again, and it is news again', async () => {

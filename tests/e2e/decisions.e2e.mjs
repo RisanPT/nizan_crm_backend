@@ -261,12 +261,14 @@ await check('Accounts\' approval is the CHECK: the expense stays pending and out
   assert.ok(bigReq.summary.some((s) => s.label === 'Vendor' && s.value === 'Lights & Co'));
 });
 
-await check('both leaders are told, once each; the administrator and Accounts are not', async () => {
+await check('both leaders are told, once each; the administrator gets one copy; Accounts and Finance are not told', async () => {
   for (const l of LEADERS) {
     const got = (await notes(l.id, 'decision_request')).filter((x) => x.link.includes(String(bigReq._id)));
     assert.equal(got.length, 1, l.name);
   }
-  for (const who of [boss, accounts, fin]) assert.equal((await notes(who.id, 'decision_request')).length, 0, who.name);
+  // admins see every notification (2026-11-26): one copy of this request, not one per leader
+  assert.equal((await notes(boss.id, 'decision_request')).filter((x) => x.link.includes(String(bigReq._id))).length, 1, boss.name);
+  for (const who of [accounts, fin]) assert.equal((await notes(who.id, 'decision_request')).length, 0, who.name);
 });
 
 await check('both leaders see it on their desk with what they need; Accounts, heads and the sales head cannot open the desk', async () => {

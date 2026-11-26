@@ -1,5 +1,5 @@
 import asyncHandler from 'express-async-handler';
-import ExpenseClaim from '../models/ExpenseClaim.js';
+import ExpenseClaim, { CLAIM_CATEGORIES } from '../models/ExpenseClaim.js';
 import Employee from '../models/Employee.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import { createApproval } from '../services/approvals.js';
@@ -14,10 +14,26 @@ const empPopulate = { path: 'employeeId', select: 'name department profileImage'
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   if (user?.isDepartmentHead) return true;
   const perms = user?.permissions || [];
   return perms.includes('reimbursement') || perms.includes('staff');
+};
+
+// Paying a claim posts money to the ledger: Finance / HR / admin only
+// (2026-11-26 — department heads used to be able to mark their team paid).
+const PAY_ROLES = ['admin', 'manager', 'hr', 'accounts', 'finance_head'];
+const canPay = (user) => {
+  if (PAY_ROLES.includes(String(user?.role || '').trim().toLowerCase())) return true;
+  const perms = user?.permissions || [];
+  return perms.includes('staff') || perms.includes('reimbursement') || perms.includes('payables');
+};
+
+// The `hr` login role runs HR company-wide (like grievances / performance).
+const isHrRole = (user) => String(user?.role || '').trim().toLowerCase() === 'hr';
+const scopeFor = async (req) => (isHrRole(req.user) ? {} : scopeFilter(req, KEYS));
+const assertInScope = async (req, res, employeeId) => {
+  if (!isHrRole(req.user)) await assertEmployeeInScope(req, res, employeeId, KEYS);
 };
 
 const getMine = asyncHandler(async (req, res) => {
@@ -31,7 +47,7 @@ const getRequests = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
   let filter = {};
   if (req.query.status && req.query.status !== 'all') filter.status = req.query.status;
-  filter = { ...filter, ...(await scopeFilter(req, KEYS)) };
+  filter = { ...filter, ...(await scopeFor(req)) };
   const rows = await ExpenseClaim.find(filter).populate(empPopulate).sort({ date: -1 }).limit(300);
   res.json(rows);
 });
@@ -42,7 +58,7 @@ const submitClaim = asyncHandler(async (req, res) => {
   const onBehalf = req.body.employeeId && String(req.body.employeeId) !== String(employeeId || '');
   if (onBehalf) {
     if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed to file for others'); }
-    await assertEmployeeInScope(req, res, req.body.employeeId, KEYS);
+    await assertInScope(req, res, req.body.employeeId);
     employeeId = req.body.employeeId;
   }
   if (!employeeId) { res.status(400); throw new Error('No employee record is linked to your account.'); }
@@ -55,12 +71,18 @@ const submitClaim = asyncHandler(async (req, res) => {
   const employee = await Employee.findById(employeeId);
   if (!employee) { res.status(404); throw new Error('Employee not found'); }
 
+  const category = req.body.category || 'other';
+  if (!CLAIM_CATEGORIES.includes(category)) {
+    res.status(400);
+    throw new Error(`Category must be one of: ${CLAIM_CATEGORIES.join(', ')}`);
+  }
   const date = req.body.date ? new Date(req.body.date) : new Date();
+  if (Number.isNaN(date.getTime())) { res.status(400); throw new Error('Invalid expense date'); }
   const claim = await ExpenseClaim.create({
     employeeId: employee._id,
     employeeName: employee.name,
     department: employee.department || '',
-    category: req.body.category || 'other',
+    category,
     title,
     amount,
     date,
@@ -100,7 +122,7 @@ const cancelClaim = asyncHandler(async (req, res) => {
   if (!claim) { res.status(404); throw new Error('Claim not found'); }
   const owns = String(claim.employeeId) === String(req.user.employeeId || '');
   if (!owns && !canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
-  if (!owns) await assertEmployeeInScope(req, res, claim.employeeId, KEYS);
+  if (!owns) await assertInScope(req, res, claim.employeeId);
   if (claim.status !== 'pending') { res.status(409); throw new Error('Only a pending claim can be cancelled'); }
   claim.status = 'cancelled';
   await claim.save();
@@ -113,10 +135,9 @@ const cancelClaim = asyncHandler(async (req, res) => {
 // @route POST /api/reimbursements/:id/pay  — HR marks an approved claim paid +
 // posts the payment voucher to the ledger (best-effort).
 const payClaim = asyncHandler(async (req, res) => {
-  if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
+  if (!canPay(req.user)) { res.status(403); throw new Error('Only Finance or HR can pay claims'); }
   const claim = await ExpenseClaim.findById(req.params.id);
   if (!claim) { res.status(404); throw new Error('Claim not found'); }
-  await assertEmployeeInScope(req, res, claim.employeeId, KEYS);
   // Separation of duties: nobody but the admin may pay out their own claim.
   const ownClaim = req.user.employeeId && String(claim.employeeId) === String(req.user.employeeId);
   if (ownClaim && String(req.user.role || '').toLowerCase() !== 'admin') {
@@ -137,7 +158,7 @@ const deleteClaim = asyncHandler(async (req, res) => {
   if (!canManage(req.user)) { res.status(403); throw new Error('Not allowed'); }
   const claim = await ExpenseClaim.findById(req.params.id);
   if (!claim) { res.status(404); throw new Error('Claim not found'); }
-  await assertEmployeeInScope(req, res, claim.employeeId, KEYS);
+  await assertInScope(req, res, claim.employeeId);
   // A paid claim has a posted payment voucher; deleting it would silently
   // reverse money already paid out, so it must stay on record.
   if (claim.status === 'paid') { res.status(400); throw new Error('A paid claim cannot be deleted'); }

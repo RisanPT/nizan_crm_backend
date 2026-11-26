@@ -166,3 +166,65 @@ export function asOfForYear(year, todayKey) {
   if (t === year) return todayKey;
   return t > year ? `${year}-12-31` : `${year}-01-01`;
 }
+
+// ─── Attendance payroll helpers (pure; used by timeboxController) ─────────
+
+/// Leave days of `leave` that fall inside [fromKey, toKey] (a payroll month),
+/// counted like leave balances: weekly offs and holidays are not charged.
+/// A leave wholly inside the range keeps its stored `days` (what was charged at
+/// apply time, incl. a 0.5 half day); a leave crossing the range edge is split
+/// by working day, never more than its stored total.
+export function leaveDaysInRange(leave, fromKey, toKey, { weeklyOffs, holidays = [] } = {}) {
+  const total = Number(leave?.days) || 0;
+  const fk = toDayKey(leave?.fromDate);
+  const tk = toDayKey(leave?.toDate);
+  if (!fk || !tk) return total;
+  const a = fk > fromKey ? fk : fromKey;
+  const b = tk < toKey ? tk : toKey;
+  if (b < a) return 0;
+  if (a === fk && b === tk) return total;
+  const part = countLeaveDays({ from: a, to: b, weeklyOffs, holidays, halfDay: 'none' }).days;
+  return Math.min(total, part);
+}
+
+/// Weekly-off days to take off Timebox's expected days for one department.
+/// Uses the Department master's weeklyOffs when HR set anything other than the
+/// default (Sunday only); otherwise keeps the old rule: the "IT" department
+/// drops Saturdays + Sundays, everyone else is left as Timebox reports.
+export function payrollOffDaysInRange({ fromKey, toKey, deptWeeklyOffs, deptName = '' }) {
+  let offs = null;
+  if (Array.isArray(deptWeeklyOffs)) {
+    const n = normaliseWeeklyOffs(deptWeeklyOffs);
+    const isDefault = n.length === DEFAULT_WEEKLY_OFFS.length && n.every((v, i) => v === DEFAULT_WEEKLY_OFFS[i]);
+    if (!isDefault) offs = n;
+  }
+  if (!offs) {
+    if (String(deptName || '').trim().toLowerCase() !== 'it') return 0;
+    offs = [0, 6];
+  }
+  if (!offs.length) return 0;
+  const set = new Set(offs);
+  return eachDay(fromKey, toKey).filter((k) => set.has(weekdayOf(k))).length;
+}
+
+/// Days of absence covered in a payroll period, applied in order:
+/// regularizations, then approved paid leave, then the monthly free absent
+/// day(s) — the free day applies only when there is no approved paid leave
+/// (existing policy). Returns what was actually applied.
+export function attendanceCredit({ expectedDays, daysPresent, approvedLeaveDays = 0, regularizedDays = 0, freeAbsentDays = 1 }) {
+  const absent = Math.max(0, (Number(expectedDays) || 0) - (Number(daysPresent) || 0));
+  let left = absent;
+  const regApplied = Math.min(left, Math.max(0, Number(regularizedDays) || 0));
+  left -= regApplied;
+  const leaveApplied = Math.min(left, Math.max(0, Number(approvedLeaveDays) || 0));
+  left -= leaveApplied;
+  const freeApplied = approvedLeaveDays > 0 ? 0 : Math.min(left, Math.max(0, Number(freeAbsentDays) || 0));
+  left -= freeApplied;
+  return {
+    absent,
+    regApplied,
+    leaveApplied,
+    freeApplied,
+    effectiveDaysPresent: (Number(daysPresent) || 0) + (absent - left),
+  };
+}

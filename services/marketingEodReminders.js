@@ -79,6 +79,7 @@ export const sendMemberReminder = async (member, dateStr, actor = null) => {
     forDate: dateStrToUtcDate(dateStr),
     createdBy: actor?._id || null,
     dedupe: true,
+    copyAdmins: false, // a personal reminder sent to many: admins are not copied (utils/notify.js)
   });
   return { sent: true, reason: '' };
 };

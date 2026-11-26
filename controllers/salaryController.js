@@ -5,6 +5,32 @@ import { applyMoneyAccount } from '../utils/moneyAccount.js';
 import { SALARY_PAYMENT_METHODS } from '../models/Salary.js';
 import PayrollLock, { isPayrollLocked } from '../models/PayrollLock.js';
 import { logChange, snapshot, maskTail } from '../utils/audit.js';
+import { notify, getUserIdsByEmployeeIds, getUserIdsByRoles, NOTIFICATION_TYPES } from '../utils/notify.js';
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const monthLabel = (m, y) => `${MONTHS[(Number(m) || 1) - 1]} ${y}`;
+
+/// "Your payslip is ready" to each employee's own login (2026-11-26). Personal,
+/// so admins aren't copied on each one; best-effort.
+export const notifyPayslipsReady = async (employeeIds, month, year) => {
+  try {
+    for (const empId of [...new Set((employeeIds || []).map(String))]) {
+      const users = await getUserIdsByEmployeeIds([empId]);
+      if (users.length === 0) continue;
+      await notify({
+        recipients: users,
+        type: NOTIFICATION_TYPES.PAYSLIP_READY,
+        title: `Your ${monthLabel(month, year)} payslip is ready`,
+        body: 'Open My Payslips to view or download it.',
+        link: '/hr/my-payslips',
+        copyAdmins: false,
+      });
+    }
+  } catch (err) {
+    // A notification problem must never undo or block the approval itself.
+    console.error('payslip notify failed:', err.message);
+  }
+};
 
 // Slip fields tracked in the HR change log.
 const SALARY_AUDIT_FIELDS = [
@@ -14,6 +40,14 @@ const SALARY_AUDIT_FIELDS = [
 ];
 
 const lockedMsg = (m, y) => `Payroll for ${m}/${y} is locked. Ask an admin to unlock it first.`;
+
+// Separation of duties: nobody approves their own salary slip (the owner /
+// admin account excepted).
+const isAdminUser = (u) => String(u?.role || '').trim().toLowerCase() === 'admin';
+const isOwnSlip = (req, employeeId) =>
+  !isAdminUser(req.user) &&
+  !!req.user?.employeeId &&
+  String(employeeId?._id ?? employeeId ?? '') === String(req.user.employeeId);
 
 // Treat user search text literally — an unescaped "(" or "*" would otherwise
 // throw "Invalid regular expression" and fail the whole request with a 500.
@@ -61,10 +95,10 @@ export const getSalaries = async (req, res) => {
       .populate('paidBy', 'name email')
       .sort({ createdAt: -1 });
 
-    // Compute summary stats for the current filter scope (month/year)
-    const statsQuery = {};
-    if (month) statsQuery.month = Number(month);
-    if (year) statsQuery.year = Number(year);
+    // Summary stats follow the same filters as the list (month/year,
+    // category, department, search) — but not status, so the status cards
+    // (draft / approved / paid) still break the filtered set down.
+    const { status: _ignoredStatus, ...statsQuery } = query;
 
     const allForPeriod = await Salary.find(statsQuery).lean();
 
@@ -266,6 +300,13 @@ export const createSalary = async (req, res) => {
     if (!month || !year) {
       return res.status(400).json({ message: 'Month and year are required' });
     }
+    // 'paid' is set only by the Pay action, which records how it was paid.
+    if (status === 'paid') {
+      return res.status(400).json({ message: 'Use "Mark as paid" to record a payment.' });
+    }
+    if (status === 'approved_by_hr' && isOwnSlip(req, employeeId)) {
+      return res.status(403).json({ message: 'You cannot approve your own salary slip.' });
+    }
 
     if (await isPayrollLocked(month, year)) {
       return res.status(409).json({ message: lockedMsg(month, year) });
@@ -350,11 +391,9 @@ export const updateSalary = async (req, res) => {
     if (salary.status === 'paid' && String(req.user?.role || '') !== 'admin') {
       return res.status(409).json({ message: 'This salary is already paid and can no longer be edited.' });
     }
-    // 'paid' is set only by the Pay action, which records how it was paid.
-    if (req.body.status === 'paid' && salary.status !== 'paid') {
-      return res.status(400).json({ message: 'Use "Mark as paid" to record a payment.' });
-    }
 
+    // `status` in the body is ignored: approval and payment go through the
+    // Approve / Mark as paid actions, which enforce their own rules.
     const {
       baseSalary,
       incentives,
@@ -363,7 +402,6 @@ export const updateSalary = async (req, res) => {
       bonus,
       deductions,
       salaryType,
-      status,
       notes,
       department,
       role,
@@ -377,7 +415,6 @@ export const updateSalary = async (req, res) => {
     if (bonus !== undefined) salary.bonus = Number(bonus) || 0;
     if (deductions !== undefined) salary.deductions = Number(deductions) || 0;
     if (salaryType !== undefined) salary.salaryType = salaryType;
-    if (status !== undefined) salary.status = status;
     if (notes !== undefined) salary.notes = notes;
     if (department !== undefined) salary.department = department;
     if (role !== undefined) salary.role = role;
@@ -388,6 +425,17 @@ export const updateSalary = async (req, res) => {
       salary.baseSalary + salary.incentives + salary.roomRent +
           salary.allowances + salary.bonus - salary.deductions,
     );
+
+    // Changing the amounts of an approved slip sends it back for approval
+    // (2026-11-26): the employee was already shown the old numbers, so someone
+    // must review the change before it is final again.
+    const moneyChanged = ['baseSalary', 'incentives', 'roomRent', 'allowances', 'bonus', 'deductions', 'netAmount']
+      .some((f) => Number(before[f] ?? 0) !== Number(salary[f] ?? 0));
+    if (salary.status === 'approved_by_hr' && moneyChanged) {
+      salary.status = 'draft';
+      salary.approvedBy = null;
+      salary.approvedAt = null;
+    }
 
     await salary.save();
     await logChange({
@@ -428,6 +476,9 @@ export const approveSalary = async (req, res) => {
     if (salary.status === 'paid') {
       return res.status(409).json({ message: 'This salary is already paid.' });
     }
+    if (isOwnSlip(req, salary.employeeId)) {
+      return res.status(403).json({ message: 'You cannot approve your own salary slip.' });
+    }
 
     const beforeStatus = snapshot(salary, ['status']);
     salary.status = 'approved_by_hr';
@@ -440,6 +491,7 @@ export const approveSalary = async (req, res) => {
       action: 'approve', before: beforeStatus, after: salary, fields: ['status'], always: true,
       note: `Slip ${salary.month}/${salary.year}`,
     });
+    await notifyPayslipsReady([salary.employeeId], salary.month, salary.year);
 
     const populated = await Salary.findById(salary._id)
       .populate('employeeId')
@@ -459,6 +511,14 @@ export const paySalary = async (req, res) => {
     const salary = await Salary.findById(req.params.id);
     if (!salary) {
       return res.status(404).json({ message: 'Salary slip not found' });
+    }
+    // Pay once, and only after HR approval: a draft must be approved first,
+    // and re-paying would overwrite the payment record and post it again.
+    if (salary.status === 'paid') {
+      return res.status(409).json({ message: 'This salary is already paid.' });
+    }
+    if (salary.status !== 'approved_by_hr') {
+      return res.status(409).json({ message: 'Only an HR-approved salary slip can be marked as paid.' });
     }
 
     const { paymentDate, paymentMethod, transactionRef, notes } = req.body;
@@ -542,20 +602,50 @@ export const submitPayrollToAccounts = async (req, res) => {
       return res.status(409).json({ message: lockedMsg(month, year) });
     }
 
+    const draftFilter = { month: Number(month), year: Number(year), status: 'draft' };
+    // The caller's own draft is skipped: someone else must approve it.
+    let skippedOwn = 0;
+    if (!isAdminUser(req.user) && req.user?.employeeId) {
+      skippedOwn = await Salary.countDocuments({ ...draftFilter, employeeId: req.user.employeeId });
+      draftFilter.employeeId = { $ne: req.user.employeeId };
+    }
+
+    const approving = await Salary.find(draftFilter).select('employeeId').lean();
     const result = await Salary.updateMany(
-      { month: Number(month), year: Number(year), status: 'draft' },
-      { 
-        $set: { 
-          status: 'approved_by_hr', 
-          approvedBy: req.user?._id || null, 
-          approvedAt: new Date() 
-        } 
+      draftFilter,
+      {
+        $set: {
+          status: 'approved_by_hr',
+          approvedBy: req.user?._id || null,
+          approvedAt: new Date()
+        }
       }
     );
 
+    if (result.modifiedCount > 0) {
+      await notifyPayslipsReady(approving.map((s) => s.employeeId), month, year);
+      // One line for Accounts / Finance (and admins): payroll is waiting to be paid.
+      try {
+        const finance = await getUserIdsByRoles(['accounts', 'finance_head']);
+        await notify({
+          recipients: finance.length ? finance : [req.user?._id].filter(Boolean),
+          type: NOTIFICATION_TYPES.PAYROLL_SUBMITTED,
+          title: `${monthLabel(month, year)} payroll ready to pay`,
+          body: `${result.modifiedCount} salary slip${result.modifiedCount === 1 ? '' : 's'} approved by HR and waiting for payment.`,
+          link: '/hr/salaries',
+          createdBy: req.user?._id || null,
+          excludeUserId: req.user?._id || null,
+        });
+      } catch (err) {
+        console.error('payroll submitted notify failed:', err.message);
+      }
+    }
+
     res.json({
-      message: `Submitted ${result.modifiedCount} payroll records to Accounts.`,
+      message: `Submitted ${result.modifiedCount} payroll records to Accounts.` +
+        (skippedOwn ? ' Your own slip was skipped: another HR user must approve it.' : ''),
       modifiedCount: result.modifiedCount,
+      skippedOwn,
     });
   } catch (error) {
     res.status(500).json({ message: error.message });
@@ -563,6 +653,38 @@ export const submitPayrollToAccounts = async (req, res) => {
 };
 
 // ── Payroll month lock ───────────────────────────────────────────────────────
+// @desc  Send an HR-approved slip back to draft so it can be corrected and
+//        approved again (2026-11-26 — the final-settlement message asked HR to
+//        do this, but there was no way to). Paid slips and locked months can't.
+// @route PUT /api/salaries/:id/draft
+export const moveSalaryToDraft = async (req, res) => {
+  try {
+    const salary = await Salary.findById(req.params.id);
+    if (!salary) return res.status(404).json({ message: 'Salary slip not found' });
+    if (await isPayrollLocked(salary.month, salary.year)) {
+      return res.status(409).json({ message: lockedMsg(salary.month, salary.year) });
+    }
+    if (salary.status === 'paid') {
+      return res.status(409).json({ message: 'This salary is already paid and cannot go back to draft.' });
+    }
+    if (salary.status === 'draft') return res.json(salary);
+    const before = snapshot(salary, ['status']);
+    salary.status = 'draft';
+    salary.approvedBy = null;
+    salary.approvedAt = null;
+    await salary.save();
+    await logChange({
+      req, entity: 'Salary', entityId: salary._id, employeeId: salary.employeeId,
+      action: 'update', before, after: salary, fields: ['status'], always: true,
+      note: `Slip ${salary.month}/${salary.year} sent back to draft`,
+    });
+    const populated = await Salary.findById(salary._id).populate('employeeId');
+    res.json(populated);
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};
+
 // @route GET /api/salaries/locks?year=  — locked months (for the screens)
 export const getPayrollLocks = async (req, res) => {
   try {

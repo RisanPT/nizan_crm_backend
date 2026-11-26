@@ -83,6 +83,11 @@ const updateGrievance = asyncHandler(async (req, res) => {
   }
 
   const b = req.body;
+  // Withdrawing is the employee's own action (POST /:id/withdraw).
+  if (b.status === 'withdrawn' || (row.status === 'withdrawn' && b.status !== undefined)) {
+    res.status(400);
+    throw new Error('A withdrawn case is changed only by the employee who raised it');
+  }
   if (b.status !== undefined) {
     row.status = b.status;
     if (['resolved', 'closed'].includes(b.status)) row.resolvedOn = row.resolvedOn || new Date();
@@ -103,8 +108,10 @@ const withdrawGrievance = asyncHandler(async (req, res) => {
   const owns = String(row.employeeId) === String(req.user.employeeId || '');
   if (!owns) { res.status(403); throw new Error('Not allowed'); }
   if (row.status !== 'open') { res.status(409); throw new Error('Only an open case can be withdrawn'); }
-  await row.deleteOne();
-  res.json({ message: 'Grievance withdrawn', id: req.params.id });
+  // Kept on record (HR keeps the trail); only marked withdrawn.
+  row.status = 'withdrawn';
+  await row.save();
+  res.json(row);
 });
 
 // @route DELETE /api/grievances/:id (admin/manager cleanup)

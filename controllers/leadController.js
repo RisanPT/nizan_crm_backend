@@ -9,11 +9,10 @@ import { regionScopedMatch } from '../utils/geoScope.js';
 import { applyLeadGeography } from '../services/leadGeography.js';
 import { applyLeadMarkets } from '../services/leadMarkets.js';
 import { DERIVED_KEYS } from '../utils/leadGeography.js';
-import { notifyStylistLeadsOfNewLead } from '../utils/consultationNotify.js';
 import {
   notify,
   getUserIdsByRoles,
-  MANAGER_AND_ADMIN_ROLES,
+  getSalesLeadIds,
   NOTIFICATION_TYPES,
 } from '../utils/notify.js';
 
@@ -549,7 +548,7 @@ export const createLead = async (req, res) => {
     }
 
     // Notify managers + admins that a new lead arrived (matrix: New Lead).
-    const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+    const managerAdminIds = await getSalesLeadIds();
     await notify({
       recipients: managerAdminIds,
       type: NOTIFICATION_TYPES.NEW_LEAD,
@@ -559,8 +558,9 @@ export const createLead = async (req, res) => {
       createdBy: req.user?._id ?? null,
       excludeUserId: req.user?._id ?? null,
     });
-    // Stylist leads (consultations module) also hear about new enquiries.
-    await notifyStylistLeadsOfNewLead(lead, req.user);
+    // (2026-11-26) Stylists are no longer told about every new enquiry — a
+    // sales enquiry is for the sales team. Stylists hear about calls assigned
+    // to them and see Royal package bookings in Stylist → Royal Clients.
 
     res.status(201).json(lead);
   } catch (error) {
@@ -716,7 +716,7 @@ export const updateLead = async (req, res) => {
       });
     }
     if (followUpCompleted) {
-      const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+      const managerAdminIds = await getSalesLeadIds();
       await notify({
         recipients: managerAdminIds,
         type: NOTIFICATION_TYPES.FOLLOWUP_COMPLETED,
@@ -851,7 +851,7 @@ export const applyLostRequest = async (
 
   // Matrix: Lost Approval. A pending request pings the reviewers; a direct
   // close by a reviewer is an FYI to the other managers/admins.
-  const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+  const managerAdminIds = await getSalesLeadIds();
   await notify({
     recipients: managerAdminIds,
     type: NOTIFICATION_TYPES.LOST_REQUESTED,
@@ -907,7 +907,7 @@ export const reviewLostApproval = async (req, res) => {
 
     // Matrix: Lost Approval Result. Tell the executive who requested it (and
     // keep the other managers/admins informed).
-    const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+    const managerAdminIds = await getSalesLeadIds();
     const approved = decision === 'approved';
     await notify({
       recipients: [lead.lostRequestedBy, ...managerAdminIds],

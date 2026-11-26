@@ -249,7 +249,7 @@ await check('reaching 80%: the people running the project and Finance are told, 
   assert.match(toMira[toMira.length - 1].title, /80% of the budget is used/);
   assert.equal((await notes(mhead.id, 'project_budget_alert')).length, 1, 'the owning head too');
   assert.equal((await notes(fin.id, 'project_budget_alert')).length, 1);
-  assert.equal((await notes(boss.id, 'project_budget_alert')).length, 0, 'admins get only the month-end summary');
+  assert.equal((await notes(boss.id, 'project_budget_alert')).length, 1, 'an admin gets ONE copy of the alert (admins see every notification, 2026-11-26), not one per list it went to');
   assert.equal((await spend(pid, mira.token)).body.level, 'warn');
   // more spending at the same level says nothing new
   await charge(acc.token, { amount: 1000, projectId: pid, department: 'Marketing' });

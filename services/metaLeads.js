@@ -14,8 +14,7 @@ import MetaLeadSettings from '../models/MetaLeadSettings.js';
 import { findDuplicateLead } from '../controllers/leadController.js';
 import { applyLeadGeography } from './leadGeography.js';
 import { applyLeadMarkets } from './leadMarkets.js';
-import { notify, getUserIdsByRoles, MANAGER_AND_ADMIN_ROLES, NOTIFICATION_TYPES } from '../utils/notify.js';
-import { notifyStylistLeadsOfNewLead } from '../utils/consultationNotify.js';
+import { notify, getSalesLeadIds, NOTIFICATION_TYPES } from '../utils/notify.js';
 import { MetaProblem, graphGet } from './metaGraph.js';
 import {
   META_LEAD_BY,
@@ -223,7 +222,7 @@ const noteAgain = async (dupe, info) => {
   );
   await quietly('repeat-lead notice', async () => {
     const owner = dupe.assignedTo?._id ?? dupe.assignedTo ?? null;
-    const recipients = owner ? [owner] : await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+    const recipients = owner ? [owner] : await getSalesLeadIds();
     await notify({
       recipients,
       type: NOTIFICATION_TYPES.NEW_LEAD,
@@ -286,8 +285,8 @@ const makeLead = async (m, info, campaign, assignee, leadgenId) => {
 const tellAboutNewLead = async (lead, info, assignee) => {
   const from = info.formName ? ` (form "${info.formName}")` : '';
   await quietly('new-lead notice', async () => {
-    // the CRM's managers, and Marketing's (the ads are theirs: a lead is the result of their campaign)
-    const managers = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+    // the Sales leaders (not every manager, like any new lead), and Marketing's managers (the ads are theirs: a lead is the result of their campaign)
+    const managers = await getSalesLeadIds();
     const marketing = await marketingManagerIds();
     await notify({
       recipients: [...new Set([...managers, ...marketing].map(String))],
@@ -307,7 +306,7 @@ const tellAboutNewLead = async (lead, info, assignee) => {
       });
     }
   });
-  await quietly('stylist notice', () => notifyStylistLeadsOfNewLead(lead, null));
+  // (stylists are no longer told about every new enquiry — a sales enquiry is for the sales team; see leadController.createLead)
 };
 
 /** One noted lead (already claimed: status 'working', attempts counted) → created | existing | failed. [prefetched] = Meta's lead. */

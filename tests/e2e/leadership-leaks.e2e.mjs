@@ -349,12 +349,13 @@ await check('the daily digest reaches each leader once — a leader added later 
   await sweepCeoDigest({ force: true });
   assert.equal(await countOf(ceo, 'ceo_digest'), 1);
   assert.equal(await countOf(ed, 'ceo_digest'), 1, 'the Executive Director gets it too');
-  assert.equal(await countOf(admin, 'ceo_digest'), 0, 'an admin never gets operational notifications');
+  assert.equal(await countOf(admin, 'ceo_digest'), 1, 'an admin gets a copy (admins see every notification, 2026-11-26)');
   const late = await mk('late', 'executive_director'); // appears later the same day
   await sweepCeoDigest({ force: true });
   assert.equal(await countOf(late, 'ceo_digest'), 1, 'the late leader still gets today\'s');
   assert.equal(await countOf(ceo, 'ceo_digest'), 1, 'nobody gets two');
   assert.equal(await countOf(ed, 'ceo_digest'), 1, 'nobody gets two');
+  assert.equal(await countOf(admin, 'ceo_digest'), 1, 'nor the admin');
   await sweepCeoDigest({ force: true });
   assert.equal(await countOf(late, 'ceo_digest') + (await countOf(ceo, 'ceo_digest')) + (await countOf(ed, 'ceo_digest')), 3);
 });

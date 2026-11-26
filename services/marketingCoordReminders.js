@@ -53,6 +53,7 @@ export const runFollowUpReminders = async (now = new Date()) => {
       body: `${claimed.item}${claimed.relatedTo ? ` (${claimed.relatedTo})` : ''} — ${kind === 'due' ? 'due today' : `was due ${claimed.dueDate}`}`,
       link: '/marketing/coordinations?tab=followups',
       forDate: new Date(`${claimed.dueDate}T00:00:00.000Z`),
+      copyAdmins: false, // a personal reminder sent to many: admins are not copied (utils/notify.js)
     });
     sent += 1;
   }

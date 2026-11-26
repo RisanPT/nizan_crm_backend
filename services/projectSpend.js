@@ -121,14 +121,16 @@ export const afterSpendChange = async (projectOrId) => {
       ? `${money(spend.used)} is charged against the approved ${money(spend.limit)} (${money(-spend.available)} over). Further expenses need the finance head.`
       : `${money(spend.used)} of the approved ${money(spend.limit)} is spent or committed; ${money(spend.available)} is left.`;
     const manager = project.managerId ? await getUserIdsByEmployeeIds([project.managerId]) : [];
+    const people = [...manager, ...(await headUsers(project.targetDepartment)), project.createdBy].filter(Boolean);
     await notify({
-      recipients: [...manager, ...(await headUsers(project.targetDepartment)), project.createdBy].filter(Boolean),
+      recipients: people,
       type: NOTIFICATION_TYPES.PROJECT_BUDGET_ALERT,
       title,
       body,
       link: `/projects/${project._id}`,
     });
-    await notifyRoles({ roles: ['finance_head'], type: NOTIFICATION_TYPES.PROJECT_BUDGET_ALERT, title, body, link: '/project-budgets' });
+    // one alert, one copy for the admins (notify() copies them): Finance's notice copies them only when the project's people had nobody
+    await notifyRoles({ roles: ['finance_head'], type: NOTIFICATION_TYPES.PROJECT_BUDGET_ALERT, title, body, link: '/project-budgets', copyAdmins: people.length === 0 });
   } catch (err) {
     console.error('afterSpendChange failed:', err.message);
   }

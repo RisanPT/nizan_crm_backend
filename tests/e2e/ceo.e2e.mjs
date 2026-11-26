@@ -285,7 +285,7 @@ await check('…but the approvals that belong to Accounts stay with Accounts: th
 });
 
 // ── notifications ───────────────────────────────────────────────────────────
-await check('the CEO gets one daily digest; an admin does not', async () => {
+await check('the CEO gets one daily digest; an admin gets one copy (admins see every notification, 2026-11-26)', async () => {
   // re-seed something waiting (the inbox above was partly cleared by deciding)
   await raw('HiringPlan', [{ status: 'raised', createdAt: daysAgo(5) }]);
   const first = await api('GET', '/notifications', ceo.token);
@@ -297,7 +297,7 @@ await check('the CEO gets one daily digest; an admin does not', async () => {
   const again = await api('GET', '/notifications', ceo.token);
   assert.equal((again.body.items ?? again.body.notifications ?? []).filter((x) => x.type === 'ceo_digest').length, 1, 'not repeated');
   const adminSees = await api('GET', '/notifications', admin.token);
-  assert.equal((adminSees.body.items ?? adminSees.body.notifications ?? []).filter((x) => x.type === 'ceo_digest').length, 0);
+  assert.equal((adminSees.body.items ?? adminSees.body.notifications ?? []).filter((x) => x.type === 'ceo_digest').length, 1);
 });
 
 await check('the CEO can clear their own notifications', async () => {

@@ -8,7 +8,7 @@ import mongoose from 'mongoose';
 import { flatGeoMatch, isFullGeoAccess } from '../utils/geoScope.js';
 import { syncTimeboxInBackground, performTimeboxEmployeeSync } from './timeboxController.js';
 import TimeboxIgnoredEmployee from '../models/TimeboxIgnoredEmployee.js';
-import { redactEmployee } from '../utils/hrAccess.js';
+import { redactEmployee, isSelfServiceOnly } from '../utils/hrAccess.js';
 import { getHrScope } from '../utils/hrDeptScope.js';
 import { logChange, snapshot } from '../utils/audit.js';
 
@@ -63,13 +63,62 @@ const handleEmployeeSaveError = (error, res) => {
   return res.status(500).json({ message: error.message });
 };
 
+/// Walks up the reporting line from `managerId`. Returns an error message when
+/// `employeeId` would report to themselves or end up in a loop, else null.
+/// `findManagerOf(id)` resolves to that employee's reportingManagerId (or null).
+export const reportingLoopError = async (employeeId, managerId, findManagerOf) => {
+  if (!managerId) return null;
+  if (String(managerId) === String(employeeId)) return 'An employee cannot report to themselves';
+  let cursor = await findManagerOf(managerId);
+  let hops = 0;
+  while (cursor && hops < 200) {
+    if (String(cursor) === String(employeeId)) return 'That reporting line would create a loop';
+    cursor = await findManagerOf(cursor);
+    hops += 1;
+  }
+  return null;
+};
+
+const findManagerOf = async (id) => {
+  const e = await Employee.findById(id).select('reportingManagerId');
+  return e?.reportingManagerId || null;
+};
+
+/// Why an employee record may not be deleted (null = safe to delete).
+export const deleteBlockedMessage = ({ name, hasLogin, reportCount, headOf }) => {
+  const reasons = [];
+  if (hasLogin) reasons.push('has a CRM login');
+  if (reportCount > 0) reasons.push(`is the reporting manager of ${reportCount} staff`);
+  if (headOf && headOf.length) reasons.push(`is head of ${headOf.join(', ')}`);
+  if (!reasons.length) return null;
+  return `${name || 'This employee'} ${reasons.join(' and ')}. Mark them Inactive or use Offboarding instead of deleting.`;
+};
+
+/// 409 message when a Timebox id is already linked to another employee, else null.
+const timeboxTakenMessage = async (tbId, selfId = null) => {
+  if (tbId == null || Number.isNaN(tbId)) return null;
+  const filter = { timeboxEmployeeId: tbId };
+  if (selfId) filter._id = { $ne: selfId };
+  const existing = await Employee.findOne(filter).select('name employeeCode');
+  if (!existing) return null;
+  return `Timebox ID #${tbId} is already linked to ${existing.name} (${existing.employeeCode || existing._id})`;
+};
+
+/// Department master id for a department name (case-insensitive), or null.
+const departmentIdForName = async (name) => {
+  const term = String(name ?? '').trim();
+  if (!term) return null;
+  const dept = await Department.findOne({ name: new RegExp(`^${escapeRegex(term)}$`, 'i') }).select('_id');
+  return dept ? dept._id : null;
+};
+
 // @desc    Get all employees
 // @route   GET /api/employees
 // @access  Public (for now)
 export const getEmployees = async (req, res) => {
   try {
     // Who may see pay fields on which rows (dept heads: own department only).
-    const scope = await getHrScope(req, ['staff']);
+    const scope = await getHrScope(req, ['staff.employees']);
     const page = Number.parseInt(req.query.page, 10);
     const limit = Number.parseInt(req.query.limit, 10);
 
@@ -222,7 +271,7 @@ export const getEmployee = async (req, res) => {
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
-    res.json(redactEmployee(employee, req.user, await getHrScope(req, ['staff'])));
+    res.json(redactEmployee(employee, req.user, await getHrScope(req, ['staff.employees'])));
   } catch (error) {
     res.status(500).json({ message: error.message });
   }
@@ -286,6 +335,12 @@ export const createEmployee = async (req, res) => {
       }
     }
 
+    const newTimeboxId = req.body.timeboxEmployeeId != null && req.body.timeboxEmployeeId !== ''
+      ? Number(req.body.timeboxEmployeeId)
+      : null;
+    const tbTaken = await timeboxTakenMessage(newTimeboxId);
+    if (tbTaken) return res.status(409).json({ message: tbTaken });
+
     const normalizedWorks = normalizeWorks(works, specialization);
     const normalizedSpecialization =
       normalizedWorks[0] ?? String(specialization ?? '').trim();
@@ -323,16 +378,14 @@ export const createEmployee = async (req, res) => {
       ifscCode: ifscCode ?? '',
       upiId: upiId ?? '',
       panNumber: panNumber ?? '',
-      departmentId: req.body.departmentId || null,
+      departmentId: req.body.departmentId || (await departmentIdForName(effectiveDepartment)),
       reportingManagerId: req.body.reportingManagerId || null,
       designationId: req.body.designationId || null,
       employmentStatus: employmentStatus || 'probation',
       currentGrade: (currentGrade || 'B').toUpperCase(),
       overtimeRate: Number(overtimeRate) || 0,
       statutoryApplicability: statutoryApplicability || { epf: false, esi: false, uan: '', esiNumber: '' },
-      timeboxEmployeeId: req.body.timeboxEmployeeId != null && req.body.timeboxEmployeeId !== ''
-        ? Number(req.body.timeboxEmployeeId)
-        : null,
+      timeboxEmployeeId: newTimeboxId,
       timeboxName: req.body.timeboxName ? String(req.body.timeboxName).trim() : '',
     };
 
@@ -410,7 +463,9 @@ export const updateEmployee = async (req, res) => {
     if (!employee) {
       return res.status(404).json({ message: 'Employee not found' });
     }
+    // Change-history "before" copy, taken before any field is changed.
     const auditBefore = snapshot(employee, EMPLOYEE_AUDIT_FIELDS);
+    const statusBefore = employee.status;
 
     const normalizedEmail = normalizeEmail(email);
     const normalizedRegionId = normalizeRegionId(regionId);
@@ -423,6 +478,21 @@ export const updateEmployee = async (req, res) => {
       const employeeExists = await Employee.findOne({ email: normalizedEmail });
       if (employeeExists) {
         return res.status(400).json({ message: 'Employee already exists' });
+      }
+    }
+
+    // A Timebox id may belong to one employee only (same rule as linkTimeboxAccount).
+    if (req.body.timeboxEmployeeId != null && req.body.timeboxEmployeeId !== '') {
+      const tbTaken = await timeboxTakenMessage(Number(req.body.timeboxEmployeeId), employee._id);
+      if (tbTaken) return res.status(409).json({ message: tbTaken });
+    }
+
+    // Reporting line: '' / null clears it; a new manager must not create a loop.
+    if (req.body.reportingManagerId !== undefined) {
+      const mgrId = req.body.reportingManagerId || null;
+      if (mgrId && String(mgrId) !== String(employee.reportingManagerId || '')) {
+        const loop = await reportingLoopError(employee._id, mgrId, findManagerOf);
+        if (loop) return res.status(400).json({ message: loop });
       }
     }
 
@@ -461,7 +531,17 @@ export const updateEmployee = async (req, res) => {
     // through to `effectiveSpecialization` (always a string), so editing only a
     // phone/status silently overwrote (or wiped) the employee's role.
     employee.role = role ?? employee.role ?? effectiveSpecialization;
+    const previousDepartment = String(employee.department ?? '').trim();
     employee.department = department ?? employee.department ?? 'Operations';
+    // The department name changed but no id came with it: follow the name so
+    // the org chart, member counts and dept-head scoping see the move.
+    if (
+      req.body.departmentId === undefined &&
+      department != null &&
+      String(department).trim().toLowerCase() !== previousDepartment.toLowerCase()
+    ) {
+      employee.departmentId = await departmentIdForName(department);
+    }
     employee.category = category ?? employee.category ?? 'operations';
     employee.profileImage = profileImage ?? employee.profileImage;
     if (salaryType !== undefined) employee.salaryType = salaryType;
@@ -534,9 +614,14 @@ export const updateEmployee = async (req, res) => {
     // A driver set Inactive must not be able to sign in: the login follows the profile's
     // status (before this, "Inactive" only changed the profile and the login kept working).
     // A login that has also reached its end date stays closed when set back to Active.
-    if (status !== undefined && employee.artistRole === 'driver') {
+    // Since 2026-11-26 this applies to EVERY employee, not only drivers: setting
+    // someone Inactive used to leave their login working. The admin account is
+    // never switched off from here, so the business can't be locked out.
+    // Only when the status really changes, so saving a profile doesn't switch
+    // back on a login HR turned off for another reason.
+    if (status !== undefined && employee.status !== statusBefore) {
       await User.updateMany(
-        { employeeId: employee._id, role: 'driver' },
+        { employeeId: employee._id, role: { $ne: 'admin' } },
         { $set: { active: employee.status === 'active' } },
       );
     }
@@ -600,6 +685,21 @@ export const deleteEmployee = async (req, res) => {
       return res.status(404).json({ message: 'Employee not found' });
     }
 
+    // Never leave a working login or dangling references behind: people with a
+    // login, direct reports or a department to head are offboarded, not deleted.
+    const [login, reportCount, headedDepts] = await Promise.all([
+      User.exists({ employeeId: employee._id }),
+      Employee.countDocuments({ reportingManagerId: employee._id }),
+      Department.find({ head: employee._id }).select('name').lean(),
+    ]);
+    const blocked = deleteBlockedMessage({
+      name: employee.name,
+      hasLogin: Boolean(login),
+      reportCount,
+      headOf: (headedDepts || []).map((d) => d.name),
+    });
+    if (blocked) return res.status(409).json({ message: blocked });
+
     // A Timebox-linked person HR deletes must not be re-imported by the sync.
     if (employee.timeboxEmployeeId != null) {
       await TimeboxIgnoredEmployee.updateOne(
@@ -647,6 +747,8 @@ export const getOrgTree = async (req, res) => {
       }
     }
 
+    const hideContacts = isSelfServiceOnly(req.user);
+    const ownId = String(req.user?.employeeId || '');
     const nodes = employees.map((e) => {
       const fallbackRole = e.designation || e.role || '';
       const fallbackLevel = (() => {
@@ -663,8 +765,9 @@ export const getOrgTree = async (req, res) => {
       return {
         id: String(e._id),
         name: e.name || '',
-        email: e.email || '',
-        phone: e.phone || '',
+        // Plain staff logins see colleagues' names and positions, not contacts.
+        email: hideContacts && String(e._id) !== ownId ? '' : e.email || '',
+        phone: hideContacts && String(e._id) !== ownId ? '' : e.phone || '',
         status: e.status || 'active',
         department: e.departmentId?.name || e.department || '',
         departmentId: e.departmentId?._id ? String(e.departmentId._id) : null,
@@ -698,22 +801,9 @@ export const setReportingDetails = async (req, res) => {
 
     if (req.body.reportingManagerId !== undefined) {
       const mgrId = req.body.reportingManagerId || null;
-      if (mgrId && String(mgrId) === String(employee._id)) {
-        return res.status(400).json({ message: 'An employee cannot report to themselves' });
-      }
-      if (mgrId) {
-        // Walk up from the proposed manager; if we reach this employee, the
-        // assignment would create a reporting loop.
-        let cursor = await Employee.findById(mgrId).select('reportingManagerId');
-        let hops = 0;
-        while (cursor && cursor.reportingManagerId && hops < 200) {
-          if (String(cursor.reportingManagerId) === String(employee._id)) {
-            return res.status(400).json({ message: 'That reporting line would create a loop' });
-          }
-          cursor = await Employee.findById(cursor.reportingManagerId).select('reportingManagerId');
-          hops += 1;
-        }
-      }
+      // Walk up from the proposed manager; reaching this employee means a loop.
+      const loop = await reportingLoopError(employee._id, mgrId, findManagerOf);
+      if (loop) return res.status(400).json({ message: loop });
       employee.reportingManagerId = mgrId;
     }
 
