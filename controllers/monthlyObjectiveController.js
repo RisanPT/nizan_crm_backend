@@ -11,6 +11,7 @@ import {
 } from '../utils/monthlyObjectives.js';
 import { notify, NOTIFICATION_TYPES, getUserIdsByEmployeeIds } from '../utils/notify.js';
 import { canViewDepartment, canManageDepartment, rightsFor, mayAddToMonth } from '../utils/monthlyObjectiveAccess.js';
+import { isLeadershipRole } from '../utils/leadership.js';
 
 // Monthly objectives per department (utils/monthlyObjectives.js has the rules). A department's head plans its month; its members
 // see it; the people who see every company project (and the CEO, read-only) see every department's.
@@ -28,7 +29,7 @@ const loadMonthlyAccess = async (user) => {
   const role = String(user?.role ?? '').trim().toLowerCase();
   const who = {
     full: await seesAllProjects(user),
-    viewOnly: role === 'ceo',
+    viewOnly: isLeadershipRole(role),
     employeeId: user?.employeeId ? idStr(user.employeeId) : '',
     headDeptIds: new Set(),
     memberDeptIds: new Set(),

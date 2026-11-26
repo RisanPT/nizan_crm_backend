@@ -57,6 +57,7 @@ const inviteStubs = ({ existingUser = null } = {}) => {
   stub(Department, 'findById', (id) => q(id === 'dA' ? { _id: 'dA', key: 'sales', name: 'Sales' } : null));
   stub(Department, 'findOne', () => q(null));
   stub(Role, 'findOne', (f) => q({ key: f?.key || 'employee' }));
+  stub(Role, 'find', () => q([])); // ensureDefaultRoles reads the roles list (after the 2026-11 main merge)
   stub(Role, 'exists', async () => true);
   stub(Role, 'create', async () => ({}));
   stub(Role, 'updateOne', async () => ({}));

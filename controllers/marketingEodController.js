@@ -18,6 +18,7 @@ import Holiday from '../models/Holiday.js';
 import User from '../models/User.js';
 import Department from '../models/Department.js';
 import { sendMemberReminder } from '../services/marketingEodReminders.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
 // ── Helper: Format IST Date string (YYYY-MM-DD) ─────────────────────────────
 const toDateStr = (date = new Date()) => {
@@ -68,7 +69,7 @@ export const attachMarketingAccess = async (req, res, next) => {
 
 // Management (read) users — SRS section 7. They see every dashboard and the
 // Team Summary but never edit EOD numbers.
-const MANAGEMENT_READ_ROLES = ['ceo', 'management', 'director'];
+const MANAGEMENT_READ_ROLES = [...LEADERSHIP_ROLES, 'management', 'director'];
 const canViewTeam = (user) =>
   isManagerOrAdmin(user) || MANAGEMENT_READ_ROLES.includes(String(user?.role || '').toLowerCase());
 

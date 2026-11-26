@@ -2,9 +2,10 @@ import { SORTS, sortRows, summarize, THIN_MARGIN_PCT } from '../utils/workProfit
 import { addDays, parseDayParam, todayIst } from '../utils/istDate.js';
 import { escapeRegex } from '../utils/financeListQuery.js';
 import { identityOf, workProfitFor } from '../services/workProfit.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
 // Money per work is for Accounts and the owners only.
-const ACCOUNTS_ROLES = new Set(['accounts', 'finance_head', 'admin', 'ceo']); // + 'ceo': read-only, enforced in middleware/ceoGuard.js
+const ACCOUNTS_ROLES = new Set(['accounts', 'finance_head', 'admin', ...LEADERSHIP_ROLES]); // + leadership: read-only, enforced in middleware/ceoGuard.js
 const EXPORT_CAP = 2000;
 const MAX_DAYS = 366;
 const FLAGS = ['loss', 'thin', 'no_costs', 'pending_costs'];
@@ -29,7 +30,10 @@ const thisMonth = () => {
 //            totals (every work in the period matching the search, whatever the flag), unallocated, gst, thinMarginPct, truncated }
 export const getWorkProfit = async (req, res) => {
   try {
-    if (!ACCOUNTS_ROLES.has(req.user?.role)) throw bad('Not authorized', 403);
+    const role = String(req.user?.role ?? '').trim().toLowerCase();
+    const perms = Array.isArray(req.user?.permissions) ? req.user.permissions : [];
+    const allowed = ACCOUNTS_ROLES.has(role) || perms.includes('payables.dashboard') || perms.includes('payables');
+    if (!allowed) throw bad('Not authorized', 403);
     const [monthFrom, monthTo] = thisMonth();
     const from = req.query.from ? parseDayParam(req.query.from) : monthFrom;
     const to = req.query.to ? parseDayParam(req.query.to) : monthTo;

@@ -18,8 +18,9 @@ import { accountMovements, round2 } from './accountingController.js';
 import { filingsForPeriod } from './taxFilingController.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { istDayKey, istMonthBounds } from '../utils/istDate.js';
+import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 
-const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', 'ceo']; // + 'ceo': read-only, enforced in middleware/ceoGuard.js
+const FINANCE_ROLES = ['admin', 'manager', 'accounts', 'finance_head', ...LEADERSHIP_ROLES]; // + leadership (CEO, Executive Director): read-only, enforced in middleware/ceoGuard.js
 const canView = (u) => FINANCE_ROLES.includes(u?.role);
 
 const DEAD_BOOKING = ['cancelled', 'canceled', 'rejected', 'lost', 'draft', 'pending'];
@@ -406,7 +407,7 @@ export const getMonthEndReview = async (req, res) => {
     kpis.newCustomers = newCustomers;
     kpis.marketingSpend = marketingSpend;
 
-    const openDecisions = await CeoDecision.countDocuments({ status: { $in: ['pending', 'deferred'] } });
+    const openDecisions = await CeoDecision.countDocuments({ status: { $in: ['pending', 'deferred'] }, deletedAt: null });
 
     // Statutory filing status for the period (GSTR-1/3B, TDS).
     const filingList = await filingsForPeriod(month, year);

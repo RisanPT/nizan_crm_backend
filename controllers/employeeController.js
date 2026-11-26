@@ -396,6 +396,10 @@ export const createEmployee = async (req, res) => {
     if (emergencyContact) employeeData.emergencyContact = emergencyContact;
 
     const employee = await Employee.create(employeeData);
+    await logChange({
+      req, entity: 'Employee', entityId: employee._id, employeeId: employee._id,
+      action: 'create', before: null, after: employee, fields: EMPLOYEE_AUDIT_FIELDS,
+    });
 
     const populatedEmployee = await Employee.findById(employee._id)
       .populate('regionId', 'name status')

@@ -20,6 +20,7 @@ import {
   SENSITIVE_EMPLOYEE_FIELDS,
 } from '../utils/hrAccess.js';
 import { getHrScope, canManageEmployee } from '../utils/hrDeptScope.js';
+import { isLeadership } from '../utils/leadership.js';
 
 const router = express.Router();
 
@@ -93,6 +94,8 @@ const inScope = async (req, res, next) => {
 /// Salary history: company-wide pay viewers only (owner 2026-11-26: department
 /// heads get a team view WITHOUT pay).
 const payInScope = (req, res, next) => {
+  // never the CEO / Executive Director: salary history is pay (they read totals on the dashboards)
+  if (isLeadership(req.user)) return forbid(res, 'Salary details are not part of this login');
   if (canSeeAllEmployeePay(req.user)) return next();
   return forbid(res, 'You are not allowed to view salary details');
 };
@@ -101,6 +104,8 @@ const payInScope = (req, res, next) => {
 /// salary (except an admin). Department heads propose raises through
 /// Compensation → revisions, which HR approves.
 const raiseGuard = (req, res, next) => {
+  // never the CEO / Executive Director (read-only, and pay is not part of that login)
+  if (isLeadership(req.user)) return forbid(res, 'Salary details are not part of this login');
   if (!canSeeAllEmployeePay(req.user)) {
     return forbid(res, 'Raises are proposed through Compensation and approved by HR');
   }

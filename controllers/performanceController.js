@@ -1,15 +1,20 @@
 import PerformanceEvaluation, { PILLARS } from '../models/PerformanceEvaluation.js';
 import Employee from '../models/Employee.js';
 import { getHrScope, canManageEmployee } from '../utils/hrDeptScope.js';
+import { isLeadership } from '../utils/leadership.js';
 
 // Permission key granting company-wide evaluation rights (the HR dept head and
 // 'staff'-module roles are company-wide too, see utils/hrDeptScope.js).
 const KEYS = ['performance'];
 
 // "HR / Admin (anyone)" tier — admin / manager and the `hr` role (added
-// 2026-11-16) evaluate anyone. Department heads may evaluate only their own team.
+// 2026-11-16) evaluate anyone, plus leadership (CEO, Executive Director):
+// read-only, enforced in middleware/ceoGuard.js. Department heads may evaluate
+// only their own team.
 const isAdmin = (u) =>
-  ['admin', 'manager', 'ceo', 'hr'].includes(String(u?.role || '').trim().toLowerCase()); // + 'ceo': read-only, enforced in middleware/ceoGuard.js
+  ['admin', 'manager', 'hr'].includes(String(u?.role || '').trim().toLowerCase()) || isLeadership(u);
+
+const canRead = (u) => isAdmin(u) || u?.isDepartmentHead === true;
 
 // Department heads are scoped to the staff of the department(s) they head;
 // the HR department head is company-wide.

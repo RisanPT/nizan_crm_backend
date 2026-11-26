@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { leadershipStampField } from './leadershipStamp.js';
 
 export const HIRING_PLAN_STATUSES = ['draft', 'raised', 'approved', 'rejected'];
 
@@ -37,6 +38,8 @@ const hiringPlanSchema = new mongoose.Schema(
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     rejectionReason: { type: String, default: '' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
+    // Held for the CEO / Executive Director when the policy asks for it (see models/leadershipStamp.js).
+    leadership: leadershipStampField(),
   },
   { timestamps: true }
 );

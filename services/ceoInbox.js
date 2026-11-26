@@ -17,7 +17,9 @@ import OKR from '../models/OKR.js';
 import StrategicVision from '../models/StrategicVision.js';
 import InventoryProduct from '../models/InventoryProduct.js';
 import Review from '../models/Review.js';
+import DecisionRequest from '../models/DecisionRequest.js';
 import { istMonthBounds } from '../utils/istDate.js';
+import { deskSummary } from './decisions.js';
 
 const DAY_MS = 86_400_000;
 
@@ -25,15 +27,27 @@ const DAY_MS = 86_400_000;
 // that a stuck approval is seen. `route` is only set where the CEO can actually open the screen.
 export const INBOX_SOURCES = [
   { key: 'project_proposals', owner: 'you', label: 'Project proposals to decide', model: Project, match: { status: 'proposed' }, route: '/projects' },
-  { key: 'ceo_decisions', owner: 'you', label: 'Open CEO decisions', model: CeoDecision, match: { status: { $in: ['pending', 'deferred'] } }, amount: 'amount', route: '/ceo/decisions' },
-  { key: 'admin_expenses', owner: 'team', label: 'Department expenses', withWhom: 'Accounts', model: AdminExpense, match: { status: 'pending' }, amount: 'amount', route: '/accounts/dashboard' },
+  // Spends above the limit, hiring plans and budget increases the team has CHECKED and is waiting for the leaders to decide (a deferred
+  // one is hidden until its date). Proposals are counted above, from the projects themselves.
+  {
+    key: 'decision_requests',
+    owner: 'you',
+    label: 'Checked by the team, waiting for your decision',
+    model: DecisionRequest,
+    match: (now) => ({ open: true, kind: { $ne: 'project_proposal' }, $or: [{ status: 'pending' }, { deferredUntil: null }, { deferredUntil: { $lte: now } }] }),
+    amount: 'amount',
+    route: '/ceo/decisions',
+  },
+  { key: 'ceo_decisions', owner: 'you', label: 'Open CEO decisions', model: CeoDecision, match: { status: { $in: ['pending', 'deferred'] }, deletedAt: null }, amount: 'amount', route: '/ceo/decisions' },
+  // (an expense, payout or plan that is with the leaders is NOT also "waiting with the team")
+  { key: 'admin_expenses', owner: 'team', label: 'Department expenses', withWhom: 'Accounts', model: AdminExpense, match: { status: 'pending', 'leadership.state': { $ne: 'awaiting' } }, amount: 'amount', route: '/accounts/dashboard' },
   { key: 'artist_expenses', owner: 'team', label: 'Artist expenses', withWhom: 'Accounts', model: Expense, match: { status: 'pending' }, amount: 'amount', route: '/accounts/dashboard' },
   { key: 'fuel_expenses', owner: 'team', label: 'Fuel / driver bills', withWhom: 'Accounts', model: FuelExpense, match: { status: 'pending' }, amount: 'totalAmount', route: '/accounts/dashboard' },
   { key: 'collections', owner: 'team', label: 'Collections to verify', withWhom: 'Accounts', model: Collection, match: { status: 'pending' }, amount: 'amount', route: '/accounts/dashboard' },
   { key: 'booking_advances', owner: 'team', label: 'Booking advances to verify', withWhom: 'Accounts', model: Booking, match: { advanceStatus: 'pending' }, amount: 'advanceAmount' },
-  { key: 'artist_payouts', owner: 'team', label: 'Freelancer payouts to approve or pay', withWhom: 'Accounts', model: ArtistPayout, match: { status: { $in: ['pending', 'approved'] } }, amount: 'amount', route: '/accounts/dashboard' },
+  { key: 'artist_payouts', owner: 'team', label: 'Freelancer payouts to approve or pay', withWhom: 'Accounts', model: ArtistPayout, match: { status: { $in: ['pending', 'approved'] }, 'leadership.state': { $ne: 'awaiting' } }, amount: 'amount', route: '/accounts/dashboard' },
   { key: 'hr_approvals', owner: 'team', label: 'HR approvals (leave, claims, revisions)', withWhom: 'HR / managers', model: ApprovalRequest, match: { status: 'pending' } },
-  { key: 'hiring_plans', owner: 'team', label: 'Hiring plans raised', withWhom: 'HR', model: HiringPlan, match: { status: 'raised' } },
+  { key: 'hiring_plans', owner: 'team', label: 'Hiring plans raised', withWhom: 'HR', model: HiringPlan, match: { status: 'raised', 'leadership.state': { $ne: 'awaiting' } } },
   { key: 'lost_leads', owner: 'team', label: 'Lost-lead reviews', withWhom: 'Sales managers', model: Lead, match: { status: 'Pending Lost Approval' } },
   { key: 'sales_returns', owner: 'team', label: 'Refunds / credit notes in draft', withWhom: 'Accounts', model: SalesReturn, match: { status: 'draft' }, amount: 'amount' },
 ];
@@ -64,26 +78,35 @@ export const shapeInbox = (rows, now = new Date()) => {
   };
 };
 
-const loadRow = async (def) => {
+const loadRow = async (def, now = new Date()) => {
+  const match = typeof def.match === 'function' ? def.match(now) : def.match;
   const [count, sum, oldest] = await Promise.all([
-    def.model.countDocuments(def.match),
+    def.model.countDocuments(match),
     def.amount
-      ? def.model.aggregate([{ $match: def.match }, { $group: { _id: null, total: { $sum: `$${def.amount}` } } }])
+      ? def.model.aggregate([{ $match: match }, { $group: { _id: null, total: { $sum: `$${def.amount}` } } }])
       : Promise.resolve([]),
-    def.model.findOne(def.match).sort({ createdAt: 1 }).select('createdAt').lean(),
+    def.model.findOne(match).sort({ createdAt: 1 }).select('createdAt').lean(),
   ]);
   return { def, count, amount: sum[0]?.total ?? 0, oldest: oldest?.createdAt ?? null };
 };
 
 /// The unfiltered counts: they do not depend on who asks (the CEO, admin and manager all see every proposal).
+/// `items`, `needsYou`, `withTeam`, `oldestTeamDays` are what older apps read; `decisions` (the desk: counts + the first few requests),
+/// `recent` (the last decided) and `log` (the manual log) are what the new home reads.
 export const loadCeoInbox = async (now = new Date()) => {
-  const rows = await Promise.all(INBOX_SOURCES.map(loadRow));
+  const rows = await Promise.all(INBOX_SOURCES.map((def) => loadRow(def, now)));
   // A GST/TDS filing that is still pending past its due date
   const overdueFilings = await TaxFiling.countDocuments({ status: 'pending', dueDate: { $lt: now } });
   if (overdueFilings > 0) {
     rows.push({ def: { key: 'tax_filings', owner: 'team', label: 'Tax filings overdue', withWhom: 'Accounts' }, count: overdueFilings, amount: 0, oldest: null });
   }
-  return shapeInbox(rows, now);
+  const inbox = shapeInbox(rows, now);
+  const desk = await deskSummary(now);
+  return {
+    ...inbox,
+    ...desk,
+    log: { open: inbox.items.find((i) => i.key === 'ceo_decisions')?.count ?? 0 },
+  };
 };
 
 // ── the watch list ──────────────────────────────────────────────────────────

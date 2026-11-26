@@ -39,7 +39,7 @@ import { protect, attachRolePermissions } from '../middleware/authMiddleware.js'
 
 const router = express.Router();
 
-router.use(protect);
+router.use(protect, attachRolePermissions);
 
 // Chart of Accounts
 router.post('/accounts/seed', seedAccounts);

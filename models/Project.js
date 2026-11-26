@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { leadershipStampField } from './leadershipStamp.js';
 
 // One department on a project. The project has exactly one `owner` (the department
 // accountable for it, approving it); the rest are `participant`s the project manager
@@ -183,6 +184,8 @@ const projectSchema = mongoose.Schema(
     // How far the spending has got along the approved limit when the people running the project were last told: ok | warn | over.
     costAlertLevel: { type: String, default: 'ok' },
     costDecisionNote: { type: String, default: '' },
+    // The cost the finance head approved is above the limit: held for the CEO / Executive Director (see models/leadershipStamp.js).
+    costLeadership: leadershipStampField(),
     costChanges: { type: [costChangeSchema], default: [] },
     progress: {
       type: Number,

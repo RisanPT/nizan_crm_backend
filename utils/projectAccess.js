@@ -4,6 +4,7 @@ import ITTask from '../models/ITTask.js';
 import { departmentsOf, eqCI as sameName } from './projectDepartments.js';
 import { editModeOf } from './taskPermissions.js';
 import { canSeeCostAmounts } from './projectCost.js';
+import { LEADERSHIP_ROLES, isLeadership } from './leadership.js';
 
 // Roles / permissions that see & manage EVERY project across all departments.
 // Keeps existing IT project managers (project_manager / it.manage) from
@@ -14,8 +15,8 @@ const ALL_PROJECT_ROLE_KEYS = new Set([
   'project_manager',
   // Coordinates every company project across departments.
   'executive_coordinator',
-  // The CEO sees all of them — to decide on proposals, not to run them (see `viewOnly` below).
-  'ceo',
+  // The CEO and the Executive Director see all of them — to decide on proposals, not to run them (see `viewOnly` below).
+  ...LEADERSHIP_ROLES,
 ]);
 
 export const escapeRegex = (s) => String(s || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -69,8 +70,8 @@ export const loadAccessContext = async (u) => ({
   // the finance head decides a project's cost; Accounts can see it
   financeHead: ['finance_head', 'admin'].includes(String(u?.role ?? '').trim().toLowerCase()),
   finance: ['finance_head', 'accounts', 'admin'].includes(String(u?.role ?? '').trim().toLowerCase()),
-  // the CEO login looks and decides; it does not plan (no managing, no adding or changing tasks)
-  viewOnly: String(u?.role ?? '').trim().toLowerCase() === 'ceo',
+  // a leadership login (CEO, Executive Director) looks and decides; it does not plan (no managing, no adding or changing tasks)
+  viewOnly: isLeadership(u),
   empId: u?.employeeId ? String(u.employeeId) : '',
   isHead: !!u?.isDepartmentHead,
   // only a department head's department matters for access (saves two lookups per request)
@@ -177,7 +178,9 @@ export const accessSummary = (project, ctx, { hasTask = false } = {}) => {
     // the cost: see the amounts, change it (those who run the project), and decide on it (the finance head)
     canSeeCost: canSeeCostAmounts({ full: ctx.full, manager, ownerHead, finance: ctx.finance }),
     canEditCost: manage,
-    canDecideCost: !!ctx.financeHead && project.costStatus === 'pending' && !['proposed', 'cancelled'].includes(project.status),
+    // (not while the CEO / Executive Director are deciding on it)
+    canDecideCost: !!ctx.financeHead && project.costStatus === 'pending' && !['proposed', 'cancelled'].includes(project.status) && project.costLeadership?.state !== 'awaiting',
+    awaitingLeadership: project.costLeadership?.state === 'awaiting',
     pendingInvitations: departmentsOf(project)
       .filter((d) => d.status === 'invited' && (ctx.full || leads.some((n) => sameName(n, d.name))))
       .map((d) => d.name),
