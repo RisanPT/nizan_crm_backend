@@ -9,7 +9,8 @@ import {
   generatePayrollFromAttendance,
   syncEmployees,
 } from '../controllers/timeboxController.js';
-import { canSeeAttendance, canManagePayroll, canManageStaff, requireAccess } from '../utils/hrAccess.js';
+import { canSeeAttendance, canManagePayroll, requireAccess } from '../utils/hrAccess.js';
+import { hrWideOnly } from '../middleware/hrWideOnly.js';
 
 const router = express.Router();
 
@@ -19,7 +20,9 @@ router.use(protect, attachRolePermissions);
 
 const attendance = requireAccess(canSeeAttendance, 'You are not allowed to view attendance');
 const payroll = requireAccess(canManagePayroll, 'You are not allowed to run payroll');
-const staff = requireAccess(canManageStaff, 'You are not allowed to manage staff');
+// The staff sync creates employees company-wide: HR only (2026-11-26 — any
+// department head used to be able to run it).
+const staff = hrWideOnly(['staff.employees']);
 
 // HR — directory + attendance
 router.get('/employees', attendance, getTimeboxEmployees);

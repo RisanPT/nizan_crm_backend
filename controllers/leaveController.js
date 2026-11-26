@@ -5,6 +5,7 @@ import LeaveRequest from '../models/LeaveRequest.js';
 import Holiday from '../models/Holiday.js';
 import CompOff from '../models/CompOff.js';
 import Employee from '../models/Employee.js';
+import TimeboxIgnoredEmployee from '../models/TimeboxIgnoredEmployee.js';
 import User from '../models/User.js';
 import ApprovalRequest from '../models/ApprovalRequest.js';
 import { createApproval } from '../services/approvals.js';
@@ -34,10 +35,11 @@ const empPopulate = { path: 'employeeId', select: 'name department profileImage'
 /// payroll role that relied on it keeps working.
 const canManageLeave = (user) => {
   const role = String(user?.role || '');
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   if (user?.isDepartmentHead) return true;
   const perms = Array.isArray(user?.permissions) ? user.permissions : [];
-  return perms.some((p) => p === 'staff' || String(p).startsWith('staff.'));
+  // The whole staff module or the payroll/employee sub-keys — not any staff.* key.
+  return perms.some((p) => ['staff', 'staff.salaries', 'staff.employees', 'staff.attendance'].includes(p));
 };
 
 // No module key grants company-wide leave rights (see above): only
@@ -134,6 +136,18 @@ async function leaveDayContext(employee, from, to) {
 }
 
 const todayKey = () => toDayKey(new Date());
+
+/// Mongo filter for leaves overlapping calendar `year` on the India calendar
+/// ({} for none/'all'). Bounds are IST midnights, like toDayKey().
+const IST_MS = 330 * 60000;
+export const yearOverlapFilter = (year) => {
+  const y = Number(year);
+  if (!year || year === 'all' || !Number.isInteger(y)) return {};
+  return {
+    fromDate: { $lt: new Date(Date.UTC(y + 1, 0, 1) - IST_MS) },
+    toDate: { $gte: new Date(Date.UTC(y, 0, 1) - IST_MS) },
+  };
+};
 
 /// Per-type balances for `employee` in `year` (monthly credit, carry-forward,
 /// used, pending). `types` defaults to the active leave types.
@@ -258,10 +272,11 @@ export const getLeaveMasterAccess = async (req, res) => {
 export const createLeaveType = async (req, res) => {
   try {
     if (!(await canEditLeaveMaster(req))) return res.status(403).json({ message: 'Not allowed' });
-    const { name, code, annualQuota, paid, carryForward, carryForwardMax, docRequired, color, order } = req.body;
+    const { name, code, annualQuota, paid, carryForward, carryForwardMax, docRequired, color, order, active } = req.body;
     if (!name) return res.status(400).json({ message: 'Name is required' });
     const t = await LeaveType.create({
       name,
+      active: active !== false,
       code: code || '',
       annualQuota: Number(annualQuota) || 0,
       paid: paid !== false,
@@ -486,8 +501,7 @@ export const getMyLeave = async (req, res) => {
   try {
     if (!req.user.employeeId) return res.json([]);
     const { year } = req.query;
-    const filter = { employeeId: req.user.employeeId };
-    if (year && year !== 'all') filter.year = Number(year);
+    const filter = { employeeId: req.user.employeeId, ...yearOverlapFilter(year) };
     const list = await LeaveRequest.find(filter).sort({ fromDate: -1 }).limit(200);
     res.json(list);
   } catch (err) {
@@ -501,16 +515,30 @@ export const getLeaveRequests = async (req, res) => {
   try {
     const { month, year, status, employeeId, department } = req.query;
     const filter = {};
-    if (month && month !== 'all') filter.month = Number(month);
-    if (year && year !== 'all') filter.year = Number(year);
+    if (month && month !== 'all') {
+      filter.month = Number(month);
+      if (year && year !== 'all') filter.year = Number(year);
+    } else {
+      // A year view lists every leave touching that year, so a Dec→Jan leave
+      // also shows in January's year (not only its start year).
+      Object.assign(filter, yearOverlapFilter(year));
+    }
     if (status && status !== 'all') filter.status = status;
     if (employeeId && employeeId !== 'all') filter.employeeId = employeeId;
     if (department && department !== 'all') filter.department = department;
 
-    // Other people's leave: admin + hr role only (company-wide).
-    if (!(await isLeaveDesk(req))) return res.status(403).json({ message: 'Only HR or admin can view leave requests' });
+    // Other people's leave: the leave desk (admin + hr role) sees everyone and
+    // decides. A department head may SEE their own team's leave, read-only
+    // (owner 2026-11-26); deciding stays with the desk (see decideLeave).
+    let query = filter;
+    if (!(await isLeaveDesk(req))) {
+      if (req.user?.isDepartmentHead !== true) {
+        return res.status(403).json({ message: 'Only HR or admin can view leave requests' });
+      }
+      query = await withLeaveScope(req, filter);
+    }
 
-    const list = await LeaveRequest.find(filter)
+    const list = await LeaveRequest.find(query)
       .populate(empPopulate)
       .sort({ fromDate: -1 })
       .limit(500);
@@ -983,6 +1011,21 @@ export const handleExternalLeaveRequest = async (req, res) => {
     }
 
     if (!crmEmp) {
+      // HR deleted this person from the CRM: never re-create them (same rule
+      // as the Timebox employee sync). Reply 409 and create nothing.
+      const ignoredOr = [];
+      if (tbEmpId != null && !Number.isNaN(tbEmpId)) ignoredOr.push({ timeboxEmployeeId: tbEmpId });
+      if (empEmail) ignoredOr.push({ email: empEmail });
+      const ignoredRow = ignoredOr.length
+        ? await TimeboxIgnoredEmployee.findOne({ $or: ignoredOr }).select('_id').lean()
+        : null;
+      if (ignoredRow) {
+        return res.status(409).json({
+          ok: false,
+          request_id: extReqId,
+          message: 'This employee was removed from the CRM, so the leave request was not recorded.',
+        });
+      }
       // Auto-provision so external employee leaves are never lost
       crmEmp = await Employee.create({
         name: empName || `Employee #${tbEmpId || extReqId}`,

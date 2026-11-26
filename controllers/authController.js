@@ -13,8 +13,7 @@ import {
   loginEmailFor, loginIdOf, expiryFromDay, loginExpired, canReuseDriverAccount, phoneDigits, EXPIRED_MESSAGE,
 } from '../utils/driverLogin.js';
 import { canManageUsers, authorizeUserChange, mayGiveRole, isAdminOnlyRole } from '../utils/userAccess.js';
-
-import { canManageUsers, authorizeUserChange, mayGiveRole } from '../utils/userAccess.js';
+import { canManageEmployee } from '../utils/hrDeptScope.js';
 import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 import { logChange } from '../utils/audit.js';
 
@@ -677,6 +676,12 @@ export const provisionEmployeeLogin = async (req, res) => {
     const employee = await Employee.findById(employeeId);
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
 
+    // A department head (without HR / full access) invites only the staff of
+    // the department they head — same scope as the other HR modules.
+    if (!isFullAccess && !isHr && !(await canManageEmployee(req, employee._id))) {
+      return res.status(403).json({ message: 'This employee is not in your department' });
+    }
+
     const email = String(req.body.email || employee.email || '').trim().toLowerCase();
     if (!email) {
       return res.status(400).json({ message: 'This employee has no email on file. Add an email first.' });
@@ -734,8 +739,11 @@ export const provisionEmployeeLogin = async (req, res) => {
       if (String(user.role || '') !== 'employee' && requesterRole !== 'admin') {
         return res.status(403).json({ message: 'This email already has a staff login. Ask an admin to manage it.' });
       }
+      // HR switched this login off — an invite must not quietly turn it back on.
+      if (user.active === false) {
+        return res.status(409).json({ message: 'This login is disabled. Re-enable it in Settings first.' });
+      }
       user.employeeId = employee._id;
-      user.active = true;
       if (!user.name && employee.name) user.name = employee.name;
     } else {
       user = new User({
@@ -760,15 +768,21 @@ export const provisionEmployeeLogin = async (req, res) => {
     }
 
     const emailSent = await sendSetupEmail(req, user, raw);
+    // When mail isn't configured, hand the link back so HR can share it
+    // manually — only to admin / HR, never to a department head.
+    const mayReceiveLink = requesterRole === 'admin' || isHr;
+    let message = created ? 'Login created; set-password link issued.' : 'Login updated; set-password link issued.';
+    if (!emailSent && !mayReceiveLink) {
+      message = 'Invite issued, but email is not set up. Ask HR to share the set-password link.';
+    }
     return res.status(created ? 201 : 200).json({
       id: user._id.toString(),
       email: user.email,
       role: user.role,
       created,
       emailSent,
-      // When mail isn't configured, hand the link back so HR can share it manually.
-      setupLink: emailSent ? null : setupLink(req, raw),
-      message: created ? 'Login created; set-password link issued.' : 'Login updated; set-password link issued.',
+      setupLink: !emailSent && mayReceiveLink ? setupLink(req, raw) : null,
+      message,
     });
   } catch (error) {
     return res.status(500).json({ message: error.message });
@@ -784,7 +798,7 @@ export const bulkProvisionEmployees = async (req, res) => {
       return res.status(403).json({ message: 'Only admins, managers or HR can bulk-provision logins.' });
     }
     await ensureDefaultRoles();
-    const employees = await Employee.find({ status: 'active', email: { $ne: '' } })
+    const employees = await Employee.find({ status: 'active', employmentStatus: { $ne: 'exited' }, email: { $ne: '' } })
       .select('name email departmentId');
 
     let created = 0;

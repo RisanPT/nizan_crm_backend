@@ -102,15 +102,9 @@ export const authorizeUserChange = (requester, target, { nextRole } = {}) => {
 
   const role = lc(nextRole);
   if (role && role !== targetRole) {
-
-    if (!me.admin && ADMIN_ONLY_ROLES.includes(role)) return no('Only an administrator can give the admin, manager or CEO role.');
+    if (!me.admin && ADMIN_ONLY_ROLES.includes(role)) return no('Only an administrator can give the admin, manager, CEO or Executive Director role.');
     const delegated = me.full || me.hr ? [] : delegatedRoles(requester?.role);
     if (!me.full && !me.hr && delegated.length && !delegated.includes(role)) {
-
-    if (!me.admin && ADMIN_ONLY_ROLES.includes(role)) return no('Only an administrator can give the admin, manager, CEO or Executive Director role.');
-    const delegated = me.full ? [] : delegatedRoles(requester?.role);
-    if (!me.full && delegated.length && !delegated.includes(role)) {
-
       return no(`You can only give your team these roles: ${delegated.join(', ')}.`);
     }
   }

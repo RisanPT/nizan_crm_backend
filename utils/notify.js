@@ -1,6 +1,7 @@
 import Notification from '../models/Notification.js';
 import User from '../models/User.js';
 import Role from '../models/Role.js';
+import Department from '../models/Department.js';
 
 // Role groups used by the notification matrix. `role` on User holds a Role.key,
 // so these are the keys management/admin accounts use. Keep the manager set in
@@ -55,17 +56,50 @@ export const NOTIFICATION_TYPES = {
   CONSULTATION_ASSIGNED: 'consultation_assigned',
   CONSULTATION_CHANGED: 'consultation_changed',
   CONSULTATION_REMINDER: 'consultation_reminder',
+  // HRMS workflow (2026-11-26).
+  PAYSLIP_READY: 'payslip_ready',
+  PAYROLL_SUBMITTED: 'payroll_submitted',
+  NEW_HIRE: 'new_hire',
+  HIRING_PLAN_RAISED: 'hiring_plan_raised',
+  OFFBOARDING_STARTED: 'offboarding_started',
+  PROBATION_ENDING: 'probation_ending',
   MARKETING_EOD_REMINDER: 'marketing_eod_reminder',
   MARKETING_EOD_MISSED_SUMMARY: 'marketing_eod_missed_summary',
 };
 
-// Stakeholders (admin accounts) are not part of the day-to-day operational
-// notification stream — they only want the month-end summary. Any notification
-// whose type is NOT in this set is never delivered to an admin, no matter which
-// roles a controller passes to notify()/notifyRoles().
-export const ADMIN_ALLOWED_TYPES = new Set([NOTIFICATION_TYPES.MONTH_END_SUMMARY]);
+// Admins see EVERY notification (2026-11-26, replacing the old "month-end
+// summary only" rule): notify() adds every active admin to each notification,
+// whoever else it is for. Everyone else only gets what concerns their team.
 
 const idStr = (v) => (v == null ? '' : String(v._id ?? v));
+
+/// Sales-only roles: these belong to the Sales team wherever the user's
+/// department is set (or not).
+export const SALES_MANAGER_ROLES = ['sales_manager', 'regional_manager'];
+
+/// The Sales team's leaders, who get the team-wide sales notifications (new
+/// enquiry, missed follow-up, lost request, booking, client chat, reviews):
+///  - anyone with a sales-only manager role;
+///  - anyone with a manager role whose department is Sales;
+///  - the head of the Sales department, whatever their role.
+/// The general `manager` role alone is NOT enough, so managers of other teams
+/// (marketing, HR…) no longer receive sales notifications. If no Sales
+/// department exists at all, falls back to every manager role so sales alerts
+/// never silently vanish.
+export const getSalesLeadIds = async () => {
+  const depts = await Department.find({ key: 'sales' }).select('_id').lean();
+  const deptIds = depts.map((d) => d._id);
+  if (deptIds.length === 0) return getUserIdsByRoles(MANAGER_ROLES);
+  const users = await User.find({
+    active: { $ne: false },
+    $or: [
+      { role: { $in: SALES_MANAGER_ROLES } },
+      { role: { $in: MANAGER_ROLES }, departmentId: { $in: deptIds } },
+      { isDepartmentHead: true, departmentId: { $in: deptIds } },
+    ],
+  }).select('_id');
+  return users.map((u) => u._id);
+};
 
 /// Resolve the active user ids that hold any of [roles].
 export const getUserIdsByRoles = async (roles) => {
@@ -131,29 +165,22 @@ export const notify = async ({
   createdBy = null,
   excludeUserId = null,
   dedupe = false,
+  // false only for strictly personal notices sent in bulk (e.g. one "payslip
+  // ready" per employee): admins then get a single summary from the caller
+  // instead of dozens of copies.
+  copyAdmins = true,
 } = {}) => {
   try {
     const exclude = idStr(excludeUserId);
+    const base = recipients.map(idStr).filter(Boolean);
+    // Nobody to tell → nothing to copy admins on either.
+    if (base.length === 0) return;
+    // Admins get a copy of every notification (applied centrally, so every
+    // controller and role fan-out obeys it).
+    const adminIds = copyAdmins ? (await getUserIdsByRoles(ADMIN_ROLES)).map(idStr) : [];
     // Unique, non-empty recipient ids, minus the excluded actor.
-    let ids = [...new Set(recipients.map(idStr).filter(Boolean))].filter(
-      (id) => id !== exclude
-    );
+    const ids = [...new Set([...base, ...adminIds])].filter((id) => id !== exclude);
     if (ids.length === 0) return;
-
-    // Suppress operational notifications for stakeholders (admins) — they only
-    // receive the month-end summary. Applied centrally so every controller and
-    // every role fan-out (notifyRoles, MANAGER_AND_ADMIN_ROLES, etc.) obeys it.
-    if (!ADMIN_ALLOWED_TYPES.has(type)) {
-      const admins = await User.find({
-        _id: { $in: ids },
-        role: { $in: ADMIN_ROLES },
-      }).select('_id');
-      if (admins.length) {
-        const adminSet = new Set(admins.map((u) => String(u._id)));
-        ids = ids.filter((id) => !adminSet.has(id));
-      }
-      if (ids.length === 0) return;
-    }
 
     let targets = ids;
     if (dedupe) {

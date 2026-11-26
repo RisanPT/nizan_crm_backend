@@ -38,8 +38,9 @@ const empPopulate = { path: 'employeeId', select: 'name department profileImage 
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
-  if (user?.isDepartmentHead) return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
+  // Department heads no longer run this (owner 2026-11-26: HR's job; heads
+  // get a team view).
   const perms = user?.permissions || [];
   return perms.includes('onboarding') || perms.includes('recruitment') || perms.includes('staff');
 };
@@ -93,6 +94,11 @@ const createOnboarding = asyncHandler(async (req, res) => {
   const employee = await Employee.findById(employeeId).select('name department role');
   if (!employee) { res.status(404); throw new Error('Employee not found'); }
   await assertEmployeeInScope(req, res, employee._id, KEYS);
+  // One open onboarding per employee: a second one would split the checklist.
+  if (await Onboarding.exists({ employeeId: employee._id, status: { $ne: 'completed' } })) {
+    res.status(409);
+    throw new Error(`${employee.name || 'This employee'} already has an open onboarding`);
+  }
 
   const tasks = Array.isArray(req.body.tasks) && req.body.tasks.length
     ? cleanTasks(req.body.tasks)
@@ -140,6 +146,11 @@ const updateOnboarding = asyncHandler(async (req, res) => {
     row.completedOn = row.completedOn || new Date();
   } else if (req.body.status === 'in_progress') {
     row.completedOn = null;
+  } else if (req.body.status === undefined && Array.isArray(req.body.tasks) && row.status === 'completed') {
+    // No explicit status: the status follows the checklist, so un-ticking a
+    // task on a completed onboarding reopens it.
+    row.status = 'in_progress';
+    row.completedOn = null;
   }
   await row.save();
   await row.populate(empPopulate);
@@ -151,8 +162,10 @@ const deleteOnboarding = asyncHandler(async (req, res) => {
   const row = await Onboarding.findById(req.params.id);
   if (!row) { res.status(404); throw new Error('Onboarding not found'); }
   await assertOnboardingInScope(req, res, row);
+  // Take the candidate out of the Hired column. 'rejected' is a real stage
+  // (there is no 'archived'); the invalid value used to break the candidate.
   if (row.candidateId) {
-    await Candidate.findByIdAndUpdate(row.candidateId, { stage: 'archived' });
+    await Candidate.findByIdAndUpdate(row.candidateId, { stage: 'rejected' }, { runValidators: true });
   }
   await Onboarding.findByIdAndDelete(req.params.id);
   res.json({ message: 'Onboarding removed', id: req.params.id });

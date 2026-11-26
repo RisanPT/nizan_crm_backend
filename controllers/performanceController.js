@@ -1,26 +1,29 @@
 import PerformanceEvaluation, { PILLARS } from '../models/PerformanceEvaluation.js';
 import Employee from '../models/Employee.js';
+import { getHrScope, canManageEmployee } from '../utils/hrDeptScope.js';
 import { isLeadership } from '../utils/leadership.js';
 
+// Permission key granting company-wide evaluation rights (the HR dept head and
+// 'staff'-module roles are company-wide too, see utils/hrDeptScope.js).
+const KEYS = ['performance'];
 
 // "HR / Admin (anyone)" tier — admin / manager and the `hr` role (added
-// 2026-11-16) evaluate anyone. Department heads may evaluate only their own team.
+// 2026-11-16) evaluate anyone, plus leadership (CEO, Executive Director):
+// read-only, enforced in middleware/ceoGuard.js. Department heads may evaluate
+// only their own team.
 const isAdmin = (u) =>
-  ['admin', 'manager', 'ceo', 'hr'].includes(String(u?.role || '').trim().toLowerCase()); // + 'ceo': read-only, enforced in middleware/ceoGuard.js
-
-// "HR / Admin (anyone)" tier — there is no dedicated `hr` role, so full-access
-// roles stand in for HR. Department heads may evaluate only their own team.
-const isAdmin = (u) => u?.role === 'admin' || u?.role === 'manager' || isLeadership(u); // + leadership (CEO, Executive Director): read-only, enforced in middleware/ceoGuard.js
+  ['admin', 'manager', 'hr'].includes(String(u?.role || '').trim().toLowerCase()) || isLeadership(u);
 
 const canRead = (u) => isAdmin(u) || u?.isDepartmentHead === true;
 
-const sameDept = (u, employee) =>
-  u?.departmentId &&
-  employee?.departmentId &&
-  String(u.departmentId) === String(employee.departmentId);
+// Department heads are scoped to the staff of the department(s) they head;
+// the HR department head is company-wide.
+const canEvaluate = async (req, employeeId) =>
+  isAdmin(req.user) || (await canManageEmployee(req, employeeId, KEYS));
 
-const canEvaluate = (u, employee) =>
-  isAdmin(u) || (u?.isDepartmentHead === true && sameDept(u, employee));
+const isSelf = (req, employeeId) =>
+  !!req.user?.employeeId &&
+  String(employeeId?._id ?? employeeId ?? '') === String(req.user.employeeId);
 
 const clampScore = (v) => Math.max(0, Math.min(5, Number(v) || 0));
 
@@ -32,7 +35,11 @@ const populate = [
 // @route GET /api/performance?month=&year=&employeeId=&departmentId=
 export const getEvaluations = async (req, res) => {
   try {
-    if (!canRead(req.user)) {
+    const scope = isAdmin(req.user) ? { wide: true } : await getHrScope(req, KEYS);
+    if (!scope.wide && scope.none) {
+      // A department head whose department can't be resolved sees nothing
+      // (never a departmentId = null match); everyone else is not allowed.
+      if (req.user?.isDepartmentHead) return res.json([]);
       return res.status(403).json({ message: 'Not authorized to view evaluations' });
     }
     const { month, year, employeeId, departmentId } = req.query;
@@ -40,15 +47,15 @@ export const getEvaluations = async (req, res) => {
     if (month) filter.month = Number(month);
     if (year) filter.year = Number(year);
     if (employeeId) filter.employeeId = employeeId;
+    if (departmentId) filter.departmentId = departmentId;
 
-    // A department head is scoped to their own department; admins/managers see all.
-    if (!isAdmin(req.user) && req.user?.isDepartmentHead) {
-      filter.departmentId = req.user.departmentId ?? null;
-    } else if (departmentId) {
-      filter.departmentId = departmentId;
-    }
+    // Department heads: only their own department's staff ($and so a query
+    // employeeId can't widen it).
+    const finalFilter = scope.wide
+      ? filter
+      : { $and: [filter, { employeeId: { $in: scope.employeeIds } }] };
 
-    const evaluations = await PerformanceEvaluation.find(filter)
+    const evaluations = await PerformanceEvaluation.find(finalFilter)
       .populate(populate)
       .sort({ year: -1, month: -1, composite: -1 });
     res.json(evaluations);
@@ -64,8 +71,7 @@ export const getEmployeeEvaluations = async (req, res) => {
       'name department departmentId'
     );
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
-    if (!isAdmin(req.user) &&
-        !(req.user?.isDepartmentHead && sameDept(req.user, employee))) {
+    if (!(await canEvaluate(req, employee._id))) {
       return res.status(403).json({ message: 'Not authorized to view this employee' });
     }
     const evaluations = await PerformanceEvaluation.find({
@@ -102,7 +108,10 @@ export const upsertEvaluation = async (req, res) => {
       'name department departmentId'
     );
     if (!employee) return res.status(404).json({ message: 'Employee not found' });
-    if (!canEvaluate(req.user, employee)) {
+    if (isSelf(req, employee._id)) {
+      return res.status(403).json({ message: 'You cannot evaluate yourself.' });
+    }
+    if (!(await canEvaluate(req, employee._id))) {
       return res
         .status(403)
         .json({ message: 'You can only evaluate your own department.' });
@@ -146,8 +155,7 @@ export const deleteEvaluation = async (req, res) => {
   try {
     const evaluation = await PerformanceEvaluation.findById(req.params.id);
     if (!evaluation) return res.status(404).json({ message: 'Evaluation not found' });
-    const employee = await Employee.findById(evaluation.employeeId).select('departmentId');
-    if (!canEvaluate(req.user, employee || {})) {
+    if (isSelf(req, evaluation.employeeId) || !(await canEvaluate(req, evaluation.employeeId))) {
       return res.status(403).json({ message: 'Not authorized to delete this evaluation' });
     }
     await evaluation.deleteOne();

@@ -8,7 +8,7 @@ import { isHrWide } from '../utils/hrDeptScope.js';
 // user (designations are organisational labels, surfaced in pickers/org charts).
 const canManageUser = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   const perms = user?.permissions || [];
   return perms.includes('staff') || perms.includes('settings');
 };

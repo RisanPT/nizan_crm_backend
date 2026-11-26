@@ -156,4 +156,6 @@ export const LEADERSHIP_READ_OK_MOUNTS = [
   '/api/shifts', '/api/slots', '/api/states', '/api/strategic-vision', '/api/stylist-clients', '/api/subscriptions',
   '/api/tax-filings', '/api/tickets', '/api/time-blocks', '/api/timebox', '/api/timesheets', '/api/travel',
   '/api/trial-packages', '/api/trials', '/api/upload', '/api/vehicles', '/api/whatsapp', '/api/work-profit', '/api/zones',
+  // Team N website: the public enquiry form and the CMS (read-only for leadership; the guard refuses CMS writes).
+  '/api/website/public', '/api/website/admin',
 ];

@@ -2,9 +2,12 @@
 // a department head manages HR only for THEIR OWN department's staff.
 //
 // Company-wide HR rights ("HR-wide") stay with:
-//   • admin / manager roles
-//   • any role granted the 'staff' module (e.g. CRM, Artist Head) — unchanged
+//   • admin / manager roles, and the `hr` role (2026-11-26)
+//   • any role granted the WHOLE 'staff' module (e.g. CRM, Artist Head — the
+//     owner chose to keep these)
 //   • any role granted the module's own permission key (e.g. 'leave', 'lms')
+//     or that key's parent; a lone sub-key like 'staff.slots' only opens the
+//     module that asks for it (2026-11-26)
 //   • the head of the HR department (Department.key === 'hr')
 //
 // Everyone else who is a department head is scoped to the employees of the
@@ -17,7 +20,16 @@ import { resolveUserDeptName } from './departmentScope.js';
 
 const roleOf = (u) => String(u?.role || '').trim().toLowerCase();
 const permsOf = (u) => (Array.isArray(u?.permissions) ? u.permissions.map(String) : []);
-const hasModule = (u, m) => permsOf(u).some((p) => p === m || p.startsWith(`${m}.`));
+/// The key itself, or its parent module ('staff' covers 'staff.attendance').
+/// NOT the other way round: holding one sub-key (e.g. 'staff.slots') no longer
+/// counts as holding the whole module (2026-11-26 — a single sub-key used to
+/// open company-wide HR everywhere).
+const hasKeyOrParent = (u, k) => {
+  const perms = permsOf(u);
+  if (perms.includes(k)) return true;
+  const dot = k.indexOf('.');
+  return dot > 0 && perms.includes(k.slice(0, dot));
+};
 const esc = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /// Departments this user heads: Department.head === their employee record,
@@ -59,8 +71,10 @@ export async function getHrScope(req, moduleKeys = []) {
   if (req[cacheKey]) return req[cacheKey];
 
   let scope;
-  if (['admin', 'manager'].includes(roleOf(user)) || hasModule(user, 'staff') ||
-      moduleKeys.some((k) => hasModule(user, k))) {
+  // HR-wide: admin/manager, the `hr` role (owner 2026-11-26: HR sees all of
+  // HRMS), the whole `staff` module, or this module's own key.
+  if (['admin', 'manager', 'hr'].includes(roleOf(user)) || permsOf(user).includes('staff') ||
+      moduleKeys.some((k) => hasKeyOrParent(user, k))) {
     scope = { wide: true };
   } else {
     const depts = await headedDepartments(user);

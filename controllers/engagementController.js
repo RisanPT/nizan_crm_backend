@@ -1,6 +1,8 @@
 import asyncHandler from 'express-async-handler';
 import Announcement from '../models/Announcement.js';
 import { isHrWide } from '../utils/hrDeptScope.js';
+import { resolveUserDeptName } from '../utils/departmentScope.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
 
 // Department heads may post, but only HR-wide callers may edit/delete posts
 // they did not create (owner decision 2026-11-06).
@@ -14,7 +16,7 @@ const assertCanEdit = async (req, res, row) => {
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   if (user?.isDepartmentHead) return true;
   const perms = user?.permissions || [];
   return perms.includes('engagement') || perms.includes('staff');
@@ -27,10 +29,26 @@ const guard = (req, res) => {
   }
 };
 
-// @route GET /api/engagement  — the feed (everyone reads active items)
+// HR (role or HR-wide scope) sees every post; everyone else sees posts for
+// 'all', for their own department, and the ones they posted themselves.
+const seesAllAudiences = async (req) =>
+  String(req.user?.role || '').trim().toLowerCase() === 'hr' || (await isHrWide(req, HR_KEYS));
+
+const audienceFilter = async (req) => {
+  if (await seesAllAudiences(req)) return null;
+  const or = [{ audience: { $in: [null, ''] } }, { audience: /^\s*all\s*$/i }];
+  const dept = await resolveUserDeptName(req.user);
+  if (dept) or.push({ audience: new RegExp(`^\\s*${escapeRegex(dept)}\\s*$`, 'i') });
+  if (req.user?._id) or.push({ postedBy: req.user._id });
+  return or;
+};
+
+// @route GET /api/engagement  — the feed (everyone reads active items meant for them)
 const getAnnouncements = asyncHandler(async (req, res) => {
   const filter = { active: true };
   if (req.query.category && req.query.category !== 'all') filter.category = req.query.category;
+  const or = await audienceFilter(req);
+  if (or) filter.$or = or;
   const rows = await Announcement.find(filter).sort({ pinned: -1, createdAt: -1 }).limit(200).lean();
   res.json(rows);
 });

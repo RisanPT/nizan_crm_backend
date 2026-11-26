@@ -21,7 +21,8 @@ const ALLOWED = {
   'models/Role.js': [1, 'the permission KEY called ceo (the CEO home), not a role'],
   'controllers/ceoDecisionController.js': [1, 'the permission KEY called ceo'],
   'controllers/employeeController.js': [1, 'org-tree: a designation text containing "ceo" is level 5'],
-  'controllers/recruitmentController.js': [4, 'the job-role hierarchy seed (an org-chart node called ceo)'],
+  // (controllers/recruitmentController.js left the list: its job-role hierarchy seed with a 'ceo' node was removed
+  // 2026-11-24 — job roles are now HR-owned, see deploy/hrms-jobroles-2026-11-24.)
 };
 
 test('no controller, util, service or route names the CEO on its own in a role list', () => {

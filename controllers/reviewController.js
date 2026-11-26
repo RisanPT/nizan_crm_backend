@@ -1,7 +1,7 @@
 import crypto from 'crypto';
 import Review from '../models/Review.js';
 import Booking from '../models/Booking.js';
-import { notify, NOTIFICATION_TYPES, getUserIdsByRoles } from '../utils/notify.js';
+import { notify, NOTIFICATION_TYPES, getUserIdsByRoles, getSalesLeadIds } from '../utils/notify.js';
 import { TEAM_N_LOGO } from '../assets/teamNLogo.js';
 
 // ── Snapshot helpers ─────────────────────────────────────────────────────────
@@ -245,7 +245,9 @@ export const submitReview = async (req, res) => {
 
     // Notify CRM + management that a review came in.
     try {
-      const ids = await getUserIdsByRoles(['crm', 'manager', 'admin']);
+      // CRM + the Sales leaders (not every manager); admins get a copy via notify().
+      const [crm, salesLeads] = await Promise.all([getUserIdsByRoles(['crm']), getSalesLeadIds()]);
+      const ids = [...crm, ...salesLeads];
       await notify({
         recipients: ids,
         type: NOTIFICATION_TYPES.REVIEW_SUBMITTED,
