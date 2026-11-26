@@ -2,7 +2,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { classifyUpstream, dropboxFileUrl, isAllowedMediaHost, signMediaToken, verifyMediaToken, videoTypeFor } from '../utils/mediaProxy.js';
+import { classifyUpstream, dropboxFileUrl, isAllowedMediaHost, signMediaToken, verifyMediaToken, videoTypeFor, directPlayable } from '../utils/mediaProxy.js';
 
 test('only Dropbox\'s own hosts are fetched from', () => {
   for (const h of ['dropbox.com', 'www.dropbox.com', 'DL.Dropbox.com', 'dl.dropboxusercontent.com', 'uc4a1.dl.dropboxusercontent.com']) assert.equal(isAllowedMediaHost(h), true, h);
@@ -81,4 +81,9 @@ test('server.js mounts the stream BEFORE /api/marketing (whose router asks every
   const marketing = server.indexOf("app.use('/api/marketing',");
   assert.ok(media > 0 && marketing > 0, 'both mounted');
   assert.ok(media < marketing, 'the media mount comes first');
+});
+
+test('which videos may play straight from Dropbox: mp4, m4v and webm — a .mov goes through the relay (Dropbox sends it as quicktime)', () => {
+  assert.deepEqual(['a.mp4', 'B.MP4', 'c.m4v', 'd.webm'].map(directPlayable), [true, true, true, true]);
+  assert.deepEqual(['e.mov', 'f.ogv', 'g.jpg', 'noext', ''].map(directPlayable), [false, false, false, false, false]);
 });

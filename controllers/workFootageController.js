@@ -14,8 +14,8 @@ import MarketingShoot from '../models/MarketingShoot.js';
 import MarketingTask from '../models/MarketingTask.js';
 import { MarketingTeamMember } from '../models/MarketingEod.js';
 import WorkFootage from '../models/WorkFootage.js';
-import { canManageMarketing } from './contentController.js';
-import { isManagerOrAdmin } from './marketingEodController.js';
+import { canEnterCreative } from './contentController.js';
+import { canManageCreative } from './marketingEodController.js';
 import { eventDaysOf, isOnBookingTeam, isWork, worksBetween } from '../utils/crmCare.js';
 import { addDays, istEnd, istStart, todayIst } from '../utils/istDate.js';
 import { assetFromShoot, portfolioOfBrand } from '../utils/marketingSocialsInput.js';
@@ -43,7 +43,7 @@ const access = async (req, res) => {
   if (!mongoose.isValidObjectId(req.params.bookingId)) bad(res, 'That work was not found.', 404);
   const booking = await Booking.findById(req.params.bookingId).select(BOOKING_FIELDS).lean();
   if (!booking) bad(res, 'That work was not found.', 404);
-  const marketing = await canManageMarketing(req.user);
+  const marketing = await canEnterCreative(req.user); // Marketing, or the Creative Director
   const onTeam = isOnBookingTeam(booking, req.user?.employeeId);
   if (!marketing && !onTeam) bad(res, 'Only the artists who worked this booking, and Marketing, can see its footage.', 403);
   return { booking, marketing, onTeam };
@@ -212,7 +212,7 @@ export const removeFootageLink = asyncHandler(async (req, res) => {
   const rec = await WorkFootage.findOne({ bookingId: a.booking._id, 'links._id': req.params.linkId });
   if (!rec) bad(res, 'That link is not on this work.', 404);
   const link = rec.links.id(req.params.linkId);
-  if (idOf(link.addedBy) !== idOf(req.user._id) && !isManagerOrAdmin(req.user)) bad(res, 'Only the person who added the link, or a Marketing Manager, can take it off.', 403);
+  if (idOf(link.addedBy) !== idOf(req.user._id) && !canManageCreative(req.user)) bad(res, 'Only the person who added the link, or a Marketing Manager, can take it off.', 403);
   if (link.assetId) {
     const asset = await MarketingAsset.findById(link.assetId).select('stage').lean();
     const used = await ContentItem.countDocuments({ assetId: link.assetId });
@@ -292,7 +292,7 @@ export const checkUpload = asyncHandler(async (req, res) => {
 // ── Marketing ──────────────────────────────────────────────────────────────────
 
 const marketingOnly = async (req, res) => {
-  if (!(await canManageMarketing(req.user))) bad(res, 'Only the Marketing team can open this.', 403);
+  if (!(await canEnterCreative(req.user))) bad(res, 'Only the Marketing team can open this.', 403);
 };
 
 // @route GET /api/work-footage/inbox?status=all|new|in_edit|edited&days=14 — every work's footage, newest first, and the works still

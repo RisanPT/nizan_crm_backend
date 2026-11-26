@@ -1,7 +1,7 @@
 // The company's Dropbox, for footage from works (controllers/workFootageController.js). OFF until the server has a Dropbox app:
 //   DROPBOX_APP_KEY, DROPBOX_APP_SECRET and DROPBOX_REFRESH_TOKEN (a long-lived refresh token for the company account), or — for a quick
 //   trial — DROPBOX_ACCESS_TOKEN alone. DROPBOX_ROOT is where works' folders go ("/Team N Works" when not set).
-//   The app needs the scopes files.metadata.read, files.content.write, file_requests.write, sharing.write and sharing.read.
+//   The app needs the scopes files.metadata.read, files.content.read, files.content.write, file_requests.write, sharing.write and sharing.read.
 //
 // With it on, an artist taps "Upload to Dropbox" on their work and gets a Dropbox FILE REQUEST for that work's folder — a page that takes
 // files from a phone without a Dropbox login; the videos land in "/Team N Works/2026-11/2026-11-18 · BK-1234 · Amina K · Bridal".
@@ -65,7 +65,7 @@ export const missingScopeOf = (json) => {
   return String(json?.error?.required_scope ?? 'a permission');
 };
 export const missingScopeMessage = (scope) =>
-  `The CRM's Dropbox app has not been given the permission "${scope}". In the Dropbox App Console → the app → Permissions, tick files.metadata.read, files.content.write, file_requests.write, sharing.read and sharing.write, click Submit — then run "node scripts/dropboxConnect.mjs" again (the Dropbox account clicks Allow once more).`;
+  `The CRM's Dropbox app has not been given the permission "${scope}". In the Dropbox App Console → the app → Permissions, tick files.metadata.read, files.content.read, files.content.write, file_requests.write, sharing.read and sharing.write, click Submit — then run "node scripts/dropboxConnect.mjs" again (the Dropbox account clicks Allow once more).`;
 
 /** One Dropbox API call. A Dropbox "error" answer (409) comes back as { error } for the caller to read; anything else wrong throws. */
 export const dropboxRpc = async (endpoint, body) => {

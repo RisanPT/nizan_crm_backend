@@ -2,7 +2,7 @@ import express from 'express';
 import asyncHandler from 'express-async-handler';
 import { protect } from '../middleware/authMiddleware.js';
 import { attachMarketingAccess } from '../controllers/marketingEodController.js';
-import { canManageMarketing } from '../controllers/contentController.js';
+import { canEnterCreative } from '../controllers/contentController.js';
 import {
   getOverview, getCalendar, listAssets, getAsset, createAsset, updateAsset, deleteAsset, listAccounts, createAccount, updateAccount, deleteAccount,
   getPublishing, getTargets, setTargets, getPerformance, getReports, listAssetKeywords, renameAssetKeyword, removeAssetKeyword, bulkAssetKeywords,
@@ -15,7 +15,7 @@ router.use(protect);
 router.use(attachMarketingAccess);
 router.use(
   asyncHandler(async (req, res, next) => {
-    if (await canManageMarketing(req.user)) return next();
+    if (await canEnterCreative(req.user)) return next(); // Marketing, or the Creative Director
     res.status(403);
     throw new Error('Only the Marketing team can open Socials.');
   }),

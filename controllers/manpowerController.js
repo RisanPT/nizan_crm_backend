@@ -8,6 +8,7 @@ import ITTask from '../models/ITTask.js';
 import HiringPlan from '../models/HiringPlan.js';
 import ManpowerRequest from '../models/ManpowerRequest.js';
 import ProjectAllocation from '../models/ProjectAllocation.js';
+import { hrUserIds } from '../services/hrPeople.js';
 import { loadAccessContext, canViewProject, isProjectManager, isOwnerHead, departmentsLedBy, escapeRegex } from '../utils/projectAccess.js';
 import { departmentsOf } from '../utils/projectDepartments.js';
 import { resolveUserDeptName } from '../utils/departmentScope.js';
@@ -54,17 +55,6 @@ const me = async (user) => {
   };
 };
 
-/// Login accounts of HR: its head, and everyone in the HR department.
-const hrUserIds = async () => {
-  const depts = await Department.find({ name: /^(hr|human resources)$/i, active: { $ne: false } }).select('_id head').lean();
-  const ids = new Set();
-  const byDept = await User.find({ departmentId: { $in: depts.map((d) => d._id) }, active: { $ne: false } }).select('_id').lean();
-  byDept.forEach((u) => ids.add(idOf(u._id)));
-  const emps = await Employee.find({ department: /^(hr|human resources)$/i, status: { $ne: 'inactive' } }).select('_id').lean();
-  const viaEmps = await getUserIdsByEmployeeIds([...emps.map((e) => e._id), ...depts.map((d) => d.head).filter(Boolean)]);
-  viaEmps.forEach((u) => ids.add(idOf(u)));
-  return [...ids];
-};
 
 /// Whoever asked, and the project manager.
 const askers = async (r) => [r.requestedBy, ...(r.managerEmp ? await getUserIdsByEmployeeIds([r.managerEmp]) : [])].filter(Boolean);

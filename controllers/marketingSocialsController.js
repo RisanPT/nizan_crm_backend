@@ -11,7 +11,7 @@ import MarketingTask from '../models/MarketingTask.js';
 import { MarketingTeamMember, MarketingMetric, MarketingGroup } from '../models/MarketingEod.js';
 import Lead from '../models/Lead.js';
 import User from '../models/User.js';
-import { toDateStr, isManagerOrAdmin, canViewTeam, findOwnMember } from './marketingEodController.js';
+import { toDateStr, isManagerOrAdmin, canManageCreative, canViewTeam, findOwnMember } from './marketingEodController.js';
 import { isDay } from '../utils/marketingActivityInput.js';
 import { cleanAssetInput, cleanAccountInput, cleanTargetInput, assetFromShoot, approvedAtFor, isUsableAsset } from '../utils/marketingSocialsInput.js';
 import * as S from '../utils/marketingSocialsStats.js';
@@ -380,7 +380,7 @@ export const listAssets = asyncHandler(async (req, res) => {
     search: { terms: spec.text.terms.map((t) => (t.phrase ? `"${t.text}"` : t.text)), exclude: spec.text.exclude.map((t) => t.text), keywords: spec.text.keywords, notKeywords: spec.text.notKeywords },
     rankedOnly: spec.sort === 'relevance' && total > RANK_CAP ? RANK_CAP : null,
     // this login may approve, reject and mark final outputs
-    canManage: isManagerOrAdmin(req.user),
+    canManage: canManageCreative(req.user),
     period,
   });
 });
@@ -391,12 +391,12 @@ export const listAssetKeywords = asyncHandler(async (req, res) => {
   const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 12, 1), 1000);
   const rows = await MarketingAsset.aggregate([{ $unwind: '$tags' }, ...(typed ? [{ $match: { tags: new RegExp(escapeRx(typed), 'i') } }] : []), { $group: { _id: '$tags', n: { $sum: 1 } } }]);
   const all = rows.map((r) => ({ keyword: r._id, count: r.n }));
-  res.json({ items: rankKeywordSuggestions(all, typed, limit), total: all.length, canManage: isManagerOrAdmin(req.user) });
+  res.json({ items: rankKeywordSuggestions(all, typed, limit), total: all.length, canManage: canManageCreative(req.user) });
 });
 
 /** Rename a keyword on every asset — into one that already exists = a merge ("bride" into "bridal"). Marketing Manager. */
 export const renameAssetKeyword = asyncHandler(async (req, res) => {
-  if (!isManagerOrAdmin(req.user)) bad(res, 'Only a Marketing Manager can rename or merge keywords.', 403);
+  if (!canManageCreative(req.user)) bad(res, 'Only a Marketing Manager or the Creative Director can rename or merge keywords.', 403);
   const from = keywordAsStored(req.body?.from);
   if (!from) bad(res, 'Choose the keyword to rename.');
   const to = cleanKeywords(req.body?.to ?? '');
@@ -413,7 +413,7 @@ export const renameAssetKeyword = asyncHandler(async (req, res) => {
 
 /** Take a keyword off every asset. Marketing Manager. */
 export const removeAssetKeyword = asyncHandler(async (req, res) => {
-  if (!isManagerOrAdmin(req.user)) bad(res, 'Only a Marketing Manager can remove a keyword from the library.', 403);
+  if (!canManageCreative(req.user)) bad(res, 'Only a Marketing Manager or the Creative Director can remove a keyword from the library.', 403);
   const k = keywordAsStored(req.body?.keyword);
   if (!k) bad(res, 'Choose the keyword to remove.');
   const r = await MarketingAsset.updateMany({ tags: k }, { $pull: { tags: k } });
@@ -475,12 +475,12 @@ const shootForAsset = async (res, shootId) => {
 };
 
 // approving, rejecting and marking a final output are a manager's call: each makes an asset postable (or not) and counts it as delivered
-const MANAGER_ONLY_ASSET = 'Only a Marketing Manager can approve, reject or mark an asset as a final output.';
+const MANAGER_ONLY_ASSET = 'Only a Marketing Manager or the Creative Director can approve, reject or mark an asset as a final output.';
 
 export const createAsset = asyncHandler(async (req, res) => {
   const v = cleanAssetInput(req.body);
   if (!v.ok) bad(res, v.message);
-  if (!isManagerOrAdmin(req.user) && (['approved', 'rejected'].includes(v.value.stage) || v.value.isFinal === true)) bad(res, MANAGER_ONLY_ASSET, 403);
+  if (!canManageCreative(req.user) && (['approved', 'rejected'].includes(v.value.stage) || v.value.isFinal === true)) bad(res, MANAGER_ONLY_ASSET, 403);
   let fields = { ...v.value };
   // an upload attached to a shoot takes the shoot's brand, portfolio and tags — the shoot decides, whatever the form sent
   if (fields.shootId) fields = { ...fields, ...assetFromShoot(await shootForAsset(res, fields.shootId), fields) };
@@ -498,8 +498,8 @@ export const updateAsset = asyncHandler(async (req, res) => {
   const v = cleanAssetInput(req.body, asset);
   if (!v.ok) bad(res, v.message);
   // approving, rejecting and the final-output mark are a manager's call; anyone on the team moves an asset through the production stages
-  const manager = isManagerOrAdmin(req.user);
-  if (!manager && v.value.stage && ['approved', 'rejected'].includes(v.value.stage) && v.value.stage !== asset.stage) bad(res, 'Only a Marketing Manager can approve or reject an asset.', 403);
+  const manager = canManageCreative(req.user);
+  if (!manager && v.value.stage && ['approved', 'rejected'].includes(v.value.stage) && v.value.stage !== asset.stage) bad(res, 'Only a Marketing Manager or the Creative Director can approve or reject an asset.', 403);
   if (!manager && v.value.isFinal !== undefined && v.value.isFinal !== !!asset.isFinal) bad(res, MANAGER_ONLY_ASSET, 403);
   const before = { stage: asset.stage, isFinal: asset.isFinal, approvedAt: asset.approvedAt, shootId: asset.shootId ? idOf(asset.shootId) : null };
   let fields = { ...v.value };

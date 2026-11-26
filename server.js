@@ -54,6 +54,7 @@ import marketingRoutes from './routes/marketingRoutes.js';
 import marketingEodRoutes from './routes/marketingEodRoutes.js';
 import marketingTeamRoutes from './routes/marketingTeamRoutes.js';
 import marketingSocialsRoutes from './routes/marketingSocialsRoutes.js';
+import creativeRoutes from './routes/creativeRoutes.js';
 import marketingPortfolioRoutes from './routes/marketingPortfolioRoutes.js';
 import marketingLeadReportRoutes from './routes/marketingLeadReportRoutes.js';
 import marketingCampaignHubRoutes from './routes/marketingCampaignHubRoutes.js';
@@ -307,6 +308,7 @@ app.use('/api/marketing/reports', marketingReportsRoutes); // Saved + scheduled 
 app.use('/api/marketing/portfolio', marketingPortfolioRoutes); // Creative Portfolio: shoot planner, production calendar, shoot reports
 app.use('/api/work-footage', workFootageRoutes); // footage from works: the artists' Dropbox links / upload page → Creative Portfolio → Footage
 app.use('/api/marketing/socials', marketingSocialsRoutes); // Socials module: overview, calendar, assets, accounts, performance, reports
+app.use('/api/creative', creativeRoutes); // the Creative Director dashboard (shoots, posts, gallery approvals, creative tasks — read-only)
 app.use('/api/trials', trialRoutes);
 app.use('/api/consultations', consultationRoutes);       // Stylist video consultations (SRS v1.2)
 app.use('/api/stylist-clients', stylistClientRoutes);    // Stylist client files (Team N + Nizan)

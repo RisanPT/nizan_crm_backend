@@ -61,6 +61,13 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    // "Also Creative Director": keeps the person's own role (an artist keeps My Works) and adds the Creative Director dashboard plus
+    // the right to approve and run creative work in Marketing (shoots, posts, gallery assets, footage, creative tasks), never
+    // campaigns, budgets, Meta or reports. Only management sets it (utils/userAccess.js mayMarkCreativeDirector).
+    creativeDirector: {
+      type: Boolean,
+      default: false,
+    },
     // When false, bookings this user ENTERS are left out of every sales total
     // (dashboards, sales reports, Sales & Invoices). The bookings themselves,
     // accounts, invoices and GST are unaffected. Toggled in Settings → Users.

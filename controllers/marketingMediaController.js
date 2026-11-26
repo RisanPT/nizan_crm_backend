@@ -3,11 +3,14 @@ import { dropboxFileUrl, signMediaToken, verifyMediaToken } from '../utils/media
 import { dropboxFolderLink, folderZipUrl, innerPath, showableInApp } from '../utils/dropboxFolder.js';
 import { probeDropbox, streamDropboxFile } from '../services/mediaStream.js';
 import { dropboxEnabled } from '../services/dropbox.js';
+import { directLinkFor } from '../services/mediaDirect.js';
 import { readSharedFolder } from '../services/sharedFolder.js';
 
 // /api/marketing/media — playing the gallery's Dropbox videos through our own server (utils/mediaProxy.js, services/mediaStream.js).
 //   GET /link?url=<the Dropbox link>&probe=1   (logged in, the Marketing team — whoever opens the gallery) → a signed stream token, and
-//       with probe=1 whether Dropbox will send the file (else why not, in plain words).
+//       with probe=1 whether Dropbox will send the file (else why not, in plain words). When the file is in the Dropbox the CRM is
+//       connected to, also `direct: { url, until }` — a 4-hour link the player uses first, so the video never passes through our server
+//       (services/mediaDirect.js); the token stays as the fallback.
 //       With &path=/clip.mp4 and a FOLDER link: the file inside that folder (needs the server's Dropbox app — services/dropbox.js).
 //   GET /folder?url=<a Dropbox folder link>&path=  what is inside the folder (utils/dropboxFolder.js) — or, with no Dropbox app on the
 //       server, just how to open it (in Dropbox, or all of it as a .zip).
@@ -27,6 +30,29 @@ const folderFile = (url, p) => {
   return { url: f.url, path: inner, fileName };
 };
 
+/// The share link as Dropbox knows it (our raw=1 / dl= additions taken off) — what its metadata call is asked about.
+const sharedLinkOf = (url) => {
+  try {
+    const u = new URL(url);
+    u.searchParams.delete('raw');
+    u.searchParams.delete('dl');
+    return u.toString();
+  } catch {
+    return url;
+  }
+};
+
+/// With a direct link (the file is in the connected Dropbox — services/mediaDirect.js) the player streams straight from Dropbox; the
+/// relay token stays in the answer as the fallback. Dropbox has just said the file is there, so the probe through our server is skipped.
+const withDirect = async (out, linkUrl, path, fileName) => {
+  const direct = await directLinkFor(linkUrl, path, fileName);
+  if (direct) {
+    out.direct = direct;
+    return true;
+  }
+  return false;
+};
+
 // @route GET /api/marketing/media/link?url=&probe=1[&path=]
 const notSetUp = (res) => res.status(503).json({ code: 'not_set_up', message: 'Video playback through the server is not set up.' });
 
@@ -38,7 +64,8 @@ export const getMediaLink = async (req, res) => {
     if (!dropboxEnabled()) return res.status(409).json({ code: 'not_connected', message: 'Dropbox is not connected on this server, so files inside a folder cannot be opened here. Open the folder in Dropbox.' });
     const token = signMediaToken(f.url, { secret: secret(), path: f.path });
     const out = { token, path: `/marketing/media/stream/${token}`, fileName: f.fileName, ok: true };
-    if (String(req.query.probe ?? '') === '1') Object.assign(out, await probeDropbox({ url: f.url, path: f.path }, f.fileName));
+    const direct = await withDirect(out, f.url, f.path, f.fileName);
+    if (!direct && String(req.query.probe ?? '') === '1') Object.assign(out, await probeDropbox({ url: f.url, path: f.path }, f.fileName));
     return res.json(out);
   }
   const f = dropboxFileUrl(req.query.url);
@@ -46,7 +73,8 @@ export const getMediaLink = async (req, res) => {
   if (!secret()) return notSetUp(res);
   const token = signMediaToken(f.url, { secret: secret() });
   const out = { token, path: `/marketing/media/stream/${token}`, fileName: f.fileName, ok: true };
-  if (String(req.query.probe ?? '') === '1') Object.assign(out, await probeDropbox(f.url, f.fileName));
+  const direct = await withDirect(out, sharedLinkOf(f.url), null, f.fileName);
+  if (!direct && String(req.query.probe ?? '') === '1') Object.assign(out, await probeDropbox(f.url, f.fileName));
   res.json(out);
 };
 

@@ -145,7 +145,7 @@ export const LEADERSHIP_READ_OK_MOUNTS = [
   '/api', '/api/account-reports', '/api/accounting', '/api/addon-services', '/api/admin-expenses', '/api/app-clients',
   '/api/allocation', '/api/approvals', '/api/artist-payouts', '/api/artist-teams', '/api/assets', '/api/associate-works', '/api/attendances', '/api/auth', '/api/blocked-dates',
   '/api/booking-advances', '/api/bookings', '/api/budgets', '/api/cash-transactions', '/api/ceo', '/api/chat', '/api/client',
-  '/api/client/auth', '/api/collections', '/api/company-reports', '/api/consultations', '/api/content', '/api/countries', '/api/crm', '/api/customers',
+  '/api/client/auth', '/api/collections', '/api/company-reports', '/api/consultations', '/api/content', '/api/countries', '/api/creative', '/api/crm', '/api/customers',
   '/api/dashboard', '/api/decision-policy', '/api/decisions', '/api/departments', '/api/designations', '/api/districts', '/api/employee-assets', '/api/employees',
   '/api/engagement', '/api/enquiry-counts', '/api/expense-categories', '/api/expenses', '/api/fleet',
   '/api/fleet/availability', '/api/fleet/gps-km', '/api/food-allowances', '/api/fuel-expenses', '/api/fuel-prices', '/api/geo',
@@ -156,5 +156,7 @@ export const LEADERSHIP_READ_OK_MOUNTS = [
   '/api/reimbursements', '/api/reports', '/api/reviews', '/api/sales-reports', '/api/sales-returns', '/api/sales-targets',
   '/api/shifts', '/api/slots', '/api/states', '/api/strategic-vision', '/api/stylist-clients', '/api/subscriptions',
   '/api/tax-filings', '/api/tickets', '/api/time-blocks', '/api/timebox', '/api/timesheets', '/api/travel',
-  '/api/trial-packages', '/api/trials', '/api/upload', '/api/vehicles', '/api/whatsapp', '/api/work-footage', '/api/work-profit', '/api/zones',
+  '/api/trial-packages', '/api/trials', '/api/upload', '/api/vehicles',
+  // the public website (no login) and its content editor: no pay or bank data, so leadership may look (never write)
+  '/api/website/admin', '/api/website/public', '/api/whatsapp', '/api/work-footage', '/api/work-profit', '/api/zones',
 ];

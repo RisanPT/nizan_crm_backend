@@ -14,7 +14,7 @@ import Attendance from '../models/Attendance.js';
 import { MarketingTeamMember, MarketingMemberRole } from '../models/MarketingEod.js';
 import LeaveRequest from '../models/LeaveRequest.js';
 import User from '../models/User.js';
-import { toDateStr, isManagerOrAdmin, canViewTeam, findOwnMember } from './marketingEodController.js';
+import { toDateStr, canManageCreative, isCreativeDirector, canViewTeam, findOwnMember } from './marketingEodController.js';
 import { isDay } from '../utils/marketingActivityInput.js';
 import { cleanShootInput, defaultMilestoneDates } from '../utils/marketingPortfolioInput.js';
 import * as P from '../utils/marketingPortfolioStats.js';
@@ -100,7 +100,7 @@ const loadAssetsFor = async (shoots) => {
 
 /** Whose logged work a viewer may see: a manager (or management) the whole team's, a member only their own. → a query part, or null. */
 const logScope = async (user) => {
-  if (canViewTeam(user)) return { scope: 'team', query: {} };
+  if (canViewTeam(user) || isCreativeDirector(user)) return { scope: 'team', query: {} }; // the Creative Director sees the team's work on shoots too
   const own = await findOwnMember(user);
   return own ? { scope: 'own', query: { memberId: own._id } } : { scope: 'own', query: null };
 };
@@ -441,7 +441,7 @@ export const saveLogistics = asyncHandler(async (req, res) => {
 });
 
 export const deleteShoot = asyncHandler(async (req, res) => {
-  if (!isManagerOrAdmin(req.user)) bad(res, 'Only a Marketing Manager can delete a shoot.', 403);
+  if (!canManageCreative(req.user)) bad(res, 'Only a Marketing Manager or the Creative Director can delete a shoot.', 403);
   if (!mongoose.isValidObjectId(req.params.id)) bad(res, 'That shoot was not found.', 404);
   const shoot = await MarketingShoot.findById(req.params.id);
   if (!shoot) bad(res, 'That shoot was not found.', 404);
@@ -530,7 +530,10 @@ export const getCalendar = asyncHandler(async (req, res) => {
   const range = readRange(req, res);
   const day = req.query.day && isDay(req.query.day) ? req.query.day : range.today >= range.from && range.today <= range.to ? range.today : range.from;
   const week = weekOf(range.today);
-  const shoots = await MarketingShoot.find({ shootDate: { $gte: range.from < week.from ? range.from : week.from, $lte: range.to > week.to ? range.to : week.to } }).lean();
+  // the month on screen, this week, and the day picked — which may be outside both (its crew availability needs its shoots)
+  const lo = [range.from, week.from, day].reduce((a, b) => (b < a ? b : a));
+  const hi = [range.to, week.to, day].reduce((a, b) => (b > a ? b : a));
+  const shoots = await MarketingShoot.find({ shootDate: { $gte: lo, $lte: hi } }).lean();
   const inRange = P.shootsInRange(shoots, range).sort((a, b) => (a.shootDate < b.shootDate ? -1 : 1));
   const upcomingAll = await MarketingShoot.find({ shootDate: { $gt: range.today }, status: { $nin: ['cancelled', 'completed'] }, ...(range.brand === 'all' ? {} : { brand: range.brand }) }).sort({ shootDate: 1 }).limit(5).lean();
   const todays = shoots.filter((s) => s.shootDate === range.today && s.status !== 'cancelled' && (range.brand === 'all' || s.brand === range.brand));

@@ -10,7 +10,10 @@ import {
   accessSummary,
   isOwnerHead,
   isProjectManager,
+  departmentsLedBy,
 } from '../utils/projectAccess.js';
+import { peopleChange, checkTeam, teamActivityLines, idList, idStr as personId, listNames } from '../utils/projectPeople.js';
+import { loadStaff, workOf, settleRemovals, notifyTeamChange } from '../services/projectTeam.js';
 import { projectProgress, departmentProgress } from '../utils/projectProgress.js';
 import { departmentsOf, normalizeDepartments, activeDepartmentNames, eqCI } from '../utils/projectDepartments.js';
 import { resolveUserDeptName } from '../utils/departmentScope.js';
@@ -199,6 +202,106 @@ export const getProjectById = async (req, res) => {
   }
 };
 
+// ── the people on a project ──────────────────────────────────────────────────
+// A change to the manager and/or the members (from the project form, "Edit team" or a new project): checked (utils/projectPeople.js),
+// someone with work on the project is only taken off once the caller confirms (their open tasks can be unassigned; an HR placement
+// ends and HR is told), every change is a line of the project's activity, and the people concerned are told.
+// Returns { error, status, code, extra } | { none: true, members } | { apply(doc, user), after(doc, user), change }.
+const prepareTeamChange = async (project, body, { owner, departments, leadOf = null, proposerId = '', fresh = false }) => {
+  const sentManager = body.managerId !== undefined;
+  const sentMembers = body.members !== undefined;
+  if (!sentManager && !sentMembers) return { none: true };
+  const before = fresh ? {} : { managerId: personId(project.managerId), members: idList(project.members) };
+  const after = {
+    managerId: sentManager ? personId(body.managerId) : personId(project.managerId),
+    members: sentMembers ? idList(body.members) : idList(project.members),
+  };
+  const change = peopleChange({ before, after });
+  if (!change.managerChanged && !change.added.length && !change.removed.length) return { none: true, members: change.members };
+
+  const staff = await loadStaff();
+  const names = new Map(staff.map((e) => [personId(e._id), e.name]));
+  const nameOf = (id) => names.get(id) || 'Someone';
+  const verdict = checkTeam({ employees: staff, owner, departments, change, leadOf, proposerId });
+  if (verdict.error) return { error: verdict.error, status: verdict.status, code: verdict.code };
+
+  // someone taken off who still has work here: ask first
+  const work = fresh ? [] : await workOf(project._id, change.removed);
+  const confirmed = body.confirmRemoval === true || body.confirmRemoval === 'true';
+  if (work.length && !confirmed) {
+    const people = work.map((w) => ({ ...w, name: nameOf(w.id) }));
+    return {
+      status: 409,
+      code: 'TEAM_REMOVAL_HAS_WORK',
+      error: `${listNames(people.map((p) => p.name))} still ${people.length === 1 ? 'has' : 'have'} work on this project. Take ${people.length === 1 ? 'them' : 'them'} off anyway?`,
+      extra: { people },
+    };
+  }
+  const unassignTasks = body.unassignTasks === true || body.unassignTasks === 'true';
+  const expected = {
+    unassigned: unassignTasks ? work.reduce((n, w) => n + w.openTasks, 0) : 0,
+    ended: work.filter((w) => w.placement).length,
+  };
+
+  return {
+    change,
+    apply(doc, user) {
+      doc.managerId = change.to || null;
+      doc.members = change.members;
+      // (a new project's people are on its team card; the activity records the changes after it was created)
+      if (!fresh) for (const line of teamActivityLines(change, nameOf, expected)) recordActivity(doc, 'team', line, user);
+    },
+    async after(doc, user) {
+      const settled = fresh ? {} : await settleRemovals(doc._id, change.removed, { unassignTasks });
+      await notifyTeamChange(doc, change, user, nameOf, settled);
+    },
+  };
+};
+
+const failTeam = (res, team) => fail(res, team.status ?? 400, team.error, { code: team.code, ...(team.extra ?? {}) });
+
+/// The departments that work on a project (the owner included, the declined left out), by name.
+const workingDepartments = (departments) => departments.filter((d) => d.status !== 'declined').map((d) => d.name);
+
+// @desc    Change who is on a project: its manager and its team members
+// @route   PUT /api/projects/:id/team   { managerId?, members?, confirmRemoval?, unassignTasks? }
+// Those who run the project change anything; the lead of a department on it (not running it) adds and takes off that
+// department's people only, and cannot change the manager.
+export const updateProjectTeam = async (req, res) => {
+  try {
+    const found = await loadOne(req.params.id);
+    if (!found) return fail(res, 404, 'Project not found');
+    const existing = found.doc;
+    const ctx = await loadAccessContext(req.user);
+    const manage = !ctx.viewOnly && (ctx.full || isProjectManager(existing, ctx) || isOwnerHead(existing, ctx));
+    const leads = manage || ctx.viewOnly ? [] : departmentsLedBy(existing, ctx, { acceptedOnly: true });
+    if (!manage && !leads.length) {
+      return fail(res, 403, `Only the project manager, the head of ${existing.targetDepartment} or the lead of a department on the project can change its team.`);
+    }
+    if (existing.status === 'cancelled') return fail(res, 409, 'This project is cancelled, so its team no longer changes.');
+
+    const team = await prepareTeamChange(existing, req.body, {
+      owner: existing.targetDepartment,
+      departments: workingDepartments(departmentsOf(existing)),
+      leadOf: manage ? null : leads,
+    });
+    if (team.error) return failTeam(res, team);
+    if (!team.none) {
+      team.apply(existing, req.user);
+      await existing.save();
+      await team.after(existing, req.user);
+    } else if (team.members && req.body.members !== undefined) {
+      // nothing changed, but the members no longer list the manager twice
+      existing.members = team.members;
+      await existing.save();
+    }
+    const fresh = await loadOne(existing._id);
+    res.json(await decorateOne(fresh.doc, fresh.tasks, ctx));
+  } catch (error) {
+    res.status(error.name === 'ValidationError' ? 400 : 500).json({ message: error.message });
+  }
+};
+
 export const createProject = async (req, res) => {
   try {
     const ctx = await loadAccessContext(req.user);
@@ -251,8 +354,21 @@ export const createProject = async (req, res) => {
       actorDept,
     });
 
+    // the people: the manager from the owning department (a proposer manages their own proposal), the team from its departments
+    const team = await prepareTeamChange({}, { managerId: body.managerId, members: body.members ?? [] }, {
+      owner: canonicalOwner,
+      departments: workingDepartments(departments),
+      proposerId: body.status === 'proposed' ? ctx.empId : '',
+      fresh: true,
+    });
+    if (team.error) return failTeam(res, team);
+    delete body.managerId;
+    delete body.members;
+
     const project = await Project.create({
       ...body,
+      managerId: team.change?.to ?? null,
+      members: team.change?.members ?? [],
       targetDepartment: canonicalOwner,
       departments,
       editMode: body.editMode === 'open' ? 'open' : 'managed', // new projects: the manager decides
@@ -260,6 +376,7 @@ export const createProject = async (req, res) => {
     });
 
     recordActivity(project, 'cost', `Estimated cost ${money(project.budget)} sent to the finance head for approval`, req.user);
+    if (team.apply) team.apply(project, req.user);
     await project.save();
 
     // A proposal goes to its department head first; the finance head hears about it once the head has approved.
@@ -273,6 +390,8 @@ export const createProject = async (req, res) => {
       }
     } else await notifyCostRequest(project, req.user);
     await notifyInvited(project, added, req.user);
+    // the manager (unless they made it themselves) and the team hear they are on it
+    if (team.after) await team.after(project, req.user);
 
     const found = await loadOne(project._id);
     res.status(201).json(await decorateOne(found.doc, found.tasks, ctx));
@@ -352,14 +471,23 @@ export const updateProject = async (req, res) => {
       added = next.added;
     }
 
+    // the people: the same checks as "Edit team" (someone with work here is taken off only once the caller confirms)
+    const team = await prepareTeamChange(existing, req.body, { owner, departments: workingDepartments(departments) });
+    if (team.error) return failTeam(res, team);
+    delete changes.managerId;
+    delete changes.members;
+
     const wasStatus = existing.status;
     existing.set({ ...changes, targetDepartment: owner, departments });
     if (changes.status && changes.status !== wasStatus) {
       recordActivity(existing, 'status', `Project moved to ${statusLabel(changes.status)}`, req.user);
     }
+    if (team.apply) team.apply(existing, req.user);
+    else if (team.members && req.body.members !== undefined) existing.members = team.members;
     await existing.save();
 
     await notifyInvited(existing, added, req.user);
+    if (team.after) await team.after(existing, req.user);
     const fresh = await loadOne(existing._id);
     res.json(await decorateOne(fresh.doc, fresh.tasks, ctx));
   } catch (error) {

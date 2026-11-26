@@ -12,7 +12,7 @@ import { transporter, sendMail } from '../utils/mailer.js';
 import {
   loginEmailFor, loginIdOf, expiryFromDay, loginExpired, canReuseDriverAccount, phoneDigits, EXPIRED_MESSAGE,
 } from '../utils/driverLogin.js';
-import { canManageUsers, authorizeUserChange, mayGiveRole, mayMarkDepartmentHead, roleGrantRefusal, isAdminOnlyRole } from '../utils/userAccess.js';
+import { canManageUsers, authorizeUserChange, mayGiveRole, mayMarkDepartmentHead, mayMarkCreativeDirector, roleGrantRefusal, isAdminOnlyRole } from '../utils/userAccess.js';
 import { LEADERSHIP_ROLES } from '../utils/leadership.js';
 import { logChange } from '../utils/audit.js';
 
@@ -59,6 +59,7 @@ const toAuthResponse = async (user) => ({
     inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
     artistHead: user.artistHead ?? false,
+    creativeDirector: user.creativeDirector ?? false,
     countInSalesTotals: user.countInSalesTotals !== false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
@@ -112,6 +113,7 @@ export const getMe = async (req, res) => {
       inventoryManage: req.user.inventoryManage ?? false,
       isDepartmentHead: req.user.isDepartmentHead ?? false,
       artistHead: req.user.artistHead ?? false,
+      creativeDirector: req.user.creativeDirector ?? false,
       managedBy: req.user.managedBy?.toString() ?? null,
       employeeId: req.user.employeeId?.toString() ?? null,
       departmentId: req.user.departmentId?.toString() ?? null,
@@ -155,6 +157,7 @@ export const getUsers = async (req, res) => {
       inventoryManage: u.inventoryManage ?? false,
       isDepartmentHead: u.isDepartmentHead ?? false,
       artistHead: u.artistHead ?? false,
+      creativeDirector: u.creativeDirector ?? false,
       countInSalesTotals: u.countInSalesTotals !== false,
       managedBy: u.managedBy?.toString() ?? null,
       employeeId: u.employeeId?.toString() ?? null,
@@ -197,6 +200,7 @@ export const getUsers = async (req, res) => {
     inventoryManage: u.inventoryManage ?? false,
     isDepartmentHead: u.isDepartmentHead ?? false,
     artistHead: u.artistHead ?? false,
+    creativeDirector: u.creativeDirector ?? false,
     countInSalesTotals: u.countInSalesTotals !== false,
     managedBy: u.managedBy?.toString() ?? null,
     employeeId: u.employeeId?.toString() ?? null,
@@ -303,6 +307,7 @@ export const createUser = async (req, res) => {
     // a department head is named by management (a head never makes another head)
     isDepartmentHead: mayMarkDepartmentHead(req.user) && Boolean(req.body.isDepartmentHead),
     artistHead: Boolean(req.body.artistHead),
+    creativeDirector: mayMarkCreativeDirector(req.user) && Boolean(req.body.creativeDirector),
     countInSalesTotals: req.body.countInSalesTotals !== false,
     departmentId: req.body.departmentId || null,
     managedBy: isDepartmentHeadReq && !isFullAccess ? req.user._id : null,
@@ -330,6 +335,7 @@ export const createUser = async (req, res) => {
     inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
     artistHead: user.artistHead ?? false,
+    creativeDirector: user.creativeDirector ?? false,
     countInSalesTotals: user.countInSalesTotals !== false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,
@@ -523,6 +529,9 @@ export const updateUser = async (req, res) => {
   if (req.body.artistHead !== undefined) {
     user.artistHead = Boolean(req.body.artistHead);
   }
+  if (req.body.creativeDirector !== undefined && mayMarkCreativeDirector(req.user)) {
+    user.creativeDirector = Boolean(req.body.creativeDirector);
+  }
   if (req.body.countInSalesTotals !== undefined) {
     user.countInSalesTotals = req.body.countInSalesTotals !== false;
     // Sales totals read this flag through a short cache — refresh it now.
@@ -573,6 +582,7 @@ export const updateUser = async (req, res) => {
     inventoryManage: user.inventoryManage ?? false,
     isDepartmentHead: user.isDepartmentHead ?? false,
     artistHead: user.artistHead ?? false,
+    creativeDirector: user.creativeDirector ?? false,
     countInSalesTotals: user.countInSalesTotals !== false,
     managedBy: user.managedBy?.toString() ?? null,
     employeeId: user.employeeId?.toString() ?? null,

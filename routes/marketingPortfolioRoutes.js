@@ -4,7 +4,7 @@ import { MAX_PDF_BYTES } from '../utils/shootBoard.js';
 import asyncHandler from 'express-async-handler';
 import { protect } from '../middleware/authMiddleware.js';
 import { attachMarketingAccess } from '../controllers/marketingEodController.js';
-import { canManageMarketing } from '../controllers/contentController.js';
+import { canEnterCreative } from '../controllers/contentController.js';
 import {
   addMoodboard, renameMoodboardItem, removeMoodboard, addCameraRefs, renameCameraRef, removeCameraRef, saveLogistics,
   tickChecklist,
@@ -36,7 +36,7 @@ router.use(protect);
 router.use(attachMarketingAccess);
 router.use(
   asyncHandler(async (req, res, next) => {
-    if (await canManageMarketing(req.user)) return next();
+    if (await canEnterCreative(req.user)) return next(); // Marketing, or the Creative Director
     res.status(403);
     throw new Error('Only the Marketing team can open the Creative Portfolio.');
   }),

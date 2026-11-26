@@ -47,6 +47,8 @@ export const NOTIFICATION_TYPES = {
   // Company Projects: a department invited to a project / its answer, a staff
   // proposal waiting for approval / the decision.
   PROJECT_INVITE: 'project_invite',
+  // made a project's manager, added to its team, or taken off it
+  PROJECT_TEAM: 'project_team',
   PROJECT_RESPONSE: 'project_response',
   PROJECT_PROPOSAL: 'project_proposal',
   PROJECT_DECISION: 'project_decision',

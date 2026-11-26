@@ -15,6 +15,7 @@ import {
   getPendingCosts,
   getProjectSpend,
   getChargeableProjects,
+  updateProjectTeam,
 } from '../controllers/projectController.js';
 import { createManpowerRequest, getProjectTeam } from '../controllers/manpowerController.js';
 import { protect } from '../middleware/authMiddleware.js';
@@ -39,6 +40,8 @@ router.get('/:id/spend', getProjectSpend);
 // More people for a project (HR answers) and who is on it
 router.post('/:id/manpower', createManpowerRequest);
 router.get('/:id/team', getProjectTeam);
+// who is on it: the manager and the team members ("Edit team")
+router.put('/:id/team', updateProjectTeam);
 router.post('/:id/cost/decision', decideCost);
 router.post('/:id/approve', approveProject);
 router.post('/:id/reject', rejectProject);

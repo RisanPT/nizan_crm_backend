@@ -70,6 +70,9 @@ const check = async (name, fn) => {
 
 // ── people ────────────────────────────────────────────────────────────────────
 const today = istDay(new Date());
+// The lists and the calendar show the current MONTH unless told otherwise — a shoot a few days ahead falls in the next month near the
+// end of one, so the counts here are read over a window around today instead (the default month has its own check below).
+const WIN = `from=${addDays(today, -5)}&to=${addDays(today, 12)}`;
 const dow = new Date(`${today}T00:00:00Z`).getUTCDay();
 await E.MarketingCalendarSetting.create({ weeklyOff: (dow + 3) % 7, standardHours: 8, editWindowDays: 2 });
 const month = today.slice(0, 7);
@@ -128,17 +131,17 @@ await pf('POST', '/shoots', boss, { title: 'Kerala Mehendi', brand: 'kerala', ca
 const cancelled = (await pf('POST', '/shoots', boss, { title: 'Cancelled shoot', shootDate: today })).body;
 await pf('PUT', `/shoots/${cancelled.id}`, boss, { status: 'cancelled' });
 await check('the KPI strip counts by where each shoot is, cancelled ones nowhere; brand and search narrow the list', async () => {
-  const r = (await pf('GET', '/shoots', preethi)).body;
+  const r = (await pf('GET', `/shoots?${WIN}`, preethi)).body;
   assert.equal(r.counts.total, 3);
   assert.equal(r.counts.planned, 3);
   assert.equal(r.counts.inProduction, 0);
   assert.equal(r.total, 3);
   assert.deepEqual(r.items.map((s) => s.title), ['Bridal Transformation – Nov', 'Kerala Mehendi', 'Party Makeup Series'], 'soonest first');
-  assert.equal((await pf('GET', '/shoots?brand=kerala', preethi)).body.items.length, 1);
-  assert.equal((await pf('GET', '/shoots?q=party', preethi)).body.items.length, 1);
-  assert.equal((await pf('GET', '/shoots?q=bridal', preethi)).body.items.length, 2, 'search reaches the category');
-  assert.equal((await pf('GET', '/shoots?q=' + encodeURIComponent('.*'), preethi)).body.items.length, 0, 'a regex in the search box is text');
-  const page = (await pf('GET', '/shoots?limit=2&page=2', preethi)).body;
+  assert.equal((await pf('GET', `/shoots?${WIN}&brand=kerala`, preethi)).body.items.length, 1);
+  assert.equal((await pf('GET', `/shoots?${WIN}&q=party`, preethi)).body.items.length, 1);
+  assert.equal((await pf('GET', `/shoots?${WIN}&q=bridal`, preethi)).body.items.length, 2, 'search reaches the category');
+  assert.equal((await pf('GET', `/shoots?${WIN}&q=` + encodeURIComponent('.*'), preethi)).body.items.length, 0, 'a regex in the search box is text');
+  const page = (await pf('GET', `/shoots?${WIN}&limit=2&page=2`, preethi)).body;
   assert.equal(page.items.length, 1);
   assert.equal(page.total, 3);
 });
@@ -162,11 +165,11 @@ await check('a log of production work moves it on; the planner, calendar load an
   const prod = await log(ashique, { shootId: bridal.id, shootStage: 'production', status: 'in_progress', workedOn: 'On set' });
   assert.equal(prod.status, 201, prod.text);
   assert.equal((await pf('GET', `/shoots/${bridal.id}`, preethi)).body.status, 'in_production');
-  const list = (await pf('GET', '/shoots', preethi)).body;
+  const list = (await pf('GET', `/shoots?${WIN}`, preethi)).body;
   assert.equal(list.counts.inProduction, 1);
   assert.equal(list.counts.planned, 2);
   assert.equal(list.items.find((s) => s.id === bridal.id).status, 'in_production');
-  const cal = (await pf('GET', '/calendar', preethi)).body;
+  const cal = (await pf('GET', `/calendar?${WIN}`, preethi)).body;
   assert.equal(cal.load.rows.find((r) => r.key === 'in_production').count, 1);
   assert.equal(cal.counts.inProduction, 1);
 });
@@ -178,7 +181,7 @@ await check('deleting the completing log takes the milestone back; moving a log 
   assert.equal(d.progress, 20, 'back to the brief only');
   assert.equal(d.status, 'in_production', 'the phase never moves backwards on its own');
   // move the production log to another shoot
-  const other = (await pf('GET', '/shoots?q=party', preethi)).body.items[0];
+  const other = (await pf('GET', `/shoots?${WIN}&q=party`, preethi)).body.items[0];
   const prodLog = await Activity.findOne({ shootId: bridal.id, shootStage: 'production' }).lean();
   const moved = await call('PUT', `/team/activities/${prodLog._id}`, ashique, { workedOn: 'On set', kind: 'shoot', entryDate: prodLog.entryDate, timeSpentMinutes: 60, status: 'in_progress', shootId: other.id, shootStage: 'production' });
   assert.equal(moved.status, 200, moved.text);
@@ -251,13 +254,15 @@ await check('delivered outputs are approved or final assets by kind; progress of
 console.log('\n— Production Calendar —');
 await check('the calendar lists the month\'s shoots, today\'s productions with their milestones, and what is upcoming', async () => {
   const c = (await pf('GET', '/calendar', preethi)).body;
-  assert.equal(c.counts.total, 3);
+  // the default view is this month: the three live shoots (today, +1, +2 days) that fall in it — all three except near a month's end
+  const inMonth = [today, addDays(today, 1), addDays(today, 2)].filter((d) => d.slice(0, 7) === today.slice(0, 7)).length;
+  assert.equal(c.counts.total, inMonth);
   assert.equal(c.today.length, 1);
   assert.equal(c.today[0].title, 'Bridal Transformation – Nov');
   assert.equal(c.today[0].milestones.length, 5);
   assert.equal(c.today[0].milestones[0].doneAt !== null, true);
   assert.deepEqual(c.upcoming.map((s) => s.title), ['Kerala Mehendi', 'Party Makeup Series']);
-  assert.equal(c.load.total, 3);
+  assert.equal(c.load.total, inMonth);
   assert.equal((await pf('GET', '/calendar?brand=kerala', preethi)).body.upcoming.length, 1);
 });
 await check('crew availability: people on the day\'s shoot or on leave are not available', async () => {
@@ -276,16 +281,19 @@ await check('crew availability: people on the day\'s shoot or on leave are not a
 console.log('\n— Shoot Reports —');
 await check('KPIs, the month bars, the output split and the rows agree with the shoots and assets', async () => {
   await pf('PUT', `/shoots/${bridal.id}`, boss, { status: 'completed' });
-  const r = (await pf('GET', '/reports', preethi)).body;
+  const r = (await pf('GET', `/reports?${WIN}`, preethi)).body;
   assert.equal(r.kpis.shoots, 3);
   assert.equal(r.kpis.completed, 1);
   assert.equal(r.kpis.outputs, 5);
   assert.equal(r.kpis.footageGb, 4);
   assert.equal(r.kpis.turnaround, 0);
-  const thisMonth = r.monthly[r.monthly.length - 1];
-  assert.equal(thisMonth.month, today.slice(0, 7));
+  // this month's bar (the bars run to the window's end, which may be next month): the bridal shoot's 5, the party shoot's reel (in
+  // 2 days) and the mehendi's 4 stills (tomorrow) — those of them that are still this month
+  const sameMonth = (d) => d.slice(0, 7) === today.slice(0, 7);
+  const thisMonth = r.monthly.find((m) => m.month === today.slice(0, 7));
+  assert.ok(thisMonth, 'a bar for this month');
   assert.equal(thisMonth.delivered, 5);
-  assert.equal(thisMonth.planned, 5 + 1 + 4);
+  assert.equal(thisMonth.planned, 5 + (sameMonth(addDays(today, 2)) ? 1 : 0) + (sameMonth(addDays(today, 1)) ? 4 : 0));
   assert.deepEqual(r.distribution.rows.map((x) => [x.key, x.count]), [['reels', 2], ['stills', 3]]);
   const row = r.rows.find((x) => x.id === bridal.id);
   assert.equal(row.deliveredTotal, 5);
@@ -294,20 +302,20 @@ await check('KPIs, the month bars, the output split and the rows agree with the 
   assert.equal(r.filters.all, 3);
 });
 await check('the report list filters (completed / in production / delayed), searches and pages', async () => {
-  const done = (await pf('GET', '/reports?filter=completed', preethi)).body;
+  const done = (await pf('GET', `/reports?${WIN}&filter=completed`, preethi)).body;
   assert.deepEqual(done.rows.map((x) => x.title), ['Bridal Transformation – Nov']);
-  const open = (await pf('GET', '/reports?filter=in_production', preethi)).body;
+  const open = (await pf('GET', `/reports?${WIN}&filter=in_production`, preethi)).body;
   assert.ok(open.rows.every((x) => ['in_production', 'post_production', 'pre_production'].includes(x.status)));
   // a shoot whose pre-production date has gone by without the work: delayed
   const late = (await pf('POST', '/shoots', boss, { title: 'Late shoot', shootDate: addDays(today, 3), milestones: [{ key: 'pre_production', date: addDays(today, -1) }] })).body;
-  const delayed = (await pf('GET', '/reports?filter=delayed', preethi)).body;
+  const delayed = (await pf('GET', `/reports?${WIN}&filter=delayed`, preethi)).body;
   const mehendi = (await Shoot.findOne({ title: 'Kerala Mehendi' }).lean())._id.toString();
   // Kerala Mehendi is tomorrow, but its pre-production was planned for yesterday and nothing was logged: that is a delay too
   assert.deepEqual(delayed.rows.map((x) => x.id).sort(), [late.id, mehendi].sort());
   assert.equal(delayed.filters.delayed, 2);
   assert.ok(!delayed.rows.some((x) => x.id === bridal.id), 'a completed shoot is never delayed');
-  assert.equal((await pf('GET', '/reports?q=party', preethi)).body.rows.length, 1);
-  assert.equal((await pf('GET', '/reports?limit=1&page=2', preethi)).body.rows.length, 1);
+  assert.equal((await pf('GET', `/reports?${WIN}&q=party`, preethi)).body.rows.length, 1);
+  assert.equal((await pf('GET', `/reports?${WIN}&limit=1&page=2`, preethi)).body.rows.length, 1);
   assert.equal((await pf('GET', '/reports?from=bad', preethi)).status, 400);
 });
 
@@ -326,7 +334,8 @@ await check('moving the date counts as a reschedule; completing a shoot marks di
   const back = await pf('PUT', `/shoots/${s.id}`, boss, { status: 'planned' });
   assert.equal(back.status, 200);
   assert.equal((await pf('GET', `/shoots/${s.id}`, boss)).body.milestones.find((m) => m.key === 'distribution').doneAt, null, 'taking it back reopens distribution');
-  assert.equal((await pf('GET', '/calendar', preethi)).body.counts.rescheduled, 1);
+  // (asked about the shoot's own day: today + 6 is next month near the end of one)
+  assert.equal((await pf('GET', `/calendar?from=${addDays(today, 6)}&to=${addDays(today, 6)}`, preethi)).body.counts.rescheduled, 1);
   assert.equal((await pf('PUT', '/shoots/64b7f0c2a1b2c3d4e5f60718', boss, { title: 'x y' })).status, 404);
   assert.equal((await pf('PUT', `/shoots/${s.id}`, boss, { endTime: '08:00', startTime: '09:00' })).status, 400);
 });

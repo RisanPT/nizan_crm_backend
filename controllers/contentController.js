@@ -19,6 +19,11 @@ export const canManageMarketing = async (u) => {
   }
 };
 
+// The creative screens (Socials posts and assets, the Creative Portfolio, the gallery, work footage) also open for the Creative Director
+// (User.creativeDirector), whose own role may have no Marketing permission at all (an artist). Campaigns, Meta, reports and
+// strategies keep canManageMarketing.
+export const canEnterCreative = async (u) => u?.creativeDirector === true || (await canManageMarketing(u));
+
 const STATUSES = ['idea', 'planned', 'in-progress', 'in-review', 'scheduled', 'published', 'cancelled'];
 const BRANDS = ['main', 'kerala'];
 const METRIC_KEYS = ['reach', 'impressions', 'views', 'likes', 'comments', 'reposts', 'shares', 'saves', 'linkClicks'];
@@ -71,7 +76,7 @@ const postLinks = async (b, current = null) => {
 
 // @route GET /api/content — list content, optionally within a [from,to] window.
 export const getContentItems = asyncHandler(async (req, res) => {
-  if (!(await canManageMarketing(req.user))) { res.status(403); throw new Error('Only marketing can view content'); }
+  if (!(await canEnterCreative(req.user))) { res.status(403); throw new Error('Only marketing can view content'); }
   const { from, to, status, platform, brand } = req.query;
   const q = {};
   if (from || to) {
@@ -92,7 +97,7 @@ export const getContentItems = asyncHandler(async (req, res) => {
 
 // @route POST /api/content
 export const createContentItem = asyncHandler(async (req, res) => {
-  if (!(await canManageMarketing(req.user))) { res.status(403); throw new Error('Only marketing can add content'); }
+  if (!(await canEnterCreative(req.user))) { res.status(403); throw new Error('Only marketing can add content'); }
   const b = req.body;
   if (!b.title || !String(b.title).trim()) { res.status(400); throw new Error('Title is required'); }
   if (!b.scheduledDate) { res.status(400); throw new Error('A scheduled date is required'); }
@@ -130,7 +135,7 @@ export const createContentItem = asyncHandler(async (req, res) => {
 
 // @route PUT /api/content/:id
 export const updateContentItem = asyncHandler(async (req, res) => {
-  if (!(await canManageMarketing(req.user))) { res.status(403); throw new Error('Only marketing can edit content'); }
+  if (!(await canEnterCreative(req.user))) { res.status(403); throw new Error('Only marketing can edit content'); }
   const item = await ContentItem.findById(req.params.id);
   if (!item) { res.status(404); throw new Error('Content not found'); }
   const b = req.body;
@@ -170,7 +175,7 @@ export const updateContentItem = asyncHandler(async (req, res) => {
 
 // @route DELETE /api/content/:id
 export const deleteContentItem = asyncHandler(async (req, res) => {
-  if (!(await canManageMarketing(req.user))) { res.status(403); throw new Error('Only marketing can delete content'); }
+  if (!(await canEnterCreative(req.user))) { res.status(403); throw new Error('Only marketing can delete content'); }
   const item = await ContentItem.findByIdAndDelete(req.params.id);
   if (!item) { res.status(404); throw new Error('Content not found'); }
   res.json({ message: 'Content deleted' });
@@ -178,7 +183,7 @@ export const deleteContentItem = asyncHandler(async (req, res) => {
 
 // @route GET /api/content/stats — dashboard counters.
 export const getContentStats = asyncHandler(async (req, res) => {
-  if (!(await canManageMarketing(req.user))) { res.status(403); throw new Error('Only marketing can view content stats'); }
+  if (!(await canEnterCreative(req.user))) { res.status(403); throw new Error('Only marketing can view content stats'); }
   const now = new Date();
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
   const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);

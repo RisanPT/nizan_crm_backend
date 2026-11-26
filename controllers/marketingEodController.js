@@ -40,6 +40,13 @@ export const isManagerOrAdmin = (user) => {
   return user.isMarketingManager === true;
 };
 
+// The Creative Director (User.creativeDirector, "Also Creative Director" in Settings → Users): approves and runs the CREATIVE work —
+// shoots, posts, gallery assets, footage and creative tasks — like a Marketing Manager, but is never a manager for campaigns,
+// budgets, Meta, reports, attendance or EOD setup. So these checks sit beside isManagerOrAdmin and are used only where the work is
+// creative; isManagerOrAdmin itself is unchanged.
+export const isCreativeDirector = (user) => user?.creativeDirector === true;
+export const canManageCreative = (user) => isManagerOrAdmin(user) || isCreativeDirector(user);
+
 // Route middleware: flags the user as a Marketing Manager when their team-member
 // record currently holds the "Marketing Manager" role, or they head the
 // Marketing department. Keeps the sync access checks above data-driven.
@@ -2154,6 +2161,9 @@ export const getMyAccess = async (req, res) => {
     res.json({
       isManager: isManagerOrAdmin(req.user),
       canViewTeam: canViewTeam(req.user),
+      // the creative side (approve assets and posts, assign creative tasks): Marketing managers and the Creative Director
+      canManageCreative: canManageCreative(req.user),
+      isCreativeDirector: isCreativeDirector(req.user),
       memberId: own ? own._id : null,
     });
   } catch (error) {

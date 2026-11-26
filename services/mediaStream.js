@@ -11,9 +11,14 @@ import { fetchSharedLinkFile, missingScopeOf } from './dropbox.js';
 
 // PLAYING A DROPBOX VIDEO THROUGH OUR SERVER (the rules: utils/mediaProxy.js). Fetches the file from Dropbox — following its redirects
 // only while they stay on Dropbox's hosts — and hands it on with byte ranges (a video player asks for pieces), the right type, and a
-// plain reason when Dropbox refuses. A copy is kept on disk (MEDIA_CACHE_DIR, at most MEDIA_CACHE_MAX_MB, default 1024; 0 = none),
+// plain reason when Dropbox refuses. A copy is kept on disk (MEDIA_CACHE_DIR, at most MEDIA_CACHE_MAX_MB, default 256; 0 = none),
 // the least recently played going first, so a video the team keeps opening is fetched from Dropbox once — Dropbox pauses a shared link
 // that is used too much.
+//
+// KIND TO A SMALL SERVER (the production one has 1 GB of memory and a few GB of disk): one copy is made at a time (MEDIA_CACHE_FILLS,
+// default 1); no copy is made while the disk would be left with less than MEDIA_CACHE_MIN_FREE_MB free (default 1536); and at most
+// MEDIA_MAX_STREAMS videos (default 6) are passed on from Dropbox at once — beyond that the player is told "busy" (and tries its other
+// routes). Most of the company's own videos do not come here at all: they play straight from Dropbox (services/mediaDirect.js).
 //
 // A SOURCE is a Dropbox file address (a string), or { url, path }: a file inside a shared FOLDER link (an artist's footage folder), fetched
 // through the Dropbox app (services/dropbox.js) — the folder link alone has no address for each file.
@@ -21,7 +26,14 @@ import { fetchSharedLinkFile, missingScopeOf } from './dropbox.js';
 const MAX_REDIRECTS = 5;
 const HEADERS_TIMEOUT_MS = 20_000;
 const PROBE_TTL_MS = 10 * 60 * 1000;
-const MAX_FILLS = 2; // copies being made at once
+const envNumber = (k, fallback) => {
+  const n = Number.parseFloat(process.env[k] ?? '');
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+};
+const maxFills = () => Math.floor(envNumber('MEDIA_CACHE_FILLS', 1)); // copies being made at once
+const minFreeBytes = () => envNumber('MEDIA_CACHE_MIN_FREE_MB', 1536) * 1024 * 1024;
+const maxStreams = () => Math.floor(envNumber('MEDIA_MAX_STREAMS', 6));
+let streaming = 0; // videos being passed on from Dropbox right now
 
 // tests replace the network
 let fetchImpl = (...a) => fetch(...a);
@@ -31,7 +43,7 @@ export const _setMediaFetch = (fn) => {
 
 const cacheDir = () => process.env.MEDIA_CACHE_DIR || path.join(os.tmpdir(), 'nizan-media-cache');
 const cacheCap = () => {
-  const mb = Number.parseFloat(process.env.MEDIA_CACHE_MAX_MB ?? '1024');
+  const mb = Number.parseFloat(process.env.MEDIA_CACHE_MAX_MB ?? '256');
   return Number.isFinite(mb) && mb > 0 ? Math.floor(mb * 1024 * 1024) : 0;
 };
 /// One file may take at most half the cache, and never more than 400 MB.
@@ -187,17 +199,28 @@ export const evictMediaCache = async () => {
 };
 
 /// Fetches the whole of [src] (a source) into the cache (once at a time per file, a few files at once; too big a file is not kept).
+/// Would the disk keep at least MEDIA_CACHE_MIN_FREE_MB free after [bytes] more? (Unknown — an older Node without statfs — counts as yes.)
+const diskHasRoomFor = async (bytes) => {
+  try {
+    const st = await fsp.statfs(cacheDir());
+    return Number(st.bavail) * Number(st.bsize) - bytes >= minFreeBytes();
+  } catch {
+    return true;
+  }
+};
+
 export const fillMediaCache = (src, fileName) => {
   if (!cacheCap()) return null;
   const key = keyOf(src);
   if (filling.has(key)) return filling.get(key);
-  if (filling.size >= MAX_FILLS) return null;
+  if (filling.size >= maxFills()) return null;
   const job = (async () => {
     const { data, meta } = filesOf(key);
     const part = `${data}.${process.pid}.part`;
     try {
       if (await readMeta(key)) return;
       await fsp.mkdir(cacheDir(), { recursive: true });
+      if (!(await diskHasRoomFor(0))) return; // the disk is getting full: play it, keep no copy
       const { res, problem } = await fetchSource(src);
       // only the file itself is kept (not a refusal, not a page) — read from the headers, the body is the file
       if (problem || !res.ok || String(res.headers.get('content-type') ?? '').toLowerCase().startsWith('text/html')) {
@@ -206,7 +229,7 @@ export const fillMediaCache = (src, fileName) => {
       }
       const max = fileCap();
       const declared = Number(res.headers.get('content-length')) || 0;
-      if (declared > max) {
+      if (declared > max || !(await diskHasRoomFor(declared))) {
         await res.body?.cancel().catch(() => {});
         return;
       }
@@ -252,6 +275,21 @@ export const streamDropboxFile = async (req, res, src, fileName) => {
     });
   }
 
+  // at most MEDIA_MAX_STREAMS videos are passed on from Dropbox at once (a small server's network and processor)
+  if (streaming >= maxStreams()) {
+    res.set('Retry-After', '20');
+    return res.status(503).json({ code: 'busy', message: MEDIA_PROBLEMS.busy });
+  }
+  streaming += 1;
+  try {
+    return await passOn(req, res, src, fileName);
+  } finally {
+    streaming -= 1;
+  }
+};
+
+/// The video from Dropbox to the player, piece by piece (the range asked for passed on), while a copy is made for next time.
+const passOn = async (req, res, src, fileName) => {
   const ac = new AbortController();
   req.on('close', () => ac.abort());
   const head = req.method === 'HEAD';
@@ -278,3 +316,5 @@ export const streamDropboxFile = async (req, res, src, fileName) => {
     // the player stopped listening (seeking, closing) — nothing to do
   }
 };
+
+export const _mediaStreaming = () => streaming;

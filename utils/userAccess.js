@@ -81,6 +81,10 @@ export const mayGiveRole = (requester, role) => {
 /// approvals and HR records, so a head never hands it on. (Only Settings → Users, an administrator's screen, offers it.)
 export const mayMarkDepartmentHead = (requester) => requesterKind(requester).full;
 
+/// May [requester] make someone the Creative Director (User.creativeDirector)? Management only, like a department head: the flag
+/// lets its holder approve the team's creative work, so no head or HR login hands it on.
+export const mayMarkCreativeDirector = (requester) => requesterKind(requester).full;
+
 /// Why [requester] may not give [role] — the message the caller answers with (null when they may).
 export const roleGrantRefusal = (requester, role) => {
   if (mayGiveRole(requester, role)) return null;

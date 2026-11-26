@@ -582,7 +582,9 @@ await check('the week\'s figures: trials, photos and reviews, clients handled, v
   ok(r, 'weekly');
   const f = r.body.figures;
   assert.deepEqual([r.body.week.from, r.body.status, r.body.live], [W.from, 'new', true]);
-  assert.deepEqual([f.trials.held, f.trials.completed], [1, 1]);
+  // the 'Past' trial (3 days ago, still scheduled) is held last week too when today is a Monday, Tuesday or Wednesday
+  const pastToo = plus(todayIst, -3) >= W.from && plus(todayIst, -3) < N.from;
+  assert.deepEqual([f.trials.held, f.trials.completed], [pastToo ? 2 : 1, 1]);
   assert.deepEqual([f.photosReviews.worksDone, f.photosReviews.photos, f.photosReviews.clientsDone, f.photosReviews.reviews], [2, 1, 2, 1], 'the cancelled booking is no work');
   assert.deepEqual(f.photosReviews.missingPhotos.map((m) => m.client), ['Week Two']);
   assert.equal(f.support.clients, 1, 'Bina answered Week One in the chat');
@@ -594,7 +596,7 @@ await check('the week\'s figures: trials, photos and reviews, clients handled, v
   assert.deepEqual(f.medical.withConditions.map((m) => [m.client, m.days]), [['Week Two', [dB, dB2]]]);
   assert.deepEqual(f.medical.emergencies.map((e) => e.what), ['Skin rash after primer']);
   assert.equal(f.workload.nextWeek.days.length, 7);
-  assert.ok(f.workload.nextWeek.booked >= 2, JSON.stringify(f.workload.nextWeek));
+  assert.ok(f.workload.nextWeek.booked >= (fiveToo ? 2 : 1), JSON.stringify(f.workload.nextWeek)); // Week Four (+ Week Five)
   assert.deepEqual(f.outsource.lines.map((l) => [l.bride, l.outsource, l.phone]), [['Week One', 'Rani Outsource', '9000011111']]);
   assert.equal(f.support.monthTarget, 100);
 });

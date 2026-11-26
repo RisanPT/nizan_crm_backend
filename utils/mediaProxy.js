@@ -55,6 +55,11 @@ export const videoTypeFor = (fileName, upstreamType = '') => {
   return VIDEO_TYPES[extOf(fileName)] ?? 'video/mp4';
 };
 
+/// May this file play STRAIGHT from Dropbox (a direct link) rather than through our server? Only the kinds Dropbox sends with a type every
+/// browser plays: mp4 / m4v / webm. A .mov comes from Dropbox as video/quicktime, which Chrome will not play — the relay sends it as mp4.
+const DIRECT_EXTENSIONS = new Set(['mp4', 'm4v', 'webm']);
+export const directPlayable = (fileName) => DIRECT_EXTENSIONS.has(extOf(fileName));
+
 // ── the signed address ──────────────────────────────────────────────────────
 
 export const MEDIA_TOKEN_TTL_MS = 12 * 3600 * 1000;
@@ -96,6 +101,7 @@ export const verifyMediaToken = (token, { secret, now = Date.now() } = {}) => {
 // ── what Dropbox answered ───────────────────────────────────────────────────
 
 export const MEDIA_PROBLEMS = {
+  busy: 'Too many videos are playing through the server right now. Try again in a moment.',
   missing: 'Dropbox says this video is no longer there — it was moved or deleted, or the link was switched off. Paste a new link for it.',
   limit: 'Dropbox has paused this link for now because it was opened too often (Dropbox limits how much a shared link is used each day). It comes back later; until then open it in Dropbox.',
   private: 'Dropbox refused the link — it may need a password, have expired, or be shared only with certain people. Share it as "Anyone with the link can view".',

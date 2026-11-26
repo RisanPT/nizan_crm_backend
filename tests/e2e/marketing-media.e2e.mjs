@@ -32,13 +32,20 @@ for (const f of readdirSync(new URL('models/', root))) await import(new URL(`mod
 const imp = (p) => import(new URL(p, root)).then((m) => m.default ?? m);
 const User = await imp('models/User.js');
 const Role = await imp('models/Role.js');
-const { _setMediaFetch, _resetMediaProbes } = await import(new URL('services/mediaStream.js', root));
+const { _setMediaFetch, _resetMediaProbes, _mediaStreaming } = await import(new URL('services/mediaStream.js', root));
+const { _setDropboxFetch } = await import(new URL('services/dropbox.js', root));
+const { _resetDirectLinks } = await import(new URL('services/mediaDirect.js', root));
 const { signMediaToken, dropboxFileUrl } = await import(new URL('utils/mediaProxy.js', root));
 const { sanitizeErrorResponses, errorHandler } = await import(new URL('middleware/errorMiddleware.js', root));
 
 // ── a fake Dropbox ──────────────────────────────────────────────────────────
 const fileOf = (name, size = 5000) => Buffer.from(Array.from({ length: size }, (_, i) => (i * 7 + name.length) % 251));
-const FILES = { 'good-1': fileOf('good-1'), 'good-2': fileOf('good-2'), 'good-3': fileOf('good-3'), big: fileOf('big', 6000), unsized: fileOf('unsized', 6000) };
+const FILES = { 'good-1': fileOf('good-1'), 'good-2': fileOf('good-2'), 'good-3': fileOf('good-3'), big: fileOf('big', 6000), unsized: fileOf('unsized', 6000), slow: fileOf('slow', 300), 'fresh-1': fileOf('fresh-1', 400), 'fresh-2': fileOf('fresh-2', 400) };
+// 'slow' sends its first piece, then waits until the test lets it finish (a player still watching)
+let releaseSlow;
+const slowGate = new Promise((r) => {
+  releaseSlow = r;
+});
 const calls = [];
 const bigPulls = []; // per answer for 'big': how many pieces were read
 _setMediaFetch(async (url, opts) => {
@@ -55,6 +62,21 @@ _setMediaFetch(async (url, opts) => {
   }
   if (u.hostname === 'uc1.dl.dropboxusercontent.com') {
     const file = FILES[u.pathname.split('/').pop()];
+    if (u.pathname.endsWith('/slow')) {
+      let sent = false;
+      const stream = new ReadableStream({
+        async pull(c) {
+          if (!sent) {
+            sent = true;
+            return c.enqueue(file.subarray(0, 100));
+          }
+          await slowGate;
+          c.enqueue(file.subarray(100));
+          c.close();
+        },
+      });
+      return new Response(stream, { status: 200, headers: { 'content-type': 'video/mp4', 'content-length': String(file.length) } });
+    }
     // Dropbox's own wrong type, as browsers have seen it
     const range = opts.headers.range;
     if (range) {
@@ -83,6 +105,25 @@ _setMediaFetch(async (url, opts) => {
     return new Response(file, { status: 200, headers: { 'content-type': 'application/json', 'content-length': String(file.length) } });
   }
   throw new Error(`the test network has no ${url}`);
+});
+
+// ── a fake Dropbox API: whose file a link is, and its 4-hour direct link ──────
+const apiCalls = [];
+_setDropboxFetch(async (url, opts) => {
+  const u = new URL(url);
+  const body = JSON.parse(opts.body ?? 'null');
+  apiCalls.push({ path: u.pathname, body });
+  const json = (status, b) => new Response(JSON.stringify(b), { status, headers: { 'content-type': 'application/json' } });
+  if (u.pathname === '/2/sharing/get_shared_link_metadata') {
+    const name = new URL(body.url).pathname.split('/')[2];
+    if (name.startsWith('own')) return json(200, { '.tag': 'file', name: 'clip.mp4', path_lower: `/team n works/reels/${name}.mp4` });
+    return json(200, { '.tag': 'file', name: 'clip.mp4' }); // someone else's link: no place in our account
+  }
+  if (u.pathname === '/2/files/get_temporary_link') {
+    if (body.path.includes('noscope')) return json(401, { error_summary: 'missing_scope/', error: { '.tag': 'missing_scope', required_scope: 'files.content.read' } });
+    return json(200, { link: `https://uc9.dl.dropboxusercontent.com/temp${encodeURI(body.path)}`, metadata: {} });
+  }
+  throw new Error(`the test Dropbox API has no ${url}`);
 });
 
 const app = express();
@@ -244,6 +285,86 @@ await check('the copies keep to their size — the least recently played goes fi
   assert.ok(bigPulls[1].n <= 2, `the copy stops at the size Dropbox gave, before fetching it (${bigPulls[1].n} pieces read)`);
   assert.equal(cached('unsized'), false, 'its size was not given: stopped once counted');
   assert.deepEqual(fs.readdirSync(cacheDir).filter((f) => f.endsWith('.part')), [], 'nothing half-written left behind');
+});
+
+console.log('Straight from Dropbox (the company\'s own videos never pass through the server)');
+await check('the company\'s own video gets a 4-hour direct link; the relay link stays as the fallback, and no probe goes through our server', async () => {
+  process.env.DROPBOX_ACCESS_TOKEN = 'e2e-dropbox';
+  _resetDirectLinks();
+  apiCalls.length = 0;
+  const before = calls.length;
+  const t0 = Date.now();
+  const l = await linkFor('own-1', '&probe=1');
+  assert.equal(l.ok, true);
+  assert.equal(l.direct.url, 'https://uc9.dl.dropboxusercontent.com/temp/team%20n%20works/reels/own-1.mp4');
+  const left = new Date(l.direct.until).getTime() - t0;
+  assert.ok(left > 3.4 * 3600e3 && left <= 3.5 * 3600e3 + 5000, `kept 3.5 h (Dropbox's lasts 4): ${left}`);
+  assert.match(l.path, /^\/marketing\/media\/stream\//, 'the relay link is still there, as the fallback');
+  assert.equal(calls.length, before, 'Dropbox said the file is there: no probe through our server');
+  assert.deepEqual(apiCalls.map((c) => c.path), ['/2/sharing/get_shared_link_metadata', '/2/files/get_temporary_link']);
+  assert.equal(apiCalls[0].body.url, 'https://www.dropbox.com/s/own-1/clip.mp4', 'Dropbox is asked about the share link as it is (no raw=1 / dl= of ours)');
+  await linkFor('own-1');
+  assert.equal(apiCalls.length, 2, 'asked once: the link is remembered');
+});
+
+await check('someone else\'s link, a .mov, a missing permission, no Dropbox connection or MEDIA_DIRECT=off: no direct link — the relay as before', async () => {
+  process.env.DROPBOX_ACCESS_TOKEN = 'e2e-dropbox';
+  _resetDirectLinks();
+  apiCalls.length = 0;
+  const theirs = await linkFor('theirs-1');
+  assert.deepEqual([theirs.ok, theirs.direct, typeof theirs.token], [true, undefined, 'string']);
+  assert.deepEqual(apiCalls.map((c) => c.path), ['/2/sharing/get_shared_link_metadata'], 'not ours: no direct link is even asked for');
+  const mov = (await get(`/marketing/media/link?url=${encodeURIComponent(share('own-2', 'clip.mov'))}`, { token: member })).body;
+  assert.deepEqual([mov.ok, mov.direct], [true, undefined], 'a .mov plays through the relay (sent as mp4)');
+  const noscope = await linkFor('own-noscope');
+  assert.deepEqual([noscope.ok, noscope.direct, typeof noscope.token], [true, undefined, 'string'], 'the app lacks files.content.read: still plays');
+  assert.equal(apiCalls.filter((c) => c.body.url?.includes('own-2')).length, 0, 'a .mov is not even asked about');
+  delete process.env.DROPBOX_ACCESS_TOKEN;
+  const offline = await linkFor('own-3');
+  assert.equal(offline.direct, undefined);
+  process.env.DROPBOX_ACCESS_TOKEN = 'e2e-dropbox';
+  process.env.MEDIA_DIRECT = 'off';
+  assert.equal((await linkFor('own-4')).direct, undefined);
+  delete process.env.MEDIA_DIRECT;
+  assert.equal(apiCalls.filter((c) => /own-3|own-4/.test(c.body.url ?? '')).length, 0, 'switched off / not connected: Dropbox is not asked');
+  delete process.env.DROPBOX_ACCESS_TOKEN;
+});
+
+console.log('Kind to a small server');
+await check('at most MEDIA_MAX_STREAMS videos pass through at once: the next player hears "busy" (and tries its other routes)', async () => {
+  process.env.MEDIA_MAX_STREAMS = '1';
+  process.env.MEDIA_CACHE_MAX_MB = '0'; // no copies in this check: only the plays count
+  const slowTok = (await linkFor('slow')).path;
+  const ac = new AbortController();
+  const holding = await fetch(`${base}${slowTok}`, { signal: ac.signal }); // headers in, the body still coming
+  assert.equal(holding.status, 200);
+  for (let i = 0; i < 50 && _mediaStreaming() < 1; i += 1) await sleep(10);
+  assert.equal(_mediaStreaming(), 1);
+  const busy = await get((await linkFor('fresh-1')).path);
+  assert.equal(busy.status, 503);
+  assert.deepEqual([busy.body.code, busy.headers.get('retry-after')], ['busy', '20']);
+  assert.match(busy.body.message, /Too many videos are playing/);
+  releaseSlow();
+  assert.ok(Buffer.from(await holding.arrayBuffer()).equals(FILES.slow), 'the first player gets all of its video');
+  for (let i = 0; i < 50 && _mediaStreaming() > 0; i += 1) await sleep(10);
+  assert.equal(_mediaStreaming(), 0, 'the count goes back down');
+  const ok = await get((await linkFor('fresh-1')).path);
+  assert.equal(ok.status, 200);
+  assert.ok(ok.buf.equals(FILES['fresh-1']));
+  delete process.env.MEDIA_MAX_STREAMS;
+  process.env.MEDIA_CACHE_MAX_MB = String(10_500 / (1024 * 1024));
+});
+
+await check('no copy is kept while the disk is getting full — the video still plays, fetched once', async () => {
+  process.env.MEDIA_CACHE_MIN_FREE_MB = String(1e9); // "keep a petabyte free": never room
+  const before = calls.filter((c) => c.path.endsWith('/fresh-2')).length;
+  const r = await get((await linkFor('fresh-2')).path);
+  assert.equal(r.status, 200);
+  assert.ok(r.buf.equals(FILES['fresh-2']));
+  await sleep(150);
+  assert.equal(cached('fresh-2'), false);
+  assert.equal(calls.filter((c) => c.path.endsWith('/fresh-2')).length - before, 1, 'only the play reached Dropbox, no second fetch for a copy');
+  delete process.env.MEDIA_CACHE_MIN_FREE_MB;
 });
 
 server.close();

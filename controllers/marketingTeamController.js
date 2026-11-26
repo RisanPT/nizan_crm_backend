@@ -12,7 +12,7 @@ import User from '../models/User.js';
 import Project from '../models/Project.js';
 import { notify, NOTIFICATION_TYPES } from '../utils/notify.js';
 import {
-  toDateStr, isManagerOrAdmin, canViewTeam, isOwnMember, findOwnMember, getCalendarSetting, logAudit,
+  toDateStr, isManagerOrAdmin, isCreativeDirector, canViewTeam, isOwnMember, findOwnMember, getCalendarSetting, logAudit,
 } from './marketingEodController.js';
 import { rebuildDay, sumLogs } from '../services/marketingRollup.js';
 import MarketingShoot from '../models/MarketingShoot.js';
@@ -39,6 +39,9 @@ const istEnd = (day) => istStart(S.addDays(day, 1));
 const idOf = (v) => (v == null ? '' : String(v._id ?? v));
 const fail = (res, status, message, extra = {}) => res.status(status).json({ message, ...extra });
 const isManager = (u) => isManagerOrAdmin(u);
+// Tasks are creative work too: the Creative Director (User.creativeDirector) sees, assigns and edits them like the Marketing Manager —
+// but nothing else on this screen (logs, attendance, work mode, reports keep isManager / canViewTeam).
+const canRunTasks = (u) => isManager(u) || isCreativeDirector(u);
 
 const weekOf = (today) => {
   const dow = new Date(Date.parse(`${today}T00:00:00Z`)).getUTCDay(); // 0 = Sunday
@@ -978,7 +981,7 @@ export const listTasks = async (req, res) => {
     const brand = parseBrand(req);
     if (!brand) return fail(res, 400, 'Brand must be all, main or kerala.');
     const own = await findOwnMember(req.user);
-    const viewer = canViewTeam(req.user);
+    const viewer = canViewTeam(req.user) || isCreativeDirector(req.user);
     if (!viewer && !own) return fail(res, 403, 'You are not on the Marketing team.');
     const scope = ['mine', 'assigned_by_me'].includes(req.query.scope) ? req.query.scope : 'all';
     const hasRange = req.query.from && req.query.to && isDay(req.query.from) && isDay(req.query.to);
@@ -1009,8 +1012,17 @@ export const listTasks = async (req, res) => {
     const names = new Map(members.map((m) => [idOf(m), m.name]));
     const counts = { all: tasks.length, requests: tasks.filter((t) => t.source === 'request').length };
     for (const t of tasks) counts[t.status] = (counts[t.status] ?? 0) + 1;
-    const c = { userId: idOf(req.user._id), ownId: own ? idOf(own) : '', manager: isManager(req.user) };
-    res.json({ scope, from, to, counts, items: tasks.map((t) => taskView(t, names, groupName, c)) });
+    const c = { userId: idOf(req.user._id), ownId: own ? idOf(own) : '', manager: canRunTasks(req.user) };
+    // who a task can be given to, and its categories — for a task form opened where the Log Activity setup is not loaded (the Creative
+    // Director dashboard): only for those who may assign
+    const assign = canRunTasks(req.user)
+      ? {
+          canAssign: true,
+          assignees: (await MarketingTeamMember.find({ isActive: true }).sort({ sortOrder: 1, name: 1 }).select('name').lean()).map((m) => ({ id: idOf(m), name: m.name })),
+          categories: (await groupNamer()).groups.filter((g) => g.isActive !== false).sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)).map((g) => ({ id: idOf(g), name: g.name })),
+        }
+      : { canAssign: false, assignees: [], categories: [] };
+    res.json({ scope, from, to, counts, items: tasks.map((t) => taskView(t, names, groupName, c)), ...assign });
   } catch (error) {
     fail(res, 500, error.message);
   }
@@ -1033,7 +1045,7 @@ const notifyAssigned = async (task, member, user) => {
 export const createTask = async (req, res) => {
   try {
     const own = await findOwnMember(req.user);
-    const manager = isManager(req.user);
+    const manager = canRunTasks(req.user);
     const input = cleanTaskInput({ ...req.body, assigneeId: req.body.assigneeId ?? (own ? idOf(own) : null) });
     if (!input.ok) return fail(res, 400, input.message, { field: input.field });
     const v = input.value;
@@ -1059,7 +1071,7 @@ export const updateTask = async (req, res) => {
     const task = await MarketingTask.findById(req.params.id);
     if (!task) return fail(res, 404, 'Task not found');
     const own = await findOwnMember(req.user);
-    const manager = isManager(req.user);
+    const manager = canRunTasks(req.user);
     const mine = own && idOf(task.assigneeId) === idOf(own);
     if (!manager && !mine) return fail(res, 403, 'You can only change your own tasks.');
     const input = cleanTaskInput(req.body, task.toObject());
@@ -1092,7 +1104,7 @@ export const deleteTask = async (req, res) => {
     if (!mongoose.isValidObjectId(req.params.id)) return fail(res, 404, 'Task not found');
     const task = await MarketingTask.findById(req.params.id);
     if (!task) return fail(res, 404, 'Task not found');
-    const manager = isManager(req.user);
+    const manager = canRunTasks(req.user);
     if (!manager && idOf(task.createdBy) !== idOf(req.user._id)) return fail(res, 403, 'Only the person who made a task, or the Marketing Manager, can delete it.');
     // logs linked to it keep their record; they just stop pointing at a task that is gone
     await MarketingActivity.updateMany({ taskId: task._id }, { $set: { taskId: null } });
@@ -1110,7 +1122,7 @@ export const addTaskComment = async (req, res) => {
     const task = await MarketingTask.findById(req.params.id);
     if (!task) return fail(res, 404, 'Task not found');
     const own = await findOwnMember(req.user);
-    if (!isManager(req.user) && !(own && idOf(task.assigneeId) === idOf(own))) return fail(res, 403, 'You can only comment on your own tasks.');
+    if (!canRunTasks(req.user) && !(own && idOf(task.assigneeId) === idOf(own))) return fail(res, 403, 'You can only comment on your own tasks.');
     const text = String(req.body?.text ?? '').trim().slice(0, 1000);
     if (!text) return fail(res, 400, 'Write a comment first.');
     task.comments.push({ by: req.user._id, byName: req.user.name ?? '', text });

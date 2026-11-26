@@ -18,7 +18,8 @@ import { fileURLToPath } from 'node:url';
 const envPath = process.env.DROPBOX_CONNECT_ENV || fileURLToPath(new URL('../.env', import.meta.url));
 const tokenUrl = process.env.DROPBOX_TOKEN_URL || 'https://api.dropbox.com/oauth2/token';
 const apiUrl = process.env.DROPBOX_API_URL || 'https://api.dropboxapi.com';
-const NEEDED = ['files.metadata.read', 'files.content.write', 'file_requests.write', 'sharing.read', 'sharing.write'];
+// files.content.read: the gallery plays the company's own Dropbox videos straight from Dropbox (a 4-hour link), not through the server
+const NEEDED = ['files.metadata.read', 'files.content.read', 'files.content.write', 'file_requests.write', 'sharing.read', 'sharing.write'];
 
 const readEnv = () => {
   const text = fs.existsSync(envPath) ? fs.readFileSync(envPath, 'utf8') : '';
