@@ -6,6 +6,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import Lead from '../models/Lead.js';
 import User from '../models/User.js';
+import Department from '../models/Department.js';
 import Notification from '../models/Notification.js';
 import ServicePackage from '../models/Package.js';
 import AddonService from '../models/AddonService.js';
@@ -87,8 +88,9 @@ Lead.create = async (doc) => {
   return { _id: 'L1', ...doc };
 };
 Lead.updateOne = async (f, u) => created.pushes.push(u);
-// Role lookup → one manager; notify()'s "which of these are admins?" lookup → none.
-User.find = (f) => ({ select: async () => (f?._id ? [] : [{ _id: 'mgr1' }]) });
+// Sales team lookup (getSalesLeadIds) → one Sales leader; notify()'s admin lookup → none.
+Department.find = () => q([{ _id: 'deptSales' }]);
+User.find = (f) => ({ select: async () => (f?.role?.$in?.includes?.('admin') ? [] : [{ _id: 'mgr1' }]) });
 Notification.insertMany = async (docs) => created.notes.push(...docs);
 const DISTRICT_ID = '665f00000000000000000d01';
 const REGION_ID = '665f00000000000000000e01';

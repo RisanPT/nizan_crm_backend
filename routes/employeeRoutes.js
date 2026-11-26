@@ -34,11 +34,19 @@ const forbid = (res, message) => res.status(403).json({ message });
 ///  • Fleet: DRIVER records only, never pay / bank / ID fields.
 const employeeWriteGuard = async (req, res, next) => {
   try {
-    const scope = await getHrScope(req, ['staff']);
-    if (scope.wide) return next();
+    const scope = await getHrScope(req, ['staff.employees']);
+    if (scope.wide) {
+      // Nobody but an admin changes their OWN pay, bank or status (2026-11-26).
+      const own = req.params.id && req.user?.employeeId && String(req.user.employeeId) === String(req.params.id);
+      if (own && String(req.user?.role || '').toLowerCase() !== 'admin') {
+        if (req.method === 'DELETE') return forbid(res, 'You cannot delete your own employee record');
+        for (const f of [...SENSITIVE_EMPLOYEE_FIELDS, 'status', 'employmentStatus']) delete req.body[f];
+      }
+      return next();
+    }
 
     if (canManageStaff(req.user) && req.params.id && req.method === 'PUT') {
-      if (await canManageEmployee(req, req.params.id, ['staff'])) {
+      if (await canManageEmployee(req, req.params.id, ['staff.employees'])) {
         // Pay changes go through Compensation (approved by someone else), and
         // a head can't move people out of their department from here.
         for (const f of [...SENSITIVE_EMPLOYEE_FIELDS, 'department', 'departmentId', 'status', 'employmentStatus']) {
@@ -75,23 +83,32 @@ const employeeWriteGuard = async (req, res, next) => {
 const inScope = async (req, res, next) => {
   try {
     if (!canManageStaff(req.user)) return forbid(res, 'You are not allowed to manage employees');
-    if (await canManageEmployee(req, req.params.id, ['staff'])) return next();
+    if (await canManageEmployee(req, req.params.id, ['staff.employees'])) return next();
     return forbid(res, 'This employee is not in your department');
   } catch (e) {
     return res.status(500).json({ message: e.message });
   }
 };
 
-/// Salary history / raises: company-wide pay viewers, or a dept head for
-/// their own team.
-const payInScope = async (req, res, next) => {
-  try {
-    if (canSeeAllEmployeePay(req.user)) return next();
-    if (canManageStaff(req.user) && (await canManageEmployee(req, req.params.id, ['staff']))) return next();
-    return forbid(res, 'You are not allowed to view salary details');
-  } catch (e) {
-    return res.status(500).json({ message: e.message });
+/// Salary history: company-wide pay viewers only (owner 2026-11-26: department
+/// heads get a team view WITHOUT pay).
+const payInScope = (req, res, next) => {
+  if (canSeeAllEmployeePay(req.user)) return next();
+  return forbid(res, 'You are not allowed to view salary details');
+};
+
+/// Applying a raise directly: HR / payroll / admin only, and never to your own
+/// salary (except an admin). Department heads propose raises through
+/// Compensation → revisions, which HR approves.
+const raiseGuard = (req, res, next) => {
+  if (!canSeeAllEmployeePay(req.user)) {
+    return forbid(res, 'Raises are proposed through Compensation and approved by HR');
   }
+  const own = req.user?.employeeId && String(req.user.employeeId) === String(req.params.id);
+  if (own && String(req.user?.role || '').toLowerCase() !== 'admin') {
+    return forbid(res, 'You cannot change your own salary');
+  }
+  return next();
 };
 
 router.route('/').get(getEmployees).post(employeeWriteGuard, createEmployee);
@@ -107,6 +124,6 @@ router.put('/:id/timebox-link', inScope, linkTimeboxAccount);
 router
   .route('/:id/increments')
   .get(payInScope, getEmployeeIncrements)
-  .post(inScope, payInScope, addEmployeeIncrement);
+  .post(raiseGuard, addEmployeeIncrement);
 
 export default router;

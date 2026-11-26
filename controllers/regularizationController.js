@@ -5,6 +5,8 @@ import ApprovalRequest from '../models/ApprovalRequest.js';
 import { createApproval } from '../services/approvals.js';
 import { buildEmployeeApprovalChain } from '../utils/approvalChain.js';
 import { scopeFilter, assertEmployeeInScope } from '../utils/hrDeptScope.js';
+import { toDayKey } from '../utils/leaveMath.js';
+import { isPayrollLocked } from '../models/PayrollLock.js';
 
 const empPopulate = { path: 'employeeId', select: 'name department profileImage' };
 
@@ -15,7 +17,7 @@ const REG_KEYS = ['regularization'];
 // so it must not unlock everyone's regularizations.
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   if (user?.isDepartmentHead) return true;
   const perms = user?.permissions || [];
   return perms.includes('staff') || perms.includes('regularization');
@@ -61,6 +63,31 @@ const applyRegularization = asyncHandler(async (req, res) => {
   if (!employee) { res.status(404); throw new Error('Employee not found'); }
 
   const date = new Date(req.body.date);
+  if (Number.isNaN(date.getTime())) { res.status(400); throw new Error('Invalid date'); }
+  // Only a day that has already started can be regularized (India calendar).
+  if (toDayKey(date) > toDayKey(new Date())) {
+    res.status(400);
+    throw new Error('You cannot regularize a future date');
+  }
+  // One request per day: a second one for a day that already has a pending or
+  // approved request would be counted twice (2026-11-26).
+  const dayKey = toDayKey(date);
+  const near = await AttendanceRegularization.find({
+    employeeId: employee._id,
+    status: { $in: ['pending', 'approved'] },
+    date: { $gte: new Date(date.getTime() - 36 * 3600000), $lte: new Date(date.getTime() + 36 * 3600000) },
+  }).select('date status').lean();
+  const same = near.find((r) => toDayKey(r.date) === dayKey);
+  if (same) {
+    res.status(409);
+    throw new Error(`There is already a ${same.status} request for ${dayKey}`);
+  }
+  // A month whose payroll is locked can't change any more, so a request for it
+  // would silently do nothing — say so instead.
+  if (await isPayrollLocked(date.getMonth() + 1, date.getFullYear())) {
+    res.status(409);
+    throw new Error('Payroll for that month is already locked. Ask HR to correct it directly.');
+  }
   const reg = await AttendanceRegularization.create({
     employeeId: employee._id,
     employeeName: employee.name,

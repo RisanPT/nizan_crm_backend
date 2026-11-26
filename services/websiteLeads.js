@@ -5,7 +5,7 @@ import Lead from '../models/Lead.js';
 import {
   notify,
   getUserIdsByRoles,
-  MANAGER_AND_ADMIN_ROLES,
+  getSalesLeadIds,
   NOTIFICATION_TYPES,
 } from '../utils/notify.js';
 import { last10, leadFromEnquiry, leadRemarks } from '../utils/websiteEnquiry.js';
@@ -36,7 +36,7 @@ export async function linkEnquiryToLead(enquiry, extras = {}) {
   linking.add(key);
   try {
     const existing = await findLeadByPhone(enquiry.phone);
-    const managers = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+    const managers = await getSalesLeadIds();
 
     if (existing) {
       await Lead.updateOne(

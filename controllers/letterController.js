@@ -19,8 +19,9 @@ const guardHrWide = async (req, res) => {
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
-  if (user?.isDepartmentHead) return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
+  // Department heads no longer run this (owner 2026-11-26: HR's job; heads
+  // get a team view).
   const perms = user?.permissions || [];
   return perms.includes('hr_letters') || perms.includes('staff');
 };
@@ -225,7 +226,7 @@ const generateLetter = asyncHandler(async (req, res) => {
     phone: employee.phone || '',
     salary: employee.baseSalary || 0,
     date: fmtDate(new Date()),
-    joiningDate: fmtDate(employee.createdAt),
+    joiningDate: fmtDate(employee.dateOfJoining || employee.createdAt),
     company: 'Nizan Makeovers',
     ...(req.body.extra && typeof req.body.extra === 'object' ? req.body.extra : {}),
   };

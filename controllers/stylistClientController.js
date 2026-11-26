@@ -295,7 +295,7 @@ export const listRoyalBookings = async (req, res) => {
       ],
     })
       .select(
-        'customerName phone bookingNumber service packageId bookingItems selectedDates bookingDate district address status leadId assignedStaff'
+        'customerName phone bookingNumber service packageId bookingItems selectedDates bookingDate district address status leadId assignedStaff eventSlot'
       )
       .sort({ bookingDate: 1 })
       .limit(ROYAL_LIMIT)
@@ -317,6 +317,10 @@ export const listRoyalBookings = async (req, res) => {
         venue: clean(b.address),
         status: clean(b.status),
         packageName: packages.join(', '),
+        // Morning / Evening etc., from the booking or its first item that has one.
+        eventSlot:
+          clean(b.eventSlot) ||
+          clean((b.bookingItems ?? []).map((it) => it?.eventSlot).find((s) => clean(s)) ?? ''),
         eventDates: days,
         nextEventDay: upcoming[0],
         artistNames: snapshotFromTeamN(null, b).artistNames,

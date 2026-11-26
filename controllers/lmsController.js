@@ -3,6 +3,7 @@ import Course from '../models/Course.js';
 import Enrollment from '../models/Enrollment.js';
 import Employee from '../models/Employee.js';
 import { getHrScope, scopeFilter, canManageEmployee, assertEmployeeInScope, isHrWide } from '../utils/hrDeptScope.js';
+import { escapeRegex } from '../utils/escapeRegex.js';
 
 // Department-head scoping (owner decision 2026-11-06): course and orientation
 // PLAN catalogues are company master data (HR-wide only); enrolments and
@@ -16,7 +17,7 @@ const empPopulate = { path: 'employeeId', select: 'name department' };
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   if (user?.isDepartmentHead) return true;
   const perms = user?.permissions || [];
   return perms.includes('lms') || perms.includes('staff');
@@ -258,11 +259,23 @@ const assignOrientation = asyncHandler(async (req, res) => {
   const employee = await Employee.findById(employeeId);
   if (!employee) { res.status(404); throw new Error('Employee not found'); }
 
-  let plan = planId ? await OrientationPlan.findById(planId) : null;
-  if (!plan) {
-    plan = await OrientationPlan.findOne({
-      $or: [{ roleTitle: employee.role }, { department: employee.department }],
-    });
+  // HR picks the plan. With none chosen, the department's plan is used only
+  // when it is the one plan for that department; otherwise ask HR to choose
+  // (the old "any plan in the department" guess could assign the wrong syllabus).
+  let plan = null;
+  if (planId) {
+    plan = await OrientationPlan.findById(planId);
+    if (!plan) { res.status(404); throw new Error('Orientation plan not found'); }
+  } else {
+    const dept = String(employee.department || '').trim();
+    const deptPlans = dept
+      ? await OrientationPlan.find({ department: new RegExp(`^${escapeRegex(dept)}$`, 'i') }).limit(2)
+      : [];
+    if (deptPlans.length > 1) {
+      res.status(400);
+      throw new Error(`There are several orientation plans for ${dept}. Please choose the plan to assign.`);
+    }
+    plan = deptPlans[0] || null;
   }
 
   if (!plan || !Array.isArray(plan.days) || plan.days.length === 0) {
@@ -318,6 +331,13 @@ const updateOrientationProgress = asyncHandler(async (req, res) => {
       day.status = day.signedOff ? 'Signed' : 'In progress';
     }
   }
+
+  // Status follows the sign-offs: Completed once every day is signed, and
+  // back on track if a day is un-signed later.
+  const allDays = Array.isArray(assignment.days) ? assignment.days : [];
+  const allSigned = allDays.length > 0 && allDays.every((d) => d.signedOff);
+  if (allSigned) assignment.status = 'Completed';
+  else if (assignment.status === 'Completed') assignment.status = 'On track';
 
   await assignment.save();
   res.json(assignment);

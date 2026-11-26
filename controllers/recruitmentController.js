@@ -12,6 +12,7 @@ import Role from '../models/Role.js';
 import Department from '../models/Department.js';
 import { isAdminOnlyRole } from '../utils/userAccess.js';
 import { getHrScope, deptNameFilter, isHrWide } from '../utils/hrDeptScope.js';
+import { notify, NOTIFICATION_TYPES } from '../utils/notify.js';
 
 // Department-head scoping (owner decision 2026-11-06): HR-wide callers see and
 // manage everything; a department head only their own department's job posts,
@@ -62,7 +63,7 @@ const assertHrWide = async (req, res) => {
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   if (user?.isDepartmentHead) return true;
   const perms = user?.permissions || [];
   return perms.includes('recruitment') || perms.includes('staff');
@@ -231,6 +232,15 @@ const bulkImportCandidates = asyncHandler(async (req, res) => {
 
   const toInsert = [];
   let duplicatesCount = 0;
+  // Rows marked "hired" in the file come in at the Offer stage: a hire must
+  // go through the hire flow (employee + onboarding), never a raw import.
+  let hiredAsOfferCount = 0;
+  const importStage = (raw) => {
+    const st = String(raw || '').trim().toLowerCase();
+    const valid = ['applied', 'screening', 'interview', 'offer', 'hired', 'rejected'].includes(st) ? st : '';
+    if (valid === 'hired') { hiredAsOfferCount++; return 'offer'; }
+    return valid;
+  };
 
   for (const item of candidatesList) {
     const name = String(item.name || item.fullName || '').trim();
@@ -255,9 +265,7 @@ const bulkImportCandidates = asyncHandler(async (req, res) => {
       jobTitle: String(item.jobTitle || defaultJobTitle).trim(),
       source: item.source || defaultSource,
       referrer: String(item.referrer || campaignName || 'Ad Campaign / Bulk CV Ingestion').trim(),
-      stage: (item.stage && ['applied', 'screening', 'interview', 'offer', 'hired', 'rejected'].includes(item.stage))
-        ? item.stage
-        : (req.body.stage || 'applied'),
+      stage: importStage(item.stage) || importStage(req.body.stage) || 'applied',
       rating: Number(item.rating) || 0,
       resumeUrl: String(item.resumeUrl || item.cvUrl || '').trim(),
       notes: [
@@ -284,27 +292,40 @@ const bulkImportCandidates = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     success: true,
-    message: `Successfully imported ${insertedDocs.length} candidates (${duplicatesCount} duplicates skipped)`,
+    message: `Successfully imported ${insertedDocs.length} candidates (${duplicatesCount} duplicates skipped)`
+      + (hiredAsOfferCount
+        ? `. ${hiredAsOfferCount} marked "hired" were added at the Offer stage - move them to Hired (or accept their offer) to create the employee and onboarding.`
+        : ''),
     importedCount: insertedDocs.length,
     duplicatesCount,
+    hiredAsOfferCount,
     totalProcessed: candidatesList.length,
     candidates: insertedDocs.slice(0, 10).map((c) => ({ id: c._id, name: c.name, jobTitle: c.jobTitle })),
   });
 });
 
-export const linkHiredCandidateToOnboarding = async (candidate, userId = null) => {
-  if (!candidate) return null;
-  // Check if onboarding already exists for this candidate
-  let onboarding = await Onboarding.findOne({
-    $or: [
-      { candidateId: candidate._id },
-      { employeeName: candidate.name }
-    ]
-  });
-  if (onboarding) return onboarding;
+// Marks the offer accepted and links it to the hired employee.
+const acceptLinkedOffer = async (offer, employeeId) => {
+  if (!offer || !employeeId) return;
+  offer.status = 'accepted';
+  if (!offer.employeeId) offer.employeeId = employeeId;
+  if (!offer.decidedAt) offer.decidedAt = new Date();
+  await offer.save();
+};
 
-  // Find offer if any
-  const offer = await Offer.findOne({ candidateId: candidate._id }).sort({ createdAt: -1 });
+// `offerArg`: the offer being accepted (acceptOffer); otherwise the
+// candidate's newest offer, if any.
+export const linkHiredCandidateToOnboarding = async (candidate, userId = null, offerArg = null) => {
+  if (!candidate) return null;
+  const offer = offerArg || await Offer.findOne({ candidateId: candidate._id }).sort({ createdAt: -1 });
+
+  // This candidate's own onboarding only (by candidateId). The old name match
+  // treated a namesake's onboarding as this hire's and skipped the hire.
+  let onboarding = await Onboarding.findOne({ candidateId: candidate._id });
+  if (onboarding) {
+    await acceptLinkedOffer(offer, onboarding.employeeId);
+    return onboarding;
+  }
 
   // Determine role & department
   let role = String(offer?.designation || candidate.jobTitle || '').trim();
@@ -337,6 +358,27 @@ export const linkHiredCandidateToOnboarding = async (candidate, userId = null) =
     employee = await Employee.findOne({ email: new RegExp(`^${escRx(candEmail)}$`, 'i') });
   }
 
+  // Joining date: offer's joiningDate or 2 weeks from now (the onboarding);
+  // the employee record gets the offer's date only (else the model default).
+  // ONE joining date for the employee and the onboarding (2026-11-26): they
+  // used to differ (employee = today, onboarding = today + 14 days).
+  const joiningDate = offer?.joiningDate || new Date(Date.now() + 14 * 86400000);
+  const probationMonths = Number(offer?.probationMonths) || 0;
+  let probationEndDate = null;
+  if (probationMonths > 0) {
+    probationEndDate = new Date(joiningDate);
+    probationEndDate.setMonth(probationEndDate.getMonth() + probationMonths);
+  }
+  // The offer's "reporting to" is free text: link it to that employee when the
+  // name matches exactly one active employee.
+  let reportingManagerId = null;
+  const reportsTo = String(offer?.reportingTo || '').trim();
+  if (reportsTo) {
+    const matches = await Employee.find({ name: new RegExp(`^${escRx(reportsTo)}$`, 'i'), status: 'active' })
+      .select('_id').limit(2).lean();
+    if (matches.length === 1) reportingManagerId = matches[0]._id;
+  }
+
   if (!employee) {
     employee = await Employee.create({
       name: candidate.name || 'New hire',
@@ -353,6 +395,13 @@ export const linkHiredCandidateToOnboarding = async (candidate, userId = null) =
       category: fieldRole ? 'operations' : 'administrative',
       salaryType: 'fixed_monthly',
       baseSalary: offer?.salary || 0,
+      // Carried over from the offer so HR doesn't type them again (2026-11-26).
+      ...(offer?.hra ? { hra: offer.hra } : {}),
+      ...(offer?.designationId ? { designationId: offer.designationId } : {}),
+      ...(reportingManagerId ? { reportingManagerId } : {}),
+      dateOfJoining: joiningDate,
+      employmentStatus: 'probation',
+      ...(probationEndDate ? { probationEndDate } : {}),
     });
   } else if (jobRole && !employee.jobRoleId) {
     // An existing employee (matched by email) only gains the job-role link;
@@ -364,14 +413,9 @@ export const linkHiredCandidateToOnboarding = async (candidate, userId = null) =
 
   // Update offer if present
   if (offer) {
-    offer.status = 'accepted';
     offer.employeeId = employee._id;
-    if (!offer.decidedAt) offer.decidedAt = new Date();
-    await offer.save();
+    await acceptLinkedOffer(offer, employee._id);
   }
-
-  // Set joining date: offer's joiningDate or 2 weeks from now
-  const joiningDate = offer?.joiningDate || new Date(Date.now() + 14 * 86400000);
 
   const tasks = DEFAULT_ONBOARDING_TASKS.map((t) => ({
     title: t,
@@ -401,6 +445,28 @@ export const linkHiredCandidateToOnboarding = async (candidate, userId = null) =
     createdBy: userId,
   });
 
+  // New hire → HR (onboarding is theirs) and the head of the department the
+  // person joins, so the desk, kit and login are ready (2026-11-26).
+  try {
+    const dept = await Department.findOne({ name: new RegExp(`^${escRx(employee.department || department)}$`, 'i') })
+      .select('_id').lean();
+    const [hr, heads] = await Promise.all([
+      User.find({ role: 'hr', active: { $ne: false } }).select('_id').lean(),
+      dept ? User.find({ isDepartmentHead: true, departmentId: dept._id, active: { $ne: false } }).select('_id').lean() : [],
+    ]);
+    await notify({
+      recipients: [...hr, ...heads].map((u) => u._id),
+      type: NOTIFICATION_TYPES.NEW_HIRE,
+      title: `New hire: ${employee.name}`,
+      body: `${role} · ${employee.department || department} · joining ${joiningDate ? new Date(joiningDate).toISOString().slice(0, 10) : 'date to confirm'}. Onboarding checklist created.`,
+      link: '/hr/onboarding',
+      createdBy: userId,
+      excludeUserId: userId,
+    });
+  } catch (err) {
+    console.error('new hire notify failed:', err.message);
+  }
+
   return onboarding;
 };
 
@@ -424,10 +490,26 @@ const updateCandidate = asyncHandler(async (req, res) => {
   }
   if (b.jobTitle !== undefined && String(b.jobTitle).trim()) cand.jobTitle = String(b.jobTitle).trim();
   if (b.referrer !== undefined) cand.referrer = String(b.referrer).trim();
-  if (b.stage !== undefined) {
-    cand.stage = b.stage;
+  if (b.stage !== undefined && b.stage !== cand.stage) {
+    // A candidate becomes Hired only through an ACCEPTED offer (2026-11-26).
+    // Jumping straight to Hired used to create an employee with salary 0, no
+    // offer and a made-up joining date.
     if (b.stage === 'hired') {
-      await linkHiredCandidateToOnboarding(cand, req.user?._id);
+      const offer = await Offer.findOne({ candidateId: cand._id, status: 'accepted' }).sort({ updatedAt: -1 });
+      if (!offer) {
+        res.status(400);
+        throw new Error('Make an offer and mark it accepted first — that hires the candidate with the offered salary and joining date');
+      }
+      cand.stage = 'hired';
+      await linkHiredCandidateToOnboarding(cand, req.user?._id, offer);
+    } else {
+      // Moving a hired person out of Hired would leave their employee and
+      // onboarding records behind; that has to be undone on purpose.
+      if (cand.stage === 'hired') {
+        res.status(409);
+        throw new Error('This candidate is already hired (employee record created). Delete the candidate or handle it in Onboarding instead');
+      }
+      cand.stage = b.stage;
     }
   }
   if (b.source !== undefined) cand.source = b.source;
@@ -487,10 +569,15 @@ const deleteOffer = asyncHandler(async (req, res) => {
     });
   }
 
-  // If candidate was in 'offer' or 'hired' stage, revert back to 'interview'
+  // If candidate was in 'offer' or 'hired' stage, revert back to 'interview',
+  // except a hired candidate whose employee / onboarding stays linked.
   if (offer.candidateId) {
     const cand = await Candidate.findById(offer.candidateId);
-    if (cand && (cand.stage === 'offer' || cand.stage === 'hired')) {
+    let keepHired = false;
+    if (cand && cand.stage === 'hired' && !deleteLinked) {
+      keepHired = !!offer.employeeId || !!(await Onboarding.exists({ candidateId: cand._id }));
+    }
+    if (cand && !keepHired && (cand.stage === 'offer' || cand.stage === 'hired')) {
       cand.stage = 'interview';
       await cand.save();
     }
@@ -607,17 +694,28 @@ const acceptOffer = asyncHandler(async (req, res) => {
   const cand = await Candidate.findById(offer.candidateId);
   // Hire flow: the candidate's job post must be in the caller's scope.
   await assertJobPostInScope(req, res, cand?.jobPostId || offer.jobPostId);
-  if (cand) {
+
+  const onboarding = await linkHiredCandidateToOnboarding(
+    cand || { _id: offer.candidateId, name: offer.candidateName, jobTitle: offer.designation },
+    req.user?._id,
+    offer
+  );
+
+  // The accepted offer must always end up accepted and linked to an employee.
+  const updatedOffer = await Offer.findById(req.params.id);
+  if (updatedOffer && !updatedOffer.employeeId && onboarding?.employeeId) {
+    await acceptLinkedOffer(updatedOffer, onboarding.employeeId);
+  }
+  if (!updatedOffer?.employeeId) {
+    res.status(409);
+    throw new Error('The offer could not be linked to an employee, so nobody was hired. Please check the candidate and try again.');
+  }
+  if (updatedOffer.status !== 'accepted') await acceptLinkedOffer(updatedOffer, updatedOffer.employeeId);
+  if (cand && cand.stage !== 'hired') {
     cand.stage = 'hired';
     await cand.save();
   }
 
-  const onboarding = await linkHiredCandidateToOnboarding(
-    cand || { _id: offer.candidateId, name: offer.candidateName, jobTitle: offer.designation },
-    req.user?._id
-  );
-
-  const updatedOffer = await Offer.findById(req.params.id);
   res.status(201).json({
     offer: updatedOffer,
     employeeId: String(onboarding?.employeeId || updatedOffer?.employeeId || ''),
@@ -820,9 +918,13 @@ const createHiringPlan = asyncHandler(async (req, res) => {
     requiredSkills: String(req.body.requiredSkills || '').trim(),
     experienceBand: String(req.body.experienceBand || '').trim(),
     competencies: String(req.body.competencies || '').trim(),
-    status: req.body.status || 'draft',
+    // A new plan starts as a draft or is raised straight away; it can only be
+    // approved / rejected through the HR decision endpoints (2026-11-26).
+    status: req.body.status === 'raised' ? 'raised' : 'draft',
+    ...(req.body.status === 'raised' ? { raisedAt: new Date() } : {}),
     createdBy: req.user?._id || null,
   });
+  if (plan.status === 'raised') await notifyPlanRaised(plan, req.user);
   res.status(201).json(plan);
 });
 
@@ -843,10 +945,25 @@ const updateHiringPlan = asyncHandler(async (req, res) => {
   if (b.requiredSkills !== undefined) plan.requiredSkills = String(b.requiredSkills).trim();
   if (b.experienceBand !== undefined) plan.experienceBand = String(b.experienceBand).trim();
   if (b.competencies !== undefined) plan.competencies = String(b.competencies).trim();
-  if (b.status !== undefined) plan.status = b.status;
+  // Status can't be set here (that used to let anyone mark a plan approved and
+  // skip HR's decision). Editing a decided plan sends it back to draft.
+  if (['approved', 'rejected'].includes(plan.status) && !(await isHrWide(req, HR_KEYS))) {
+    plan.status = 'draft';
+    plan.approvedAt = undefined;
+    plan.approvedBy = undefined;
+  }
   await plan.save();
   res.json(plan);
 });
+
+/// Approving or rejecting a hiring plan is HR's decision (admin, the `hr`
+/// role, or HR-wide) — not the department head who wants the hire.
+const assertHrDecides = async (req, res) => {
+  const role = String(req.user?.role || '').trim().toLowerCase();
+  if (role === 'hr' || (await isHrWide(req, HR_KEYS))) return;
+  res.status(403);
+  throw new Error('Only HR can approve or reject hiring plans');
+};
 
 const raiseHiringPlan = asyncHandler(async (req, res) => {
   guard(req, res);
@@ -856,14 +973,35 @@ const raiseHiringPlan = asyncHandler(async (req, res) => {
   plan.status = 'raised';
   plan.raisedAt = new Date();
   await plan.save();
+  await notifyPlanRaised(plan, req.user);
   res.json(plan);
 });
+
+/// A hiring plan waiting for HR's decision → the HR logins (admins get a copy
+/// via notify). 2026-11-26: raising a plan used to tell nobody.
+async function notifyPlanRaised(plan, actor) {
+  try {
+    const hr = await User.find({ role: 'hr', active: { $ne: false } }).select('_id').lean();
+    await notify({
+      recipients: hr.length ? hr.map((u) => u._id) : [actor?._id].filter(Boolean),
+      type: NOTIFICATION_TYPES.HIRING_PLAN_RAISED,
+      title: `Hiring plan to approve: ${plan.designation || 'new role'}`,
+      body: `${plan.department || 'A department'} asks for ${plan.openings || 1} opening${(plan.openings || 1) === 1 ? '' : 's'}${actor?.name ? ` (raised by ${actor.name})` : ''}.`,
+      link: '/hr/recruitment',
+      createdBy: actor?._id || null,
+      excludeUserId: actor?._id || null,
+    });
+  } catch (err) {
+    console.error('hiring plan notify failed:', err.message);
+  }
+}
 
 const approveHiringPlan = asyncHandler(async (req, res) => {
   guard(req, res);
   const plan = await HiringPlan.findById(req.params.id);
   if (!plan) { res.status(404); throw new Error('Hiring plan not found'); }
-  await assertDeptInScope(req, res, plan.department);
+  await assertHrDecides(req, res);
+  if (plan.status !== 'raised') { res.status(409); throw new Error('Only a raised plan can be approved'); }
   // Maker-checker: whoever raised the plan cannot approve it (admin excepted).
   const isAdmin = String(req.user?.role || '').toLowerCase() === 'admin';
   if (!isAdmin && plan.createdBy && req.user?._id && String(plan.createdBy) === String(req.user._id)) {
@@ -881,7 +1019,8 @@ const rejectHiringPlan = asyncHandler(async (req, res) => {
   guard(req, res);
   const plan = await HiringPlan.findById(req.params.id);
   if (!plan) { res.status(404); throw new Error('Hiring plan not found'); }
-  await assertDeptInScope(req, res, plan.department);
+  await assertHrDecides(req, res);
+  if (plan.status !== 'raised') { res.status(409); throw new Error('Only a raised plan can be rejected'); }
   plan.status = 'rejected';
   plan.rejectionReason = String(req.body.reason || 'Rejected during review').trim();
   await plan.save();
@@ -1025,11 +1164,14 @@ const metaWebhookReceive = asyncHandler(async (req, res) => {
 });
 
 const getJobPostSocialCopy = asyncHandler(async (req, res) => {
+  guard(req, res);
   const post = await JobPost.findById(req.params.id).populate('designationId', 'name').lean();
   if (!post) {
     res.status(404);
     throw new Error('Job post not found');
   }
+  // Same department scope as the job-post list for department heads.
+  await assertJobPostInScope(req, res, post._id);
 
   const studio = 'Hilite Business Park, Kozhikode, Kerala';
   const applyUrl = `https://nizanmakeovers.com/careers/${post._id}`;

@@ -1,7 +1,8 @@
 import mongoose from 'mongoose';
 
 export const GRIEVANCE_CATEGORIES = ['workplace', 'harassment', 'payroll', 'facilities', 'management', 'other'];
-export const GRIEVANCE_STATUSES = ['open', 'in_review', 'resolved', 'closed'];
+// 'withdrawn': the employee pulled back an open case (kept on record, not deleted).
+export const GRIEVANCE_STATUSES = ['open', 'in_review', 'resolved', 'closed', 'withdrawn'];
 
 // An employee-raised grievance / complaint. Confidential ones are visible only
 // to full-access HR (admins/managers), not department heads.

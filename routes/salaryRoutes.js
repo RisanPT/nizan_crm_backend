@@ -6,6 +6,7 @@ import {
   createSalary,
   updateSalary,
   approveSalary,
+  moveSalaryToDraft,
   paySalary,
   deleteSalary,
   submitPayrollToAccounts,
@@ -33,6 +34,7 @@ router.post('/lock', lockPayrollMonth);
 router.post('/unlock', unlockPayrollMonth);
 router.route('/:id').put(updateSalary).delete(deleteSalary);
 router.route('/:id/approve').put(approveSalary);
+router.route('/:id/draft').put(moveSalaryToDraft);
 router.route('/:id/pay').put(paySalary);
 
 export default router;

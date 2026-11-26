@@ -26,6 +26,8 @@ import Department from '../models/Department.js';
 import TimeboxIgnoredEmployee from '../models/TimeboxIgnoredEmployee.js';
 import LeaveRequest from '../models/LeaveRequest.js';
 import AttendanceRegularization from '../models/AttendanceRegularization.js';
+import Holiday from '../models/Holiday.js';
+import { attendanceCredit, leaveDaysInRange, payrollOffDaysInRange } from '../utils/leaveMath.js';
 import { isPayrollLocked } from '../models/PayrollLock.js';
 import { canManagePayroll } from '../utils/hrAccess.js';
 import { getHrScope } from '../utils/hrDeptScope.js';
@@ -66,19 +68,6 @@ function defaultRange() {
   return { from: iso(first), to: iso(last) };
 }
 
-/** Helper to count weekend days (Saturdays and Sundays) in a given date range. */
-function countWeekends(fromStr, toStr) {
-  let start = new Date(`${fromStr}T00:00:00`);
-  let end = new Date(`${toStr}T00:00:00`);
-  let count = 0;
-  let current = new Date(start);
-  while (current <= end) {
-    const day = current.getDay();
-    if (day === 0 || day === 6) count++;
-    current.setDate(current.getDate() + 1);
-  }
-  return count;
-}
 
 /**
  * Build lookup maps of CRM employees keyed by:
@@ -487,27 +476,42 @@ async function buildPayroll({ from, to }) {
     }).populate('leaveTypeId', 'paid name').lean(),
   ]);
 
-  // Map CRM employeeId -> approved paid leave days INSIDE this range. A leave
-  // from Jan 30 to Feb 2 counts 2 days in January and 2 in February — not 4
-  // in both.
+  // Map CRM employeeId -> approved paid leave days INSIDE this range, counted
+  // like leave balances (the department's weekly offs and holidays are not
+  // charged). Sat 28 Nov – Wed 2 Dec with Sunday off = 4 working days: 1 in
+  // November, 3 in December.
   const rangeStart = new Date(`${range.from}T00:00:00`);
   const rangeEnd = new Date(`${range.to}T23:59:59`);
   const DAY = 24 * 60 * 60 * 1000;
-  const daysInside = (lr) => {
-    const total = Number(lr.days) || 0;
-    if (!lr.fromDate || !lr.toDate) return total;
-    const a = Math.max(new Date(lr.fromDate).setHours(0, 0, 0, 0), rangeStart.getTime());
-    const b = Math.min(new Date(lr.toDate).setHours(0, 0, 0, 0), rangeEnd.getTime());
-    if (b < a) return 0;
-    const overlap = Math.floor((b - a) / DAY) + 1;
-    return Math.min(total, overlap);
-  };
+
+  // Department master (weekly offs) by id, name and key.
+  const departments = await Department.find({}).select('name key weeklyOffs').lean();
+  const deptById = new Map(departments.map((d) => [String(d._id), d]));
+  const deptByName = new Map();
+  for (const d of departments) {
+    if (d.name) deptByName.set(norm(d.name), d);
+    if (d.key && !deptByName.has(norm(d.key))) deptByName.set(norm(d.key), d);
+  }
+  const deptFor = ({ departmentId, department } = {}) =>
+    (departmentId && deptById.get(String(departmentId))) || (department && deptByName.get(norm(department))) || null;
+
+  const holidays = await Holiday.find({
+    $or: [
+      { date: { $gte: new Date(rangeStart.getTime() - DAY), $lte: new Date(rangeEnd.getTime() + DAY) } },
+      { recurring: true },
+    ],
+  }).select('date recurring type').lean();
+  const empById = new Map((index.all || []).map((e) => [String(e._id), e]));
+
   const approvedLeaveMap = new Map();
   for (const lr of approvedLeaves || []) {
     // Unpaid leave (LWP) does not offset absence deductions
     if (lr.leaveTypeId && lr.leaveTypeId.paid === false) continue;
     const k = String(lr.employeeId);
-    approvedLeaveMap.set(k, (approvedLeaveMap.get(k) || 0) + daysInside(lr));
+    const emp = empById.get(k);
+    const dept = deptFor(emp || { department: lr.department });
+    const inside = leaveDaysInRange(lr, range.from, range.to, { weeklyOffs: dept?.weeklyOffs, holidays });
+    approvedLeaveMap.set(k, (approvedLeaveMap.get(k) || 0) + inside);
   }
 
   // Approved attendance regularizations (missed punch, WFH, on duty…) credit
@@ -548,11 +552,18 @@ async function buildPayroll({ from, to }) {
     let attendancePercent = Number(s.attendance_percent) || 0;
 
     const department = s.department || tb.department || crm?.department || '';
-    
-    // IT Department weekend logic override
-    if (department.toLowerCase() === 'it') {
-      const weekends = countWeekends(range.from, range.to);
-      expectedDays = Math.max(0, expectedDays - weekends);
+
+    // Weekly offs from the Department master; with none configured (default
+    // Sunday only) the old IT rule (drop Sat + Sun) still applies.
+    const deptDoc = deptFor(crm?.departmentId ? crm : { department });
+    const offDays = payrollOffDaysInRange({
+      fromKey: range.from,
+      toKey: range.to,
+      deptWeeklyOffs: deptDoc?.weeklyOffs,
+      deptName: department,
+    });
+    if (offDays > 0) {
+      expectedDays = Math.max(0, expectedDays - offDays);
       if (expectedDays > 0) {
         attendancePercent = Math.round(Math.min(100, (daysPresent / expectedDays) * 100));
       } else {
@@ -563,17 +574,18 @@ async function buildPayroll({ from, to }) {
     // Reconcile approved paid leave from CRM LeaveRequest records
     const approvedLeaveDays = crm?._id ? (approvedLeaveMap.get(String(crm._id)) || 0) : 0;
     const regularizedDays = crm?._id ? (regDatesMap.get(String(crm._id))?.size || 0) : 0;
-    let effectiveDaysPresent = daysPresent;
-    let freeDaysApplied = 0;
-    const absentDays = expectedDays - daysPresent;
-    if (absentDays > 0) {
-      // Approved paid leave covers absences; with no approved leave, the
-      // company's monthly free-absence allowance (PAYROLL_FREE_ABSENT_DAYS,
-      // default 1) applies instead.
-      freeDaysApplied = approvedLeaveDays > 0 ? 0 : Math.min(FREE_ABSENT_DAYS, absentDays);
-      const protectedDays = (approvedLeaveDays > 0 ? approvedLeaveDays : freeDaysApplied) + regularizedDays;
-      effectiveDaysPresent += Math.min(absentDays, protectedDays);
-    }
+    // Regularizations cover absences first, then approved paid leave; with no
+    // approved leave the monthly free-absence allowance
+    // (PAYROLL_FREE_ABSENT_DAYS, default 1) covers what is still absent.
+    const credit = attendanceCredit({
+      expectedDays,
+      daysPresent,
+      approvedLeaveDays,
+      regularizedDays,
+      freeAbsentDays: FREE_ABSENT_DAYS,
+    });
+    const effectiveDaysPresent = credit.effectiveDaysPresent;
+    const freeDaysApplied = credit.freeApplied;
 
     const factor =
       expectedDays > 0 ? Math.min(1, effectiveDaysPresent / expectedDays) : (effectiveDaysPresent > 0 ? 1 : 0);
@@ -592,6 +604,8 @@ async function buildPayroll({ from, to }) {
       approvedLeaveDays,
       regularizedDays,
       freeDaysApplied,
+      leaveDaysApplied: credit.leaveApplied,
+      regularizedApplied: credit.regApplied,
       salaryType: crm?.salaryType || null,
       baseSalary,
       allowances,
@@ -601,6 +615,7 @@ async function buildPayroll({ from, to }) {
       hoursWorked,
       attendancePercent,
       attendanceFactor: Number(factor.toFixed(4)),
+      _factor: factor,
       proratedBase,
       absenceDeduction,
       netPayable,
@@ -637,7 +652,7 @@ export const getPayrollPreview = async (req, res) => {
       totals,
       count: rows.length,
       freeAbsentDays: FREE_ABSENT_DAYS,
-      data: rows,
+      data: rows.map(({ _factor, ...row }) => row),
     });
   } catch (err) {
     sendTimeboxError(res, err, 'Timebox payroll error');
@@ -685,16 +700,19 @@ export const generatePayrollFromAttendance = async (req, res) => {
       }
 
       const totalDeductions = r.deductions + r.absenceDeduction;
+      // Only what was actually applied to absences (regularizations first,
+      // then paid leave, then the free day).
       const extras = [
-        r.approvedLeaveDays ? `${r.approvedLeaveDays} paid leave day(s)` : '',
-        r.regularizedDays ? `${r.regularizedDays} regularized day(s)` : '',
+        r.regularizedApplied ? `${r.regularizedApplied} regularized day(s)` : '',
+        r.leaveDaysApplied ? `${r.leaveDaysApplied} paid leave day(s)` : '',
         r.freeDaysApplied ? `${r.freeDaysApplied} free absent day(s)` : '',
       ].filter(Boolean).join(', ');
-      const attendanceNote =
+      const noteFor = (absenceDeduction, keptHrEdits) =>
         `Attendance ${r.daysPresent}/${r.expectedDays} days ` +
         `(${r.attendancePercent}%) · ${r.hoursWorked}h worked. ` +
         (extras ? `Credited: ${extras}. ` : '') +
-        `Absence deduction ₹${r.absenceDeduction}. ` +
+        `Absence deduction ₹${absenceDeduction}. ` +
+        (keptHrEdits ? 'Kept HR-edited base/allowances. ' : '') +
         `Matched by: ${r.matchedBy}. ` +
         `[Timebox ${range.from}→${range.to}]`;
 
@@ -717,13 +735,20 @@ export const generatePayrollFromAttendance = async (req, res) => {
         const manualDeductions = existing.attendanceDeduction != null
           ? Math.max(0, (existing.deductions || 0) - existing.attendanceDeduction)
           : r.deductions;
+        // Base and allowances already on the slip (HR may have edited them)
+        // are kept; only an empty (0) value is filled from the employee
+        // master. The absence deduction is pro-rated on the kept base.
+        const baseSalary = Number(existing.baseSalary) ? existing.baseSalary : r.baseSalary;
+        const allowances = Number(existing.allowances) ? existing.allowances : r.allowances;
+        const absenceDeduction = Math.max(0, baseSalary - round0(baseSalary * r._factor));
+        const keptHrEdits = baseSalary !== r.baseSalary || allowances !== r.allowances;
         const next = {
-          baseSalary: r.baseSalary,
-          allowances: r.allowances,
+          baseSalary,
+          allowances,
           incentives: existing.incentives,
           roomRent: existing.roomRent,
           bonus: existing.bonus,
-          deductions: manualDeductions + r.absenceDeduction,
+          deductions: manualDeductions + absenceDeduction,
         };
         const netAmount = netOf(next);
 
@@ -732,8 +757,9 @@ export const generatePayrollFromAttendance = async (req, res) => {
           continue;
         }
 
+        const prevNet = existing.netAmount;
         Object.assign(existing, next);
-        existing.attendanceDeduction = r.absenceDeduction;
+        existing.attendanceDeduction = absenceDeduction;
         existing.netAmount = netAmount;
         existing.department = existing.department || r.department;
         // Replace the previous attendance note; keep anything HR typed.
@@ -741,14 +767,21 @@ export const generatePayrollFromAttendance = async (req, res) => {
           .split('\n')
           .filter((l) => l.trim() && !l.startsWith('Attendance '))
           .join('\n');
-        existing.notes = [manualNotes, attendanceNote].filter(Boolean).join('\n');
-        // Status and category stay as HR left them (a draft stays a draft).
+        existing.notes = [manualNotes, noteFor(absenceDeduction, keptHrEdits)].filter(Boolean).join('\n');
+        // Status and category stay as HR left them (a draft stays a draft) —
+        // except an approved slip whose amount changed goes back to draft for
+        // HR to review again (2026-11-26).
+        if (existing.status === 'approved_by_hr' && Number(existing.netAmount) !== Number(prevNet)) {
+          existing.status = 'draft';
+          existing.approvedBy = null;
+          existing.approvedAt = null;
+        }
         await existing.save();
         updated += 1;
         affected.push({ name: r.name, netAmount, action: 'update', matchedBy: r.matchedBy });
       } else {
         const netAmount = netOf({ baseSalary: r.baseSalary, allowances: r.allowances, deductions: totalDeductions });
-        const notes = attendanceNote;
+        const notes = noteFor(r.absenceDeduction, false);
         if (dryRun) {
           affected.push({ name: r.name, netAmount, action: 'create' });
           continue;
@@ -769,7 +802,10 @@ export const generatePayrollFromAttendance = async (req, res) => {
           deductions: totalDeductions,
           attendanceDeduction: r.absenceDeduction,
           netAmount,
-          status: 'approved_by_hr',
+          // Every new slip starts as a DRAFT (2026-11-26): HR reviews and
+          // submits to Accounts, and only then does the employee see it. It
+          // used to be approved straight away, skipping review.
+          status: 'draft',
           notes,
           bankDetails: {
             bankName: crm?.bankName || '',
@@ -777,13 +813,25 @@ export const generatePayrollFromAttendance = async (req, res) => {
             ifscCode: crm?.ifscCode || '',
             upiId: crm?.upiId || '',
           },
-          approvedBy: req.user?._id || null,
-          approvedAt: new Date(),
+          approvedBy: null,
+          approvedAt: null,
         });
         created += 1;
         affected.push({ name: r.name, netAmount, action: 'create', matchedBy: r.matchedBy });
       }
     }
+
+    // Office staff who will get NO attendance slip because Timebox doesn't know
+    // them (e.g. a new hire never linked) — named, so HR can link them or make
+    // their slip by hand instead of finding out on pay day (2026-11-26).
+    const matchedIds = new Set(rows.filter((r) => r.matched && r.crmEmployeeId).map((r) => String(r.crmEmployeeId)));
+    const office = await Employee.find({
+      status: 'active',
+      type: { $ne: 'outsource' },
+      artistRole: { $nin: ['driver', 'artist', 'assistant'] },
+      category: { $nin: ['operations', 'creative'] },
+    }).select('name').lean();
+    const notInTimebox = office.filter((e) => !matchedIds.has(String(e._id))).map((e) => e.name).sort();
 
     res.json({
       ok: true,
@@ -795,6 +843,7 @@ export const generatePayrollFromAttendance = async (req, res) => {
       updated,
       skippedPaid,
       unmatched,
+      notInTimebox,
       affected,
       message: dryRun
         ? `Preview: ${affected.length} slips would be written (${unmatched} unmatched skipped).`

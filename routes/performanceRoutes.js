@@ -5,11 +5,12 @@ import {
   upsertEvaluation,
   deleteEvaluation,
 } from '../controllers/performanceController.js';
-import { protect } from '../middleware/authMiddleware.js';
+import { protect, attachRolePermissions } from '../middleware/authMiddleware.js';
 
 const router = express.Router();
 
-router.use(protect);
+// Role permissions feed the HR scope (HR dept head / module keys = company-wide).
+router.use(protect, attachRolePermissions);
 
 router.route('/').get(getEvaluations).post(upsertEvaluation);
 router.get('/employee/:employeeId', getEmployeeEvaluations);

@@ -23,7 +23,7 @@ import {
   notify,
   getUserIdsByRoles,
   getUserIdsByEmployeeIds,
-  MANAGER_AND_ADMIN_ROLES,
+  getSalesLeadIds,
   NOTIFICATION_TYPES,
 } from '../utils/notify.js';
 
@@ -1576,7 +1576,7 @@ export const createBooking = async (req, res) => {
 
     // Matrix: Booking Created — notify managers + admins.
     try {
-      const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+      const managerAdminIds = await getSalesLeadIds();
       await notify({
         recipients: managerAdminIds,
         type: NOTIFICATION_TYPES.BOOKING_CREATED,

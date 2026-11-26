@@ -29,6 +29,7 @@ const FINANCE_ROLES = ['accounts', 'finance_head'];
 /// Accounts salary + attendance-payroll screens (payables.*).
 export const canManagePayroll = (user) =>
   isFullAccess(user) ||
+  isHrRoleUser(user) ||
   FINANCE_ROLES.includes(roleOf(user)) ||
   hasPerm(user, 'staff.salaries') ||
   hasPerm(user, 'payables.admin_salaries') ||
@@ -41,9 +42,15 @@ export const canManageHra = (user) =>
   hasPerm(user, 'payables.hra') ||
   hasPerm(user, 'staff.salaries');
 
-/// HR staff records and HR modules (who may manage employees).
+/// The `hr` login role: all of HRMS (owner 2026-11-26).
+export const isHrRoleUser = (user) => roleOf(user) === 'hr';
+
+/// HR staff records and HR modules (who may manage employees). A department
+/// head passes here but every write is further limited to their own team by
+/// getHrScope. A lone unrelated `staff.*` sub-key (e.g. staff.slots) no longer
+/// counts — only the whole `staff` module or `staff.employees` (2026-11-26).
 export const canManageStaff = (user) =>
-  isFullAccess(user) || user?.isDepartmentHead === true || hasModule(user, 'staff');
+  isFullAccess(user) || isHrRoleUser(user) || user?.isDepartmentHead === true || hasPerm(user, 'staff.employees');
 
 /// May see salary / bank / ID fields on employee records.
 export const canSeeEmployeePay = (user) => canManageStaff(user) || canManagePayroll(user) || canManageHra(user);
@@ -77,23 +84,38 @@ export const SENSITIVE_EMPLOYEE_FIELDS = [
   'dateOfBirth',
 ];
 
-/// Company-wide pay visibility: HR (staff module), payroll, HRA, admin/manager.
-/// Department heads are NOT here — they see pay only for their own team.
+/// Company-wide pay visibility: HR (whole staff module / staff.salaries / hr
+/// role), payroll, HRA, admin/manager. Department heads are NOT here and, since
+/// 2026-11-26 (owner: "team view, no pay"), don't see their team's pay either.
 export const canSeeAllEmployeePay = (user) =>
-  isFullAccess(user) || hasModule(user, 'staff') || canManagePayroll(user) || canManageHra(user);
+  isFullAccess(user) || isHrRoleUser(user) || hasPerm(user, 'staff.salaries') ||
+  canManagePayroll(user) || canManageHra(user);
+
+/// Plain staff logins (self-service only): they see colleagues as a bare list
+/// (name, designation, department) — enough for the app's pickers — and only
+/// their OWN record in full (owner 2026-11-26: "staff see only themselves").
+export const SELF_SERVICE_ROLES = ['employee', 'artist', 'driver'];
+export const isSelfServiceOnly = (user) => SELF_SERVICE_ROLES.includes(roleOf(user));
+const MINIMAL_EMPLOYEE_FIELDS = [
+  '_id', 'name', 'employeeCode', 'designation', 'designationId', 'department', 'departmentId',
+  'artistRole', 'status', 'profileImage', 'photoUrl',
+];
 
 /// Strips pay / bank / personal fields from an employee (doc or plain object)
-/// unless the viewer may see them. A user always sees their own record; a
-/// department head sees their own department's (pass `scope` from
-/// getHrScope(req, ['staff'])).
+/// unless the viewer may see them. A user always sees their own record.
+/// Self-service logins see only the minimal fields of anyone else.
 export const redactEmployee = (emp, viewer, scope = null) => {
   if (!emp) return emp;
-  if (canSeeAllEmployeePay(viewer) || scope?.wide) return emp;
+  if (canSeeAllEmployeePay(viewer) || (scope?.wide && !isSelfServiceOnly(viewer))) return emp;
   const obj = typeof emp.toObject === 'function' ? emp.toObject() : { ...emp };
   const id = String(obj._id);
   const own = viewer?.employeeId && String(viewer.employeeId) === id;
   if (own) return obj;
-  if (scope && !scope.none && scope.employeeIds?.includes(id)) return obj;
+  if (isSelfServiceOnly(viewer)) {
+    const out = {};
+    for (const f of MINIMAL_EMPLOYEE_FIELDS) if (obj[f] !== undefined) out[f] = obj[f];
+    return out;
+  }
   for (const f of SENSITIVE_EMPLOYEE_FIELDS) delete obj[f];
   return obj;
 };

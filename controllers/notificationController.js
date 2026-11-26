@@ -3,6 +3,7 @@ import Lead from '../models/Lead.js';
 import Booking from '../models/Booking.js';
 import Collection from '../models/Collection.js';
 import Expense from '../models/Expense.js';
+import Employee from '../models/Employee.js';
 import { makeCountsTowardSales } from '../utils/salesRules.js';
 import { sweepSalesTargetMidMonth } from '../utils/salesTargetAlerts.js';
 import { loadCeoInbox, digestText } from '../services/ceoInbox.js';
@@ -12,19 +13,13 @@ import { sweepConsultationReminders } from '../utils/consultationNotify.js';
 import {
   notify,
   getUserIdsByRoles,
-  MANAGER_AND_ADMIN_ROLES,
+  getSalesLeadIds,
   ADMIN_ROLES,
-  ADMIN_ALLOWED_TYPES,
   NOTIFICATION_TYPES,
 } from '../utils/notify.js';
 
-// Admins (stakeholders) only ever see the month-end summary — never the
-// operational stream. Restricts their inbox + unread count at read time so the
-// historical backlog is hidden too, not just newly-created notifications.
-const adminTypeScope = (req) =>
-  ADMIN_ROLES.includes(req.user?.role)
-    ? { type: { $in: [...ADMIN_ALLOWED_TYPES] } }
-    : {};
+// Admins now see every notification (notify() copies them on all of them), so
+// their inbox is no longer narrowed to the month-end summary.
 
 // Cleared notifications are hidden from every inbox query and badge count.
 const NOT_CLEARED = { cleared: { $ne: true } };
@@ -72,7 +67,7 @@ const sweepFollowUps = async () => {
       .limit(500);
 
     if (leads.length === 0) return;
-    const managerAdminIds = await getUserIdsByRoles(MANAGER_AND_ADMIN_ROLES);
+    const managerAdminIds = await getSalesLeadIds();
 
     for (const lead of leads) {
       const fu = lead.followUpDate;
@@ -109,8 +104,8 @@ const sweepFollowUps = async () => {
 };
 
 // ── Month-end summary for stakeholders (admins) ─────────────────────────────
-// Admins are kept out of the operational stream (see ADMIN_ALLOWED_TYPES in
-// notify.js). Instead, once a calendar month closes we post them a single
+// Admins (who also get every operational notification) and the CEO receive,
+// once a calendar month closes we post them a single
 // summary of the month just ended — deduped by period so it's created exactly
 // once. Generated lazily on notification fetch and throttled so many polling
 // clients don't each recompute it.
@@ -222,9 +217,52 @@ const sweepMonthlyObjectives = async () => {
   }
 };
 
+// ── Probation ending → HR (2026-11-26) ─────────────────────────────────────
+// Nothing used to move anyone out of probation or remind HR. Once a day-ish,
+// every active employee still on probation whose end date is within 7 days (or
+// already passed in the last 30) gets ONE reminder to the HR logins, deduped by
+// (type, link to the staff record, end date).
+let lastProbationCheckAt = 0;
+const PROBATION_CHECK_MS = 60 * 60 * 1000;
+
+const sweepProbationEnding = async () => {
+  const nowMs = Date.now();
+  if (nowMs - lastProbationCheckAt < PROBATION_CHECK_MS) return;
+  lastProbationCheckAt = nowMs;
+  try {
+    const now = new Date();
+    const soon = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+    const since = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const due = await Employee.find({
+      status: 'active',
+      employmentStatus: 'probation',
+      probationEndDate: { $gte: since, $lte: soon },
+    }).select('name department probationEndDate').limit(200).lean();
+    if (due.length === 0) return;
+    const hr = await getUserIdsByRoles(['hr']);
+    if (hr.length === 0) return;
+    for (const e of due) {
+      const link = `/staff/${e._id}`;
+      if (await Notification.exists({ type: NOTIFICATION_TYPES.PROBATION_ENDING, link, forDate: e.probationEndDate })) continue;
+      const ended = e.probationEndDate < now;
+      await notify({
+        recipients: hr,
+        type: NOTIFICATION_TYPES.PROBATION_ENDING,
+        title: ended ? `Probation over: ${e.name}` : `Probation ending: ${e.name}`,
+        body: `${e.department ? `${e.department} · ` : ''}${ended ? 'ended' : 'ends'} ${fmt(e.probationEndDate).split(',')[0]}. Confirm the employee or extend probation.`,
+        link,
+        forDate: e.probationEndDate,
+      });
+    }
+  } catch (err) {
+    console.error('sweepProbationEnding failed:', err.message);
+  }
+};
+
 export const getNotifications = async (req, res) => {
   try {
     await sweepFollowUps();
+    await sweepProbationEnding();
     await sweepMonthEndSummary();
     await sweepCeoDigest();
     await sweepMonthlyObjectives();
@@ -235,8 +273,7 @@ export const getNotifications = async (req, res) => {
     const limit = parseInt(req.query.limit) || 30;
     const skip = (page - 1) * limit;
 
-    const scope = adminTypeScope(req);
-    const filter = { recipient: req.user._id, ...NOT_CLEARED, ...scope };
+    const filter = { recipient: req.user._id, ...NOT_CLEARED };
     if (req.query.unread === 'true') filter.read = false;
 
     const [items, totalItems, unreadCount] = await Promise.all([
@@ -251,7 +288,6 @@ export const getNotifications = async (req, res) => {
         recipient: req.user._id,
         read: false,
         ...NOT_CLEARED,
-        ...scope,
       }),
     ]);
 
@@ -274,7 +310,6 @@ export const getUnreadCount = async (req, res) => {
       recipient: req.user._id,
       read: false,
       ...NOT_CLEARED,
-      ...adminTypeScope(req),
     });
     res.json({ count });
   } catch (error) {

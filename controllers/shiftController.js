@@ -9,7 +9,7 @@ const SHIFT_KEYS = ['shift'];
 
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   if (user?.isDepartmentHead) return true;
   const perms = user?.permissions || [];
   return perms.includes('staff') || perms.includes('shift');
@@ -59,8 +59,8 @@ const createShift = asyncHandler(async (req, res) => {
     code: String(req.body.code || '').trim(),
     startTime: String(req.body.startTime || '09:00'),
     endTime: String(req.body.endTime || '18:00'),
-    graceInMin: Number(req.body.graceInMin) || 0,
-    graceOutMin: Number(req.body.graceOutMin) || 0,
+    graceInMin: Math.max(0, Number(req.body.graceInMin) || 0),
+    graceOutMin: Math.max(0, Number(req.body.graceOutMin) || 0),
     workingDays: Array.isArray(req.body.workingDays) ? req.body.workingDays.map(Number) : undefined,
     color: String(req.body.color || '#601A29'),
     active: req.body.active !== false,
@@ -78,8 +78,8 @@ const updateShift = asyncHandler(async (req, res) => {
   if (b.code !== undefined) shift.code = String(b.code).trim();
   if (b.startTime !== undefined) shift.startTime = String(b.startTime);
   if (b.endTime !== undefined) shift.endTime = String(b.endTime);
-  if (b.graceInMin !== undefined) shift.graceInMin = Number(b.graceInMin) || 0;
-  if (b.graceOutMin !== undefined) shift.graceOutMin = Number(b.graceOutMin) || 0;
+  if (b.graceInMin !== undefined) shift.graceInMin = Math.max(0, Number(b.graceInMin) || 0);
+  if (b.graceOutMin !== undefined) shift.graceOutMin = Math.max(0, Number(b.graceOutMin) || 0);
   if (Array.isArray(b.workingDays)) shift.workingDays = b.workingDays.map(Number);
   if (b.color !== undefined) shift.color = String(b.color);
   if (b.active !== undefined) shift.active = Boolean(b.active);
@@ -124,6 +124,12 @@ const createAssignment = asyncHandler(async (req, res) => {
   const shiftId = String(req.body.shiftId || '').trim();
   if (!employeeId || !shiftId) { res.status(400); throw new Error('Employee and shift are required'); }
   if (!req.body.fromDate) { res.status(400); throw new Error('A start date is required'); }
+  const fromDate = new Date(req.body.fromDate);
+  const toDate = req.body.toDate ? new Date(req.body.toDate) : null;
+  if (Number.isNaN(fromDate.getTime()) || (toDate && Number.isNaN(toDate.getTime()))) {
+    res.status(400); throw new Error('Invalid date');
+  }
+  if (toDate && toDate < fromDate) { res.status(400); throw new Error('The end date cannot be before the start date'); }
   await assertEmployeeInScope(req, res, employeeId, SHIFT_KEYS);
 
   const [employee, shift] = await Promise.all([
@@ -139,8 +145,8 @@ const createAssignment = asyncHandler(async (req, res) => {
     department: employee.department || '',
     shiftId,
     shiftName: shift.name,
-    fromDate: new Date(req.body.fromDate),
-    toDate: req.body.toDate ? new Date(req.body.toDate) : null,
+    fromDate,
+    toDate,
     note: String(req.body.note || '').trim(),
     createdBy: req.user?._id || null,
   });

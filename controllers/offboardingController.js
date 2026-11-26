@@ -8,16 +8,18 @@ import { isPayrollLocked } from '../models/PayrollLock.js';
 import { scopeFilter, assertEmployeeInScope, isHrWide } from '../utils/hrDeptScope.js';
 import { prorateFinalSettlement } from '../utils/settlementMath.js';
 import { istDayKey } from '../utils/istDate.js';
+import { notify, getUserIdsByRoles, NOTIFICATION_TYPES } from '../utils/notify.js';
 
 // Dept heads only manage exits for their own department's staff.
 const KEYS = ['offboarding'];
 
 const empPopulate = { path: 'employeeId', select: 'name department profileImage' };
 
+// Exits are HR's job (owner 2026-11-26: department heads get a team view,
+// not HR actions). Admin / manager / hr role, or the staff / offboarding keys.
 const canManage = (user) => {
   const role = String(user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'manager') return true;
-  if (user?.isDepartmentHead) return true;
+  if (role === 'admin' || role === 'manager' || role === 'hr') return true;
   const perms = user?.permissions || [];
   return perms.includes('offboarding') || perms.includes('staff');
 };
@@ -50,6 +52,11 @@ const createOffboarding = asyncHandler(async (req, res) => {
   const employee = await Employee.findById(employeeId).select('name department');
   if (!employee) { res.status(404); throw new Error('Employee not found'); }
   await assertEmployeeInScope(req, res, employee._id, KEYS);
+  // One open exit per employee.
+  if (await Offboarding.exists({ employeeId: employee._id, status: { $ne: 'completed' } })) {
+    res.status(409);
+    throw new Error(`${employee.name || 'This employee'} already has an open exit`);
+  }
 
   const items = Array.isArray(req.body.clearanceItems) && req.body.clearanceItems.length
     ? cleanItems(req.body.clearanceItems)
@@ -65,6 +72,18 @@ const createOffboarding = asyncHandler(async (req, res) => {
     finalSettlementAmount: Number(req.body.finalSettlementAmount) || 0,
     notes: String(req.body.notes || '').trim(),
     createdBy: req.user?._id || null,
+  });
+  // Tell HR (and admins, via notify) that an exit has started, so clearance,
+  // assets and the settlement get handled before the last day (2026-11-26).
+  const hr = await getUserIdsByRoles(['hr']);
+  await notify({
+    recipients: hr.length ? hr : [req.user?._id].filter(Boolean),
+    type: NOTIFICATION_TYPES.OFFBOARDING_STARTED,
+    title: `Exit started: ${employee.name || 'an employee'}`,
+    body: `${employee.department ? `${employee.department} · ` : ''}last working day ${row.lastWorkingDay ? istDayKey(row.lastWorkingDay) : 'not set yet'}. Clearance, assets and final settlement are due.`,
+    link: '/hr/offboarding',
+    createdBy: req.user?._id || null,
+    excludeUserId: req.user?._id || null,
   });
   await row.populate(empPopulate);
   res.status(201).json(row);
@@ -82,6 +101,25 @@ const updateOffboarding = asyncHandler(async (req, res) => {
   const completing = b.status === 'completed' && row.status !== 'completed';
   let forcedNote = '';
   if (completing) {
+    // The server checks what the app's button already expects (2026-11-26):
+    // a real last working day (it used to fall back to "today" and switch the
+    // login off at once), every clearance item done, and the settlement paid.
+    const lwd = b.lastWorkingDay !== undefined ? b.lastWorkingDay : row.lastWorkingDay;
+    if (!lwd) {
+      res.status(400);
+      throw new Error('Set the last working day before completing the exit');
+    }
+    const items = Array.isArray(b.clearanceItems) ? cleanItems(b.clearanceItems) : row.clearanceItems || [];
+    const open = items.filter((i) => !i.cleared).map((i) => i.label);
+    if (open.length) {
+      res.status(400);
+      throw new Error(`Clear these items first: ${open.join(', ')}`);
+    }
+    const paid = b.settlementPaid !== undefined ? Boolean(b.settlementPaid) : row.settlementPaid;
+    if (!paid) {
+      res.status(400);
+      throw new Error('Mark the final settlement as paid before completing the exit');
+    }
     const outstanding = await EmployeeAsset.find({ employeeId: row.employeeId, status: 'issued' })
       .select('item serialNo category').lean();
     if (outstanding.length) {

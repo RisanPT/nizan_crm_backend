@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import Employee from '../models/Employee.js';
 import Department from '../models/Department.js';
+import User from '../models/User.js';
 import Course from '../models/Course.js';
 import Shift from '../models/Shift.js';
 import OrientationPlan from '../models/OrientationPlan.js';
@@ -84,6 +85,7 @@ test('M3 assigning with no matching plan is refused, not given a DevOps syllabus
   stub(Employee, 'findById', async () => ({ _id: 'e1', name: 'A', role: 'Receptionist', department: 'Front Office' }));
   stub(OrientationPlan, 'findById', async () => null);
   stub(OrientationPlan, 'findOne', async () => null);
+  stub(OrientationPlan, 'find', () => q([]));
   stub(OrientationAssignment, 'create', async () => { created++; });
   const { res, error } = await call(lms.assignOrientation, { user: ADMIN, body: { employeeId: 'e1' } });
   assert.equal(res.statusCode, 400);
@@ -163,6 +165,10 @@ test('M5 deleting a Timebox-linked employee records them so the sync skips them'
   let removed = 0;
   stub(Employee, 'findById', async () => ({ _id: 'e9', name: 'Gone', email: 'g@x.in', timeboxEmployeeId: 9, deleteOne: async () => { removed++; } }));
   stub(TimeboxIgnoredEmployee, 'updateOne', async (f, u, o) => { recorded = { f, u, o }; });
+  // No login, no direct reports, heads no department: the delete is allowed.
+  stub(User, 'exists', async () => null);
+  stub(Employee, 'countDocuments', async () => 0);
+  stub(Department, 'find', () => q([]));
   const res = mockRes();
   await deleteEmployee({ params: { id: 'e9' }, user: { _id: 'u1' } }, res);
   assert.equal(removed, 1);
