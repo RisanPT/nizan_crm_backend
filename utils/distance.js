@@ -12,7 +12,9 @@ import { findPlusCode, plusCodeToPoint } from './plusCode.js';
 // Each pincode's route is cached, so it's looked up once.
 // The ORS key stays on the server (ORS_API_KEY in .env).
 
-const ORS = 'https://api.openrouteservice.org';
+// api.openrouteservice.org was retired by HeiGIT on 2026-11-24 (HTTP 410);
+// the same API + keys now live under api.heigit.org/openrouteservice.
+const ORS = process.env.ORS_BASE_URL || 'https://api.heigit.org/openrouteservice';
 const ROUTE_TTL_MS = 90 * 24 * 60 * 60 * 1000; // roads change rarely
 // A venue address is trusted over the pincode's centre only when it lands
 // this close to that pincode (guards against a same-named place elsewhere).
